@@ -487,6 +487,141 @@ function dismissInstallHint() {
   renderApp();
 }
 
+function hasWorkoutInProgress() {
+  return (
+    state.pendingSession.length > 0 ||
+    state.currentIndex > 0 ||
+    state.workoutFinished ||
+    state.timer.seconds > 0
+  );
+}
+
+function updateCurrentLoad(direction) {
+  const active = getActiveExercise();
+  const key = getExerciseKey();
+  const current = getCurrentSettings();
+  if (!active || !key || !isNumericLoad(current.load)) return;
+
+  const step = getIncrement(active.kind);
+  const minimum = getMinimumLoad(active.kind);
+  const base =
+    direction === "up"
+      ? current.load + step
+      : Math.max(minimum, current.load - step);
+  const nextLoad = roundToIncrement(base, step, direction === "down" ? "down" : "up");
+
+  state.exerciseData[key] = {
+    ...current,
+    load: nextLoad,
+    loadLabel: `${nextLoad} kg`,
+  };
+
+  saveState();
+  renderApp();
+}
+
+function resetCurrentLoad() {
+  const active = getActiveExercise();
+  const key = getExerciseKey();
+  if (!active || !key) return;
+
+  state.exerciseData[key] = {
+    load: active.defaultLoad,
+    loadLabel: active.loadLabel,
+    deload: false,
+  };
+
+  saveState();
+  renderApp();
+}
+
+function discardWorkoutProgress() {
+  state.pendingSession = [];
+  resetWorkoutState();
+  state.screen = "dashboard";
+  saveState();
+  renderApp();
+}
+
+function renderPendingSessionSummary(compact = false) {
+  if (!state.pendingSession.length) return "";
+
+  const classes = compact
+    ? "surface surface--soft surface-pad stack-sm"
+    : "surface surface--soft surface-pad stack-md";
+
+  return `
+    <section class="${classes}">
+      <div class="row">
+        <div class="label">Seance en attente</div>
+        <div class="label">${state.pendingSession.length} serie(s)</div>
+      </div>
+      <div class="pending-list">
+        ${state.pendingSession
+          .map(
+            (item, index) => `
+              <article class="pending-item">
+                <div>
+                  <div class="pending-item__title">${index + 1}. ${item.exercise}</div>
+                  <div class="pending-item__meta">${item.series} · ${formatLoad(item.load, item.loadLabel)}</div>
+                </div>
+                <div class="pending-item__score">${item.reps} reps · RPE ${item.rpe}</div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderResumeCard() {
+  if (!hasWorkoutInProgress()) return "";
+
+  const exercises = getExercises();
+  const progress = getProgressPercent();
+  const headline = state.workoutFinished
+    ? "Seance terminee a valider"
+    : "Seance en cours";
+  const detail = state.workoutFinished
+    ? `${state.pendingSession.length} serie(s) pretes a etre enregistrees`
+    : `${state.day} · ${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length}`;
+
+  return `
+    <article class="surface surface-pad stack-md">
+      <div class="row row-start">
+        <div class="stack-sm">
+          <div class="label">Reprise rapide</div>
+          <h2 class="section-title">${headline}</h2>
+          <div class="muted">${detail}</div>
+        </div>
+        <span class="pill">${state.day}</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">Progression</div>
+          <div class="label">${progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${progress}%"></div>
+        </div>
+      </div>
+
+      ${state.pendingSession.length ? renderPendingSessionSummary(true) : ""}
+
+      <div class="grid-2">
+        <button class="button button--primary" data-action="resume-workout">
+          Reprendre
+        </button>
+        <button class="button button--ghost" data-action="discard-workout">
+          Annuler
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function getInstallHintHtml() {
   if (state.installHintDismissed) return "";
 
@@ -545,6 +680,7 @@ function renderDashboard() {
   return `
     <section class="stack-md">
       ${getInstallHintHtml()}
+      ${renderResumeCard()}
 
       <article class="surface surface-pad chart-shell">
         <div class="row">
@@ -645,6 +781,17 @@ function renderWeightView(settings, active, last) {
         <span>Objectif : ${active.targetLabel} reps · Repos : ${active.rest}s</span>
       </div>
       ${
+        isNumericLoad(settings.load)
+          ? `
+              <div class="load-actions">
+                <button class="icon-button" data-action="decrease-load" aria-label="Baisser la charge">-</button>
+                <button class="button button--ghost load-reset" data-action="reset-load">Reset cible</button>
+                <button class="icon-button" data-action="increase-load" aria-label="Augmenter la charge">+</button>
+              </div>
+            `
+          : ""
+      }
+      ${
         last
           ? `<div class="last-performance">Precedent : <strong>${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}</strong></div>`
           : ""
@@ -661,23 +808,26 @@ function renderWorkout() {
 
   if (state.workoutFinished) {
     return `
-      <section class="surface surface-pad-lg center-block stack-md">
-        <div class="trophy">T</div>
-        <div class="stack-sm">
-          <h2 class="section-title">Seance terminee</h2>
-          <div class="muted">
-            Valide la fin de seance pour enregistrer les performances et calculer
-            automatiquement les prochains poids.
+      <section class="stack-md">
+        <section class="surface surface-pad-lg center-block stack-md">
+          <div class="trophy">T</div>
+          <div class="stack-sm">
+            <h2 class="section-title">Seance terminee</h2>
+            <div class="muted">
+              Valide la fin de seance pour enregistrer les performances et calculer
+              automatiquement les prochains poids.
+            </div>
           </div>
-        </div>
-        <div class="stack-sm">
-          <button class="button button--primary" data-action="finalize-workout">
-            Enregistrer la seance
-          </button>
-          <button class="button button--ghost" data-action="restart-workout">
-            Annuler et recommencer
-          </button>
-        </div>
+          <div class="stack-sm">
+            <button class="button button--primary" data-action="finalize-workout">
+              Enregistrer la seance
+            </button>
+            <button class="button button--ghost" data-action="restart-workout">
+              Annuler et recommencer
+            </button>
+          </div>
+        </section>
+        ${renderPendingSessionSummary(false)}
       </section>
     `;
   }
@@ -723,6 +873,7 @@ function renderWorkout() {
       </div>
 
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last)}
+      ${state.pendingSession.length ? renderPendingSessionSummary(true) : ""}
 
       <div class="stack-md">
         <div class="field-wrap">
@@ -937,6 +1088,18 @@ function bindEvents() {
         renderApp();
       }
 
+      if (action === "increase-load") {
+        updateCurrentLoad("up");
+      }
+
+      if (action === "decrease-load") {
+        updateCurrentLoad("down");
+      }
+
+      if (action === "reset-load") {
+        resetCurrentLoad();
+      }
+
       if (action === "validate-set") {
         handleValidation();
       }
@@ -949,6 +1112,16 @@ function bindEvents() {
         state.pendingSession = [];
         state.workoutFinished = false;
         startWorkoutDay(state.day);
+      }
+
+      if (action === "resume-workout") {
+        state.screen = "workout";
+        saveState();
+        renderApp();
+      }
+
+      if (action === "discard-workout") {
+        discardWorkoutProgress();
       }
 
       if (action === "clear-data") {
