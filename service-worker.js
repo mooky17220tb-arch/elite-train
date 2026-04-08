@@ -1,4 +1,4 @@
-const CACHE_NAME = "elite-train-iphone-cache-v5";
+const CACHE_NAME = "elite-train-iphone-cache-v6";
 const APP_ASSETS = [
   "./",
   "./index.html",

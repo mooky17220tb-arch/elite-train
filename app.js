@@ -95,6 +95,9 @@ const state = {
   exerciseData: {},
   history: [],
   timer: { seconds: 0, active: false },
+  restAlertVisible: false,
+  restSoundEnabled: true,
+  restVibrationEnabled: true,
   rpe: 8,
   repsInput: "",
   showPlates: false,
@@ -107,6 +110,7 @@ const state = {
 };
 
 const root = document.getElementById("app");
+let restAudioContext = null;
 
 function createProgramCopy() {
   return JSON.parse(JSON.stringify(PROGRAM));
@@ -138,6 +142,66 @@ function sanitizePlainText(value, fallback) {
 
 function formatTargetLabelFromRange(minReps, maxReps) {
   return minReps === maxReps ? `${minReps}` : `${minReps}-${maxReps}`;
+}
+
+function getRestAlertCopy() {
+  const upcoming = getActiveExercise();
+  return {
+    title: "Repos termine",
+    text: upcoming
+      ? `Tu peux repartir sur ${upcoming.exercise} · ${upcoming.series}.`
+      : "Tu peux reprendre ton entrainement.",
+  };
+}
+
+function primeAudioEngine() {
+  if (!state.restSoundEnabled) return;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  if (!restAudioContext) {
+    restAudioContext = new AudioContextClass();
+  }
+
+  if (restAudioContext.state === "suspended") {
+    restAudioContext.resume().catch(() => {});
+  }
+}
+
+function playRestSound() {
+  if (!state.restSoundEnabled) return;
+
+  primeAudioEngine();
+  if (!restAudioContext || restAudioContext.state !== "running") return;
+
+  const now = restAudioContext.currentTime;
+  const notes = [
+    { start: 0, freq: 880, duration: 0.12 },
+    { start: 0.17, freq: 1174, duration: 0.18 },
+  ];
+
+  notes.forEach((note) => {
+    const oscillator = restAudioContext.createOscillator();
+    const gainNode = restAudioContext.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(note.freq, now + note.start);
+    gainNode.gain.setValueAtTime(0.0001, now + note.start);
+    gainNode.gain.exponentialRampToValueAtTime(0.18, now + note.start + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(restAudioContext.destination);
+    oscillator.start(now + note.start);
+    oscillator.stop(now + note.start + note.duration + 0.04);
+  });
+}
+
+function vibrateRestAlert() {
+  if (!state.restVibrationEnabled) return;
+  if (!("vibrate" in navigator)) return;
+  navigator.vibrate([180, 70, 180]);
 }
 
 function normalizeProgramEntry(entry, fallback = {}) {
@@ -382,6 +446,9 @@ function saveState() {
       day: state.day,
       currentIndex: state.currentIndex,
       timer: state.timer,
+      restAlertVisible: state.restAlertVisible,
+      restSoundEnabled: state.restSoundEnabled,
+      restVibrationEnabled: state.restVibrationEnabled,
       rpe: state.rpe,
       repsInput: state.repsInput,
       showPlates: state.showPlates,
@@ -413,6 +480,9 @@ function restoreState() {
       Math.max(0, (state.program[state.day] || []).length - 1)
     );
     state.timer = parsed.timer || { seconds: 0, active: false };
+    state.restAlertVisible = Boolean(parsed.restAlertVisible);
+    state.restSoundEnabled = parsed.restSoundEnabled ?? true;
+    state.restVibrationEnabled = parsed.restVibrationEnabled ?? true;
     state.rpe = parsed.rpe ?? 8;
     state.repsInput = parsed.repsInput || "";
     state.showPlates = Boolean(parsed.showPlates);
@@ -477,6 +547,7 @@ function handleValidation() {
   const reps = parseInt(state.repsInput, 10);
   if (!active || Number.isNaN(reps) || reps <= 0) return;
 
+  state.restAlertVisible = false;
   state.pendingSession.push({
     key: getExerciseKey(),
     day: state.day,
@@ -570,6 +641,9 @@ function clearAllData() {
   state.installHintDismissed = false;
   state.onboardingCompleted = false;
   state.onboardingStep = 0;
+  state.restAlertVisible = false;
+  state.restSoundEnabled = true;
+  state.restVibrationEnabled = true;
   resetWorkoutState();
   state.day = "Push";
   state.screen = "dashboard";
@@ -684,6 +758,43 @@ function resetProgram() {
   state.programEditorDay = state.day;
   saveState();
   renderApp();
+}
+
+function toggleRestPreference(key) {
+  state[key] = !state[key];
+  if (key === "restSoundEnabled" && state[key]) {
+    primeAudioEngine();
+  }
+  saveState();
+  renderApp();
+}
+
+function dismissRestAlert() {
+  state.restAlertVisible = false;
+  saveState();
+  renderApp();
+}
+
+function extendRest(seconds = 30) {
+  state.timer = {
+    seconds,
+    active: true,
+  };
+  state.restAlertVisible = false;
+  saveState();
+  renderApp();
+}
+
+function triggerRestAlert() {
+  state.restAlertVisible = true;
+  playRestSound();
+  vibrateRestAlert();
+  saveState();
+  renderApp();
+}
+
+function testRestAlert() {
+  triggerRestAlert();
 }
 
 function getOnboardingSlides() {
@@ -1625,6 +1736,81 @@ function renderProgramEditor() {
   `;
 }
 
+function renderRestSettings() {
+  return `
+    <article class="surface surface-pad stack-md">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Alertes de repos</div>
+          <h3 class="section-title dashboard-section-head__title">Visuel + sonore</h3>
+        </div>
+        <div class="label">In-app</div>
+      </div>
+
+      <div class="program-hint">
+        Quand le repos se termine, l'app affiche une alerte plein ecran, joue un son si possible et vibre sur les appareils compatibles.
+      </div>
+
+      <div class="settings-toggle-list">
+        <button class="settings-toggle" data-action="toggle-rest-sound">
+          <div>
+            <div class="settings-toggle__title">Son de fin de repos</div>
+            <div class="settings-toggle__meta">Petit chime genere directement dans l'app</div>
+          </div>
+          <span class="settings-toggle__switch ${state.restSoundEnabled ? "is-on" : ""}">
+            ${state.restSoundEnabled ? "ON" : "OFF"}
+          </span>
+        </button>
+
+        <button class="settings-toggle" data-action="toggle-rest-vibration">
+          <div>
+            <div class="settings-toggle__title">Vibration</div>
+            <div class="settings-toggle__meta">Utilise la vibration si l'iPhone ou le navigateur l'autorise</div>
+          </div>
+          <span class="settings-toggle__switch ${state.restVibrationEnabled ? "is-on" : ""}">
+            ${state.restVibrationEnabled ? "ON" : "OFF"}
+          </span>
+        </button>
+      </div>
+
+      <button class="button button--ghost" data-action="test-rest-alert">
+        Tester l'alerte de repos
+      </button>
+    </article>
+  `;
+}
+
+function renderRestAlertOverlay() {
+  if (!state.restAlertVisible) return "";
+
+  const copy = getRestAlertCopy();
+
+  return `
+    <div class="rest-alert-overlay">
+      <article class="rest-alert-card">
+        <div class="rest-alert-card__pulse"></div>
+        <div class="rest-alert-card__content">
+          <div class="rest-alert-card__icon">GO</div>
+          <div class="stack-sm center-block">
+            <div class="label">Repos termine</div>
+            <h2 class="section-title rest-alert-card__title">${copy.title}</h2>
+            <div class="rest-alert-card__text">${copy.text}</div>
+          </div>
+
+          <div class="rest-alert-card__actions">
+            <button class="button button--ghost" data-action="extend-rest-30">
+              +30s
+            </button>
+            <button class="button button--primary" data-action="dismiss-rest-alert">
+              Continuer
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
 function renderSettings() {
   return `
     <section class="stack-md">
@@ -1647,6 +1833,7 @@ function renderSettings() {
         </button>
       </article>
 
+      ${renderRestSettings()}
       ${renderProgramEditor()}
     </section>
   `;
@@ -1660,6 +1847,8 @@ function renderBody() {
 }
 
 function renderApp() {
+  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+
   root.innerHTML = `
     <div class="app-shell">
       <header class="app-header">
@@ -1670,7 +1859,7 @@ function renderApp() {
           </div>
 
           <button
-            class="timer-button ${state.timer.active ? "is-active" : ""}"
+            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""}"
             data-action="toggle-timer"
             aria-label="Pause ou reprise du timer"
           >
@@ -1702,6 +1891,7 @@ function renderApp() {
       </nav>
 
       ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
+      ${renderRestAlertOverlay()}
     </div>
   `;
 
@@ -1711,6 +1901,7 @@ function renderApp() {
 function bindEvents() {
   document.querySelectorAll("[data-screen]").forEach((button) => {
     button.onclick = () => {
+      primeAudioEngine();
       state.screen = button.dataset.screen;
       saveState();
       renderApp();
@@ -1718,7 +1909,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-day]").forEach((button) => {
-    button.onclick = () => startWorkoutDay(button.dataset.day);
+    button.onclick = () => {
+      primeAudioEngine();
+      startWorkoutDay(button.dataset.day);
+    };
   });
 
   document.querySelectorAll(".program-day-tab").forEach((button) => {
@@ -1727,6 +1921,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.onclick = () => {
+      primeAudioEngine();
       const action = button.dataset.action;
 
       if (action === "toggle-timer") {
@@ -1779,6 +1974,26 @@ function bindEvents() {
 
       if (action === "clear-data") {
         clearAllData();
+      }
+
+      if (action === "toggle-rest-sound") {
+        toggleRestPreference("restSoundEnabled");
+      }
+
+      if (action === "toggle-rest-vibration") {
+        toggleRestPreference("restVibrationEnabled");
+      }
+
+      if (action === "test-rest-alert") {
+        testRestAlert();
+      }
+
+      if (action === "dismiss-rest-alert") {
+        dismissRestAlert();
+      }
+
+      if (action === "extend-rest-30") {
+        extendRest(30);
       }
 
       if (action === "add-program-entry") {
@@ -1867,6 +2082,8 @@ function tickTimer() {
   if (state.timer.seconds <= 0) {
     state.timer.seconds = 0;
     state.timer.active = false;
+    triggerRestAlert();
+    return;
   }
   saveState();
   renderApp();
