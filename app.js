@@ -1075,6 +1075,36 @@ function renderPendingSessionSummary(compact = false) {
   `;
 }
 
+function renderPendingSessionSummary(compact = false) {
+  const summary = getPendingAdviceSummary();
+  if (!summary) return "";
+
+  const classes = compact
+    ? "surface surface--soft surface-pad verdict-summary verdict-summary--compact"
+    : "surface surface--soft surface-pad verdict-summary";
+
+  const verdictLabel =
+    summary.latestPresentation.tone === "progress"
+      ? "Valide · Monte"
+      : summary.latestPresentation.tone === "reduce"
+      ? "Ajuste · Baisse"
+      : "Solide · Garde";
+
+  return `
+    <section class="${classes}">
+      <div class="verdict-summary__row verdict-summary__row--${summary.latestPresentation.tone}">
+        <span class="verdict-summary__label">Prochaine</span>
+        <span class="verdict-summary__headline verdict-summary__headline--${summary.latestPresentation.tone}">
+          ${verdictLabel}
+        </span>
+        <span class="verdict-summary__latest">
+          ${summary.latestEntry.reps} reps · ${summary.latestEntry.exercise}
+        </span>
+      </div>
+    </section>
+  `;
+}
+
 function renderResumeCard() {
   if (!hasWorkoutInProgress()) return "";
 

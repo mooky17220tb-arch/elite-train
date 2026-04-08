@@ -603,6 +603,55 @@ button {
   line-height: 1.45;
 }
 
+.verdict-summary {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.verdict-summary__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.verdict-summary__label,
+.verdict-summary__headline,
+.verdict-summary__latest {
+  min-width: 0;
+}
+
+.verdict-summary__label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.verdict-summary__headline {
+  flex: 0 0 auto;
+  font-size: 15px;
+}
+
+.verdict-summary__latest {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.verdict-summary__text,
+.verdict-summary__fatigue,
+.verdict-summary__badge,
+.verdict-summary__chips {
+  display: none;
+}
+
 .section-title {
   margin: 0;
   font-size: 22px;
