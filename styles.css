@@ -513,6 +513,96 @@ button {
   opacity: 0.88;
 }
 
+.verdict-summary {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.verdict-summary__headline {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.verdict-summary__headline--progress {
+  color: #8ef0c3;
+}
+
+.verdict-summary__headline--hold {
+  color: #e7ece9;
+}
+
+.verdict-summary__headline--reduce {
+  color: #ffd47b;
+}
+
+.verdict-summary__text {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.verdict-summary__fatigue {
+  color: #ffd47b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.verdict-summary__badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce4e0;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.verdict-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.verdict-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.verdict-chip--progress {
+  background: rgba(22, 196, 127, 0.14);
+  color: #8ef0c3;
+}
+
+.verdict-chip--hold {
+  background: rgba(255, 255, 255, 0.06);
+  color: #dfe6e2;
+}
+
+.verdict-chip--reduce {
+  background: rgba(245, 166, 35, 0.14);
+  color: #ffd47b;
+}
+
+.verdict-summary__latest {
+  color: #e5ece8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .section-title {
   margin: 0;
   font-size: 22px;

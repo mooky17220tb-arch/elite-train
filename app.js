@@ -317,8 +317,60 @@ function getAdvice(reps, minReps, maxReps, rpe) {
   return {
     type,
     action,
-    label: `Semaine suivante : ${action}`,
+    label: `Prochaine seance : ${action}`,
     fatigue: rpe >= 9.5 && reps <= minReps ? "Fatigue elevee detectee" : "",
+  };
+}
+
+function getAdvicePresentation(advice, entry) {
+  if (!advice || !entry) return null;
+
+  if (advice.type === "progress") {
+    return {
+      tone: "progress",
+      headline: "Objectif valide. Tu peux monter.",
+      text: `${entry.reps} reps sur ${entry.exercise}. Continue comme ca et augmente a la prochaine seance.`,
+    };
+  }
+
+  if (advice.type === "reduce") {
+    return {
+      tone: "reduce",
+      headline: "On ajuste pour repartir fort.",
+      text: `${entry.reps} reps sur ${entry.exercise}. La prochaine fois, baisse un peu pour repartir plus propre.`,
+    };
+  }
+
+  return {
+    tone: "hold",
+    headline: "Solide. Garde cette charge.",
+    text: `${entry.reps} reps sur ${entry.exercise}. Verrouille encore cette charge avant de monter.`,
+  };
+}
+
+function getPendingAdviceSummary() {
+  if (!state.pendingSession.length) return null;
+
+  const counts = { progress: 0, hold: 0, reduce: 0 };
+
+  state.pendingSession.forEach((entry) => {
+    const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
+    counts[advice.type] += 1;
+  });
+
+  const latestEntry = state.pendingSession[state.pendingSession.length - 1];
+  const latestAdvice = getAdvice(
+    latestEntry.reps,
+    latestEntry.minReps,
+    latestEntry.maxReps,
+    latestEntry.rpe
+  );
+
+  return {
+    counts,
+    latestEntry,
+    latestAdvice,
+    latestPresentation: getAdvicePresentation(latestAdvice, latestEntry),
   };
 }
 
@@ -984,6 +1036,45 @@ function renderPendingSessionSummary(compact = false) {
   `;
 }
 
+function renderPendingSessionSummary(compact = false) {
+  const summary = getPendingAdviceSummary();
+  if (!summary) return "";
+
+  const classes = compact
+    ? "surface surface--soft surface-pad stack-sm verdict-summary verdict-summary--compact"
+    : "surface surface--soft surface-pad stack-md verdict-summary";
+
+  return `
+    <section class="${classes}">
+      <div class="row row-start">
+        <div class="stack-sm">
+          <div class="label">Bilan progression</div>
+          <div class="verdict-summary__headline verdict-summary__headline--${summary.latestPresentation.tone}">
+            ${summary.latestPresentation.headline}
+          </div>
+          <div class="verdict-summary__text">${summary.latestPresentation.text}</div>
+          ${
+            summary.latestAdvice.fatigue
+              ? `<div class="verdict-summary__fatigue">${summary.latestAdvice.fatigue}</div>`
+              : ""
+          }
+        </div>
+        <div class="verdict-summary__badge">${state.pendingSession.length} serie(s)</div>
+      </div>
+
+      <div class="verdict-summary__chips">
+        <span class="verdict-chip verdict-chip--progress">Monter : ${summary.counts.progress}</span>
+        <span class="verdict-chip verdict-chip--hold">Garder : ${summary.counts.hold}</span>
+        <span class="verdict-chip verdict-chip--reduce">Baisser : ${summary.counts.reduce}</span>
+      </div>
+
+      <div class="verdict-summary__latest">
+        Derniere serie : <strong>${summary.latestEntry.exercise}</strong> · ${summary.latestEntry.series} · ${summary.latestEntry.reps} reps
+      </div>
+    </section>
+  `;
+}
+
 function renderResumeCard() {
   if (!hasWorkoutInProgress()) return "";
 
@@ -1405,11 +1496,6 @@ function renderWorkout() {
           <span class="pill">${active.series}</span>
           <h2 class="hero-title">${active.exercise}</h2>
           <div class="hero-subtitle">Exercice ${state.currentIndex + 1} sur ${getExercises().length}</div>
-          ${
-            state.pendingSession.length
-              ? `<div class="notice">${state.pendingSession.length} serie(s) en attente d'enregistrement final</div>`
-              : ""
-          }
         </div>
         <button
           class="icon-button ${state.showPlates ? "is-active" : ""}"
@@ -1435,7 +1521,7 @@ function renderWorkout() {
 
       <div class="stack-md">
         <div class="field-wrap">
-          <label class="label" for="reps-input">Repetitions validees</label>
+          <label class="label" for="reps-input">Combien de reps tu as faites ?</label>
           <input
             id="reps-input"
             class="input"
