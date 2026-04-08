@@ -786,7 +786,7 @@ button {
 .dashboard-hero__copy {
   display: grid;
   gap: 8px;
-  max-width: 280px;
+  max-width: 320px;
 }
 
 .dashboard-hero__label {
@@ -795,7 +795,7 @@ button {
 
 .dashboard-hero__title {
   margin: 0;
-  font-size: 54px;
+  font-size: clamp(44px, 13vw, 54px);
   line-height: 0.92;
   font-weight: 980;
   letter-spacing: -0.06em;
@@ -803,7 +803,7 @@ button {
 
 .dashboard-hero__text {
   margin: 0;
-  max-width: 280px;
+  max-width: 320px;
   color: rgba(232, 239, 235, 0.84);
   font-size: 14px;
   line-height: 1.45;
@@ -869,6 +869,71 @@ button {
   margin-top: 6px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.dashboard-mini-grid--insights {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-mini-card__value--text {
+  font-size: 24px;
+  line-height: 1.04;
+}
+
+.dashboard-mini-card--trend {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-mini-card--progress {
+  border-color: rgba(22, 196, 127, 0.22);
+  background: rgba(22, 196, 127, 0.1);
+}
+
+.dashboard-mini-card--reduce {
+  border-color: rgba(245, 166, 35, 0.22);
+  background: rgba(245, 166, 35, 0.1);
+}
+
+.smart-resume {
+  display: grid;
+  gap: 16px;
+}
+
+.smart-resume__copy {
+  min-width: 0;
+}
+
+.smart-resume__title {
+  margin: 0;
+}
+
+.smart-resume__meta,
+.smart-resume__actions {
+  display: grid;
+  gap: 10px;
+}
+
+.smart-resume__meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.smart-resume__actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.smart-resume__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  text-align: center;
+  color: #dbe4e0;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .dashboard-section-head__title {
@@ -1651,9 +1716,65 @@ button {
   }
 }
 
+@media (max-width: 430px) {
+  .app-header__inner {
+    padding: 16px;
+  }
+
+  .page {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .surface-pad {
+    padding: 18px;
+  }
+
+  .surface-pad-lg {
+    padding: 20px;
+  }
+
+  .dashboard-hero__content {
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .dashboard-hero__stats {
+    gap: 10px;
+  }
+
+  .dashboard-hero__stat {
+    padding: 12px 10px;
+  }
+
+  .dashboard-hero__stat-value {
+    font-size: 24px;
+  }
+
+  .chart-box {
+    min-height: 220px;
+    padding: 14px 8px 10px;
+  }
+
+  .smart-resume__chip {
+    font-size: 11px;
+    padding: 9px 10px;
+  }
+
+  .bottom-nav__inner {
+    padding: 12px 14px;
+  }
+}
+
 @media (max-width: 360px) {
   .brand {
     font-size: 24px;
+  }
+
+  .dashboard-mini-grid--insights,
+  .smart-resume__meta,
+  .smart-resume__actions {
+    grid-template-columns: 1fr;
   }
 
   .hero-title {

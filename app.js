@@ -1306,6 +1306,176 @@ function getRecentSets(days = 7) {
   }).length;
 }
 
+function getWeeklySessionCount(days = 7) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  const sessions = new Set();
+
+  state.history.forEach((item) => {
+    const time = new Date(item.date).getTime();
+    if (Number.isFinite(time) && now - time <= range) {
+      sessions.add(`${item.day}-${String(item.date || "").slice(0, 10)}`);
+    }
+  });
+
+  return sessions.size;
+}
+
+function getSortedHistory() {
+  return state.history
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+function getDaySummary(day) {
+  const entries = state.program[day] || [];
+  return {
+    exerciseCount: new Set(entries.map((item) => item.exercise)).size,
+    setCount: entries.length,
+  };
+}
+
+function shortenLabel(text, maxLength = 18) {
+  const value = String(text || "");
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
+function formatCompactNumber(value) {
+  if (!Number.isFinite(value)) return "0";
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? `${rounded}` : `${rounded}`;
+}
+
+function getNextTrainingDay() {
+  const days = getProgramDays();
+  if (!days.length) return state.day;
+
+  const sortedHistory = getSortedHistory();
+  if (!sortedHistory.length) {
+    return days.includes(state.day) ? state.day : days[0];
+  }
+
+  const lastDay = sortedHistory[0]?.day;
+  const lastIndex = days.indexOf(lastDay);
+
+  if (lastIndex === -1) {
+    return days.includes(state.day) ? state.day : days[0];
+  }
+
+  return days[(lastIndex + 1) % days.length];
+}
+
+function getSmartResumeData() {
+  const days = getProgramDays();
+  if (!days.length) return null;
+
+  if (hasWorkoutInProgress()) {
+    const active = getActiveExercise();
+    const exercises = getExercises();
+
+    return {
+      mode: "active",
+      day: state.day,
+      title: state.workoutFinished ? "Seance a valider" : `Reprendre ${state.day}`,
+      subtitle: state.workoutFinished
+        ? `${state.pendingSession.length} series a enregistrer`
+        : `${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length} series`,
+      meta: active ? `${active.exercise} · ${active.series}` : "Session en cours",
+      progress: getProgressPercent(),
+      actionLabel: "Reprendre",
+      actionAttrs: `data-action="resume-workout"`,
+      secondaryLabel: "Annuler",
+      secondaryAttrs: `data-action="discard-workout"`,
+    };
+  }
+
+  const day = getNextTrainingDay();
+  const summary = getDaySummary(day);
+  const lastEntry = getSortedHistory().find((item) => item.day === day) || null;
+
+  return {
+    mode: "next",
+    day,
+    title: `Prochaine ${day}`,
+    subtitle: `${summary.exerciseCount} exos · ${summary.setCount} series`,
+    meta: lastEntry ? `Derniere ${formatDate(lastEntry.date)}` : "Jamais lancee",
+    progress: 0,
+    actionLabel: `Lancer ${day}`,
+    actionAttrs: `data-day="${day}"`,
+    secondaryLabel: "Historique",
+    secondaryAttrs: `data-screen="history"`,
+  };
+}
+
+function getTopExerciseInsight() {
+  if (!state.history.length) {
+    return {
+      value: "A venir",
+      detail: "Commence une seance pour voir ton exercice cle",
+    };
+  }
+
+  const counts = new Map();
+  state.history.forEach((item) => {
+    counts.set(item.exercise, (counts.get(item.exercise) || 0) + 1);
+  });
+
+  const [exercise, count] = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+
+  return {
+    value: shortenLabel(exercise, 18),
+    detail: `${count} series loggees`,
+  };
+}
+
+function getTrendInsight() {
+  const key = state.selectedChartKey || getHistoryKeys()[0]?.key || "";
+  if (!key) {
+    return {
+      tone: "hold",
+      value: "A venir",
+      detail: "Ajoute 2 perfs sur le meme exercice",
+    };
+  }
+
+  const entries = getSortedHistory().filter((item) => item.key === key);
+
+  if (entries.length < 2) {
+    return {
+      tone: "hold",
+      value: "Stable",
+      detail: "Encore 1 seance pour lire la tendance",
+    };
+  }
+
+  const [latest, previous] = entries;
+  const useLoad = isNumericLoad(latest.load) && isNumericLoad(previous.load);
+  const delta = useLoad ? latest.load - previous.load : latest.reps - previous.reps;
+
+  if (delta > 0) {
+    return {
+      tone: "progress",
+      value: useLoad ? `+${formatCompactNumber(delta)} kg` : `+${delta} reps`,
+      detail: `${shortenLabel(latest.exercise, 18)} en hausse`,
+    };
+  }
+
+  if (delta < 0) {
+    return {
+      tone: "reduce",
+      value: useLoad ? `${formatCompactNumber(delta)} kg` : `${delta} reps`,
+      detail: `vs ${formatDate(previous.date)}`,
+    };
+  }
+
+  return {
+    tone: "hold",
+    value: "Stable",
+    detail: `${shortenLabel(latest.exercise, 18)} tient le rythme`,
+  };
+}
+
 function renderPremiumDayList() {
   return `
     <section class="day-list">
@@ -1394,6 +1564,166 @@ function renderPremiumDashboard() {
           <div class="label">Volume recent</div>
           <div class="dashboard-mini-card__value">${recentSets}</div>
           <div class="dashboard-mini-card__meta">series sur 7 jours</div>
+        </article>
+      </section>
+
+      <article class="surface surface-pad chart-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+          </div>
+          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} · ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
+function renderResumeCard() {
+  const resume = getSmartResumeData();
+  if (!resume) return "";
+
+  return `
+    <article class="surface surface-pad smart-resume">
+      <div class="row row-start">
+        <div class="stack-sm smart-resume__copy">
+          <div class="label">Reprise intelligente</div>
+          <h2 class="section-title smart-resume__title">${resume.title}</h2>
+          <div class="muted">${resume.subtitle}</div>
+          <div class="smart-resume__meta">
+            <span class="smart-resume__chip">${resume.day}</span>
+            <span class="smart-resume__chip">${resume.meta}</span>
+          </div>
+        </div>
+        <span class="pill">${resume.mode === "active" ? "Maintenant" : "Ensuite"}</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">${resume.mode === "active" ? "Progression" : "Preparation"}</div>
+          <div class="label">${resume.progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${resume.progress}%"></div>
+        </div>
+      </div>
+
+      <div class="smart-resume__actions">
+        <button class="button button--primary" ${resume.actionAttrs}>
+          ${resume.actionLabel}
+        </button>
+        <button class="button button--ghost" ${resume.secondaryAttrs}>
+          ${resume.secondaryLabel}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const weeklySessions = getWeeklySessionCount();
+  const recentSets = getRecentSets();
+  const resume = getSmartResumeData();
+  const heroDay = resume?.day || state.day;
+  const heroSummary = getDaySummary(heroDay);
+  const topExercise = getTopExerciseInsight();
+  const trend = getTrendInsight();
+  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionAttrs = resume?.mode === "active"
+    ? `data-action="resume-workout"`
+    : `data-day="${heroDay}"`;
+  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
+  const heroCopy = resume?.mode === "active"
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
+    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-day="${heroDay}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${heroDay}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
+              <span class="dashboard-hero__stat-label">Semaine</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Total</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">Series 7j</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" ${heroActionAttrs}>
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+
+      <section class="dashboard-mini-grid dashboard-mini-grid--insights">
+        <article class="surface dashboard-mini-card">
+          <div class="label">Le plus regulier</div>
+          <div class="dashboard-mini-card__value dashboard-mini-card__value--text">${topExercise.value}</div>
+          <div class="dashboard-mini-card__meta">${topExercise.detail}</div>
+        </article>
+        <article class="surface dashboard-mini-card dashboard-mini-card--trend dashboard-mini-card--${trend.tone}">
+          <div class="label">Tendance</div>
+          <div class="dashboard-mini-card__value">${trend.value}</div>
+          <div class="dashboard-mini-card__meta">${trend.detail}</div>
         </article>
       </section>
 
