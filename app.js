@@ -860,8 +860,8 @@ function getOnboardingSlides() {
     {
       label: "Comment ca marche",
       title: "Valide chaque serie en quelques secondes",
-      text: "Tu renseignes tes reps, ton RPE, puis l'app calcule automatiquement la suite de ta progression.",
-      points: ["Charge cible", "Conseil auto", "Historique visuel"],
+      text: "Tu renseignes tes reps, puis l'app enregistre ta serie et te laisse avancer tres vite dans la seance.",
+      points: ["Charge cible", "Saisie rapide", "Historique visuel"],
     },
     {
       label: "Installation",
@@ -1150,6 +1150,10 @@ function renderResumeCard() {
       </div>
     </article>
   `;
+}
+
+function renderPendingSessionSummary(compact = false) {
+  return "";
 }
 
 function getInstallHintHtml() {
@@ -1483,7 +1487,6 @@ function renderWorkout() {
   const active = getActiveExercise();
   const settings = getCurrentSettings();
   const last = getLastPerformance();
-  const advice = getCurrentAdvice();
 
   if (state.workoutFinished) {
     return `
@@ -1506,7 +1509,6 @@ function renderWorkout() {
             </button>
           </div>
         </section>
-        ${renderPendingSessionSummary(false)}
       </section>
     `;
   }
@@ -1547,11 +1549,10 @@ function renderWorkout() {
       </div>
 
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last)}
-      ${state.pendingSession.length ? renderPendingSessionSummary(true) : ""}
 
       <div class="stack-md">
         <div class="field-wrap">
-          <label class="label" for="reps-input">Combien de reps tu as faites ?</label>
+          <label class="label" for="reps-input">Reps</label>
           <input
             id="reps-input"
             class="input"
@@ -1562,43 +1563,6 @@ function renderWorkout() {
             value="${state.repsInput}"
           />
         </div>
-
-        <div class="stack-sm">
-          <div class="row">
-            <div class="label">RPE</div>
-            <div class="section-title" style="color:var(--green)">${state.rpe}</div>
-          </div>
-          <input
-            id="rpe-input"
-            class="slider"
-            type="range"
-            min="5"
-            max="10"
-            step="0.5"
-            value="${state.rpe}"
-          />
-          <div class="row">
-            <div class="label">Facile</div>
-            <div class="label">Echec</div>
-          </div>
-        </div>
-
-        ${
-          advice
-            ? `
-                <div class="advice ${
-                  advice.type === "progress"
-                    ? "advice--progress"
-                    : advice.type === "reduce"
-                    ? "advice--reduce"
-                    : ""
-                }">
-                  <div>${advice.label}</div>
-                  ${advice.fatigue ? `<div class="advice__sub">${advice.fatigue}</div>` : ""}
-                </div>
-              `
-            : ""
-        }
 
         <button class="button button--primary" data-action="validate-set">
           Serie terminee
@@ -1640,10 +1604,6 @@ function renderHistory() {
                 <div class="metric">
                   <div class="label">Reps</div>
                   <div class="metric__value">${item.reps}</div>
-                </div>
-                <div class="metric">
-                  <div class="label">RPE</div>
-                  <div class="metric__value">${item.rpe}</div>
                 </div>
               </div>
             </article>
