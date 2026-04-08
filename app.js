@@ -504,64 +504,68 @@ function getChartData() {
   };
 }
 
-function saveState() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      screen: state.screen,
-      program: state.program,
-      programEditorDay: state.programEditorDay,
-      exerciseData: state.exerciseData,
-      history: state.history,
-      day: state.day,
-      currentIndex: state.currentIndex,
-      timer: state.timer,
-      restAlertVisible: state.restAlertVisible,
-      restSoundEnabled: state.restSoundEnabled,
-      restVibrationEnabled: state.restVibrationEnabled,
-      rpe: state.rpe,
-      repsInput: state.repsInput,
-      showPlates: state.showPlates,
-      workoutFinished: state.workoutFinished,
-      pendingSession: state.pendingSession,
-      selectedChartKey: state.selectedChartKey,
-      installHintDismissed: state.installHintDismissed,
-      onboardingCompleted: state.onboardingCompleted,
-      onboardingStep: state.onboardingStep,
-    })
+function buildPersistedState() {
+  return {
+    screen: state.screen,
+    program: state.program,
+    programEditorDay: state.programEditorDay,
+    exerciseData: state.exerciseData,
+    history: state.history,
+    day: state.day,
+    currentIndex: state.currentIndex,
+    timer: state.timer,
+    restAlertVisible: state.restAlertVisible,
+    restSoundEnabled: state.restSoundEnabled,
+    restVibrationEnabled: state.restVibrationEnabled,
+    rpe: state.rpe,
+    repsInput: state.repsInput,
+    showPlates: state.showPlates,
+    workoutFinished: state.workoutFinished,
+    pendingSession: state.pendingSession,
+    selectedChartKey: state.selectedChartKey,
+    installHintDismissed: state.installHintDismissed,
+    onboardingCompleted: state.onboardingCompleted,
+    onboardingStep: state.onboardingStep,
+  };
+}
+
+function hydrateState(parsed = {}) {
+  state.program = sanitizeProgram(parsed.program);
+  state.screen = parsed.screen || "dashboard";
+  state.exerciseData = parsed.exerciseData || {};
+  state.history = parsed.history || [];
+  state.day = getProgramDays().includes(parsed.day) ? parsed.day : "Push";
+  state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
+    ? parsed.programEditorDay
+    : state.day;
+  state.currentIndex = Math.min(
+    parsed.currentIndex || 0,
+    Math.max(0, (state.program[state.day] || []).length - 1)
   );
+  state.timer = parsed.timer || { seconds: 0, active: false };
+  state.restAlertVisible = Boolean(parsed.restAlertVisible);
+  state.restSoundEnabled = parsed.restSoundEnabled ?? true;
+  state.restVibrationEnabled = parsed.restVibrationEnabled ?? true;
+  state.rpe = parsed.rpe ?? 8;
+  state.repsInput = parsed.repsInput || "";
+  state.showPlates = Boolean(parsed.showPlates);
+  state.workoutFinished = Boolean(parsed.workoutFinished);
+  state.pendingSession = parsed.pendingSession || [];
+  state.selectedChartKey = parsed.selectedChartKey || "";
+  state.installHintDismissed = Boolean(parsed.installHintDismissed);
+  state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
+  state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(buildPersistedState()));
 }
 
 function restoreState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw);
-    state.program = sanitizeProgram(parsed.program);
-    state.screen = parsed.screen || "dashboard";
-    state.exerciseData = parsed.exerciseData || {};
-    state.history = parsed.history || [];
-    state.day = getProgramDays().includes(parsed.day) ? parsed.day : "Push";
-    state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
-      ? parsed.programEditorDay
-      : state.day;
-    state.currentIndex = Math.min(
-      parsed.currentIndex || 0,
-      Math.max(0, (state.program[state.day] || []).length - 1)
-    );
-    state.timer = parsed.timer || { seconds: 0, active: false };
-    state.restAlertVisible = Boolean(parsed.restAlertVisible);
-    state.restSoundEnabled = parsed.restSoundEnabled ?? true;
-    state.restVibrationEnabled = parsed.restVibrationEnabled ?? true;
-    state.rpe = parsed.rpe ?? 8;
-    state.repsInput = parsed.repsInput || "";
-    state.showPlates = Boolean(parsed.showPlates);
-    state.workoutFinished = Boolean(parsed.workoutFinished);
-    state.pendingSession = parsed.pendingSession || [];
-    state.selectedChartKey = parsed.selectedChartKey || "";
-    state.installHintDismissed = Boolean(parsed.installHintDismissed);
-    state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
-    state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
+    hydrateState(JSON.parse(raw));
   } catch (error) {
     console.error("Erreur localStorage", error);
   }
@@ -719,6 +723,55 @@ function clearAllData() {
   state.screen = "dashboard";
   seedPreviewData();
   renderApp();
+}
+
+function exportBackup() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    source: "elite-train-iphone",
+    data: buildPersistedState(),
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `elite-train-backup-${stamp}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function importBackupFromFile(file) {
+  if (!file) return;
+
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    const nextState = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+
+    if (!nextState || typeof nextState !== "object") {
+      throw new Error("Backup invalide");
+    }
+
+    if (!window.confirm("Importer ce backup et remplacer les donnees actuelles ?")) {
+      return;
+    }
+
+    hydrateState(nextState);
+    saveState();
+    renderApp();
+    window.alert("Backup importe avec succes.");
+  } catch (error) {
+    window.alert("Impossible d'importer ce backup.");
+  }
 }
 
 function dismissInstallHint() {
@@ -1292,7 +1345,7 @@ function renderDashboard() {
 
 function getSessionCount() {
   const sessions = new Set(
-    state.history.map((item) => `${item.day}-${String(item.date || "").slice(0, 10)}`)
+    state.history.map((item) => `${item.day}-${getDayKey(item.date)}`)
   );
   return sessions.size;
 }
@@ -1306,6 +1359,208 @@ function getRecentSets(days = 7) {
   }).length;
 }
 
+function formatWeekday(date) {
+  return new Date(date)
+    .toLocaleDateString("fr-FR", { weekday: "short" })
+    .replace(".", "")
+    .slice(0, 3);
+}
+
+function getDayKey(date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeeklyPlanner(days = 7) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const counts = new Map();
+
+  state.history.forEach((item) => {
+    counts.set(getDayKey(item.date), (counts.get(getDayKey(item.date)) || 0) + 1);
+  });
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (days - 1 - index));
+    const key = getDayKey(date);
+
+    return {
+      key,
+      label: formatWeekday(date),
+      dateLabel: new Date(date).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+      }),
+      count: counts.get(key) || 0,
+      isToday: index === days - 1,
+    };
+  });
+}
+
+function getGlobalRecords() {
+  const numericEntries = state.history.filter((item) => isNumericLoad(item.load));
+  const heaviest = numericEntries
+    .slice()
+    .sort((a, b) => (b.load || 0) - (a.load || 0) || b.reps - a.reps)[0] || null;
+  const bestReps = state.history
+    .slice()
+    .sort((a, b) => b.reps - a.reps || new Date(b.date).getTime() - new Date(a.date).getTime())[0] || null;
+
+  return { heaviest, bestReps };
+}
+
+function getExerciseRecords(limit = 8) {
+  const records = new Map();
+
+  state.history.forEach((item) => {
+    const current = records.get(item.exercise) || {
+      exercise: item.exercise,
+      bestLoad: null,
+      bestLoadLabel: item.loadLabel,
+      bestLoadReps: 0,
+      bestReps: 0,
+      lastDate: item.date,
+      count: 0,
+    };
+
+    current.count += 1;
+    if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
+      current.lastDate = item.date;
+    }
+
+    if (item.reps > current.bestReps) {
+      current.bestReps = item.reps;
+    }
+
+    if (
+      isNumericLoad(item.load) &&
+      (!isNumericLoad(current.bestLoad) ||
+        item.load > current.bestLoad ||
+        (item.load === current.bestLoad && item.reps > current.bestLoadReps))
+    ) {
+      current.bestLoad = item.load;
+      current.bestLoadLabel = item.loadLabel;
+      current.bestLoadReps = item.reps;
+    }
+
+    records.set(item.exercise, current);
+  });
+
+  return Array.from(records.values())
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        (isNumericLoad(b.bestLoad) ? b.bestLoad : -1) - (isNumericLoad(a.bestLoad) ? a.bestLoad : -1) ||
+        b.bestReps - a.bestReps
+    )
+    .slice(0, limit);
+}
+
+function renderWeeklyPlanner() {
+  const planner = getWeeklyPlanner();
+  const resume = getSmartResumeData();
+
+  return `
+    <article class="surface surface-pad planner-shell">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Planning</div>
+          <h3 class="section-title dashboard-section-head__title">Semaine en cours</h3>
+        </div>
+        <div class="label">${getWeeklySessionCount()} seance(s)</div>
+      </div>
+
+      <div class="planner-grid">
+        ${planner
+          .map(
+            (day) => `
+              <div class="planner-day ${day.count ? "is-done" : ""} ${day.isToday ? "is-today" : ""}">
+                <div class="planner-day__label">${day.label}</div>
+                <div class="planner-day__count">${day.count || "—"}</div>
+                <div class="planner-day__date">${day.dateLabel}</div>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="planner-note">
+        <span class="planner-note__pill">${hasWorkoutInProgress() ? "A finir" : "A lancer"}</span>
+        <span>${resume?.title || `Prochaine ${getNextTrainingDay()}`}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderRecordsSection() {
+  const records = getExerciseRecords();
+  const { heaviest, bestReps } = getGlobalRecords();
+
+  return `
+    <section class="stack-md">
+      <article class="surface surface-pad records-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Records</div>
+            <h3 class="section-title dashboard-section-head__title">PR et meilleures perfs</h3>
+          </div>
+          <div class="label">${records.length} exos</div>
+        </div>
+
+        <div class="records-summary">
+          <div class="metric">
+            <div class="label">Charge max</div>
+            <div class="metric__value">
+              ${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "—"}
+            </div>
+            <div class="records-summary__meta">
+              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} · ${heaviest.reps} reps` : "Pas encore de PR"}
+            </div>
+          </div>
+          <div class="metric">
+            <div class="label">Reps max</div>
+            <div class="metric__value">${bestReps ? bestReps.reps : "—"}</div>
+            <div class="records-summary__meta">
+              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
+            </div>
+          </div>
+        </div>
+
+        ${
+          records.length
+            ? `
+                <div class="records-list">
+                  ${records
+                    .map(
+                      (record) => `
+                        <article class="record-card">
+                          <div class="record-card__top">
+                            <div class="record-card__title">${record.exercise}</div>
+                            <div class="record-card__count">${record.count} serie(s)</div>
+                          </div>
+                          <div class="record-card__stats">
+                            <span>Charge: ${formatLoad(record.bestLoad, record.bestLoadLabel)}</span>
+                            <span>Reps: ${record.bestReps}</span>
+                          </div>
+                          <div class="record-card__meta">Derniere: ${formatDate(record.lastDate)}</div>
+                        </article>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+            : `<div class="chart-empty">Aucun record disponible pour le moment.</div>`
+        }
+      </article>
+    </section>
+  `;
+}
+
 function getWeeklySessionCount(days = 7) {
   const now = Date.now();
   const range = days * 24 * 60 * 60 * 1000;
@@ -1314,7 +1569,7 @@ function getWeeklySessionCount(days = 7) {
   state.history.forEach((item) => {
     const time = new Date(item.date).getTime();
     if (Number.isFinite(time) && now - time <= range) {
-      sessions.add(`${item.day}-${String(item.date || "").slice(0, 10)}`);
+      sessions.add(`${item.day}-${getDayKey(item.date)}`);
     }
   });
 
@@ -1713,6 +1968,7 @@ function renderPremiumDashboard() {
 
       ${getInstallHintHtml()}
       ${renderResumeCard()}
+      ${renderWeeklyPlanner()}
 
       <section class="dashboard-mini-grid dashboard-mini-grid--insights">
         <article class="surface dashboard-mini-card">
@@ -1926,14 +2182,18 @@ function renderWorkout() {
 function renderHistory() {
   if (!state.history.length) {
     return `
-      <section class="surface surface-pad">
-        <div class="muted">Aucune serie enregistree.</div>
+      <section class="stack-md">
+        ${renderRecordsSection()}
+        <section class="surface surface-pad">
+          <div class="muted">Aucune serie enregistree.</div>
+        </section>
       </section>
     `;
   }
 
   return `
     <section class="history-list">
+      ${renderRecordsSection()}
       <h2 class="section-title">Historique</h2>
       ${state.history
         .slice(0, 24)
@@ -2255,6 +2515,27 @@ function renderSettings() {
         <div class="install-hint">
           Les donnees sont stockees localement sur l'appareil via le navigateur.
         </div>
+        <article class="surface surface--soft surface-pad backup-shell">
+          <div class="dashboard-section-head">
+            <div>
+              <div class="label">Backup</div>
+              <h3 class="section-title dashboard-section-head__title">Export et import</h3>
+            </div>
+            <div class="label">JSON</div>
+          </div>
+          <div class="muted">
+            Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
+          </div>
+          <div class="backup-actions">
+            <button class="button button--ghost" data-action="export-backup">
+              Exporter mes donnees
+            </button>
+            <button class="button button--primary" data-action="import-backup">
+              Importer un backup
+            </button>
+          </div>
+          <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
+        </article>
         <button class="button button--danger" data-action="clear-data">
           Reinitialiser toutes les donnees
         </button>
@@ -2403,6 +2684,14 @@ function bindEvents() {
         clearAllData();
       }
 
+      if (action === "export-backup") {
+        exportBackup();
+      }
+
+      if (action === "import-backup") {
+        document.getElementById("backup-input")?.click();
+      }
+
       if (action === "toggle-rest-sound") {
         toggleRestPreference("restSoundEnabled");
       }
@@ -2477,6 +2766,15 @@ function bindEvents() {
       state.selectedChartKey = event.target.value;
       saveState();
       renderApp();
+    };
+  }
+
+  const backupInput = document.getElementById("backup-input");
+  if (backupInput) {
+    backupInput.onchange = async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      await importBackupFromFile(file);
     };
   }
 

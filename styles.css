@@ -1568,9 +1568,136 @@ button {
   background: linear-gradient(180deg, #f7c05d 0%, #f5a623 100%);
 }
 
+.planner-shell,
+.records-shell,
+.backup-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.planner-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.planner-day {
+  padding: 12px 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.planner-day.is-done {
+  border-color: rgba(22, 196, 127, 0.22);
+  background: rgba(22, 196, 127, 0.1);
+}
+
+.planner-day.is-today {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.planner-day__label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.planner-day__count {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.planner-day__date {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.planner-note {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #dce4e0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.planner-note__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a6f0cb;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .history-list {
   display: grid;
   gap: 12px;
+}
+
+.records-summary,
+.backup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.records-summary__meta {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.records-list {
+  display: grid;
+  gap: 10px;
+}
+
+.record-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.record-card__top,
+.record-card__stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.record-card__title {
+  font-size: 15px;
+  font-weight: 900;
+  color: white;
+}
+
+.record-card__count,
+.record-card__meta,
+.record-card__stats {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.record-card__stats {
+  color: #dce5e1;
+  font-weight: 800;
 }
 
 .metric-grid {
@@ -1648,6 +1775,10 @@ button {
   padding: 14px;
   font-size: 14px;
   color: var(--muted);
+}
+
+.backup-input {
+  display: none;
 }
 
 .bottom-nav {
@@ -1756,6 +1887,18 @@ button {
     padding: 14px 8px 10px;
   }
 
+  .planner-grid {
+    gap: 6px;
+  }
+
+  .planner-day {
+    padding: 10px 4px 8px;
+  }
+
+  .planner-day__count {
+    font-size: 16px;
+  }
+
   .smart-resume__chip {
     font-size: 11px;
     padding: 9px 10px;
@@ -1771,10 +1914,17 @@ button {
     font-size: 24px;
   }
 
+  .records-summary,
+  .backup-actions,
   .dashboard-mini-grid--insights,
   .smart-resume__meta,
   .smart-resume__actions {
     grid-template-columns: 1fr;
+  }
+
+  .planner-day__label,
+  .planner-day__date {
+    font-size: 9px;
   }
 
   .hero-title {
