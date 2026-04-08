@@ -513,6 +513,48 @@ button {
   opacity: 0.88;
 }
 
+.next-cue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin: -2px auto 2px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.next-cue__label {
+  color: var(--muted);
+}
+
+.next-cue__value {
+  white-space: nowrap;
+}
+
+.next-cue--progress {
+  border-color: rgba(22, 196, 127, 0.24);
+  background: rgba(22, 196, 127, 0.1);
+  color: #93efc6;
+}
+
+.next-cue--hold {
+  color: #e7ece9;
+}
+
+.next-cue--reduce {
+  border-color: rgba(245, 166, 35, 0.24);
+  background: rgba(245, 166, 35, 0.1);
+  color: #ffd27a;
+}
+
 .verdict-summary {
   border-color: rgba(255, 255, 255, 0.08);
 }

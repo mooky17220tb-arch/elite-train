@@ -374,6 +374,24 @@ function getPendingAdviceSummary() {
   };
 }
 
+function renderCompactNextCue(advice) {
+  if (!advice) return "";
+
+  const value =
+    advice.type === "progress"
+      ? "Monter"
+      : advice.type === "reduce"
+      ? "Baisser"
+      : "Garder";
+
+  return `
+    <div class="next-cue next-cue--${advice.type}">
+      <span class="next-cue__label">Prochaine</span>
+      <span class="next-cue__value">${value}</span>
+    </div>
+  `;
+}
+
 function calculatePlates(targetWeight, barWeight = 20) {
   if (!isNumericLoad(targetWeight)) return [];
 
@@ -1487,6 +1505,7 @@ function renderWorkout() {
   const active = getActiveExercise();
   const settings = getCurrentSettings();
   const last = getLastPerformance();
+  const advice = getCurrentAdvice();
 
   if (state.workoutFinished) {
     return `
@@ -1563,6 +1582,8 @@ function renderWorkout() {
             value="${state.repsInput}"
           />
         </div>
+
+        ${renderCompactNextCue(advice)}
 
         <button class="button button--primary" data-action="validate-set">
           Serie terminee
