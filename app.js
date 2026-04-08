@@ -114,7 +114,7 @@ const root = document.getElementById("app");
 let restAudioContext = null;
 
 function createProgramCopy() {
-  return JSON.parse(JSON.stringify(PROGRAM));
+  return ensureActivationSeriesForProgram(JSON.parse(JSON.stringify(PROGRAM)));
 }
 
 function createDefaultCycle() {
@@ -124,6 +124,82 @@ function createDefaultCycle() {
     week: 1,
     startedAt: new Date().toISOString(),
   };
+}
+
+function getActivationPreset(day) {
+  const presets = {
+    Push: {
+      exercise: "Ecarte poulie",
+      kind: "isolation",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 60,
+      defaultLoad: 12,
+      loadLabel: "12-15 kg",
+    },
+    Pull: {
+      exercise: "Pullover poulie",
+      kind: "isolation",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 60,
+      defaultLoad: 20,
+      loadLabel: "20 kg",
+    },
+    Legs: {
+      exercise: "Leg curl",
+      kind: "machine",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 60,
+      defaultLoad: 25,
+      loadLabel: "25 kg",
+    },
+    Upper: {
+      exercise: "Ecarte poulie",
+      kind: "isolation",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 60,
+      defaultLoad: 12,
+      loadLabel: "12-15 kg",
+    },
+  };
+
+  return presets[day] || presets.Push;
+}
+
+function isActivationEntry(entry) {
+  return String(entry?.series || "").toLowerCase().includes("activation");
+}
+
+function ensureActivationSeriesForDay(day, entries = []) {
+  const activationEntries = entries.filter((entry) => isActivationEntry(entry));
+  const otherEntries = entries.filter((entry) => !isActivationEntry(entry));
+  const nextActivationEntries = [...activationEntries];
+
+  while (nextActivationEntries.length < 4) {
+    nextActivationEntries.push({
+      ...getActivationPreset(day),
+      series: `Activation ${nextActivationEntries.length + 1}`,
+    });
+  }
+
+  return [...nextActivationEntries, ...otherEntries];
+}
+
+function ensureActivationSeriesForProgram(program = {}) {
+  const nextProgram = {};
+
+  Object.keys(PROGRAM).forEach((day) => {
+    nextProgram[day] = ensureActivationSeriesForDay(day, Array.isArray(program?.[day]) ? program[day] : []);
+  });
+
+  return nextProgram;
 }
 
 function sanitizeCycle(cycle = {}) {
@@ -265,7 +341,10 @@ function sanitizeProgram(program) {
 
   Object.keys(PROGRAM).forEach((day) => {
     const fallbackEntries = PROGRAM[day] || [];
-    const sourceEntries = Array.isArray(program?.[day]) ? program[day] : fallbackEntries;
+    const sourceEntries = ensureActivationSeriesForDay(
+      day,
+      Array.isArray(program?.[day]) ? program[day] : fallbackEntries
+    );
     nextProgram[day] = sourceEntries.map((entry, index) =>
       normalizeProgramEntry(entry, fallbackEntries[index] || fallbackEntries[fallbackEntries.length - 1] || {})
     );
