@@ -90,6 +90,8 @@ const state = {
   screen: "dashboard",
   day: "Push",
   currentIndex: 0,
+  program: createProgramCopy(),
+  programEditorDay: "Push",
   exerciseData: {},
   history: [],
   timer: { seconds: 0, active: false },
@@ -105,6 +107,79 @@ const state = {
 };
 
 const root = document.getElementById("app");
+
+function createProgramCopy() {
+  return JSON.parse(JSON.stringify(PROGRAM));
+}
+
+function getProgramDays() {
+  return Object.keys(state.program || PROGRAM);
+}
+
+function sanitizePositiveInteger(value, fallback, minimum = 1) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, parsed);
+}
+
+function sanitizeLoadNumber(value, fallback = null) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed * 100) / 100);
+}
+
+function sanitizePlainText(value, fallback) {
+  const text = String(value ?? "")
+    .replace(/[<>"]/g, "")
+    .trim();
+  return text || fallback;
+}
+
+function formatTargetLabelFromRange(minReps, maxReps) {
+  return minReps === maxReps ? `${minReps}` : `${minReps}-${maxReps}`;
+}
+
+function normalizeProgramEntry(entry, fallback = {}) {
+  const minReps = sanitizePositiveInteger(entry?.minReps, fallback.minReps ?? 10, 1);
+  const maxReps = Math.max(
+    minReps,
+    sanitizePositiveInteger(entry?.maxReps, fallback.maxReps ?? Math.max(minReps, 12), minReps)
+  );
+  const defaultLoad = sanitizeLoadNumber(entry?.defaultLoad, fallback.defaultLoad ?? null);
+  const loadLabel = sanitizePlainText(
+    entry?.loadLabel,
+    fallback.loadLabel || (isNumericLoad(defaultLoad) ? `${defaultLoad} kg` : "Charge libre")
+  );
+
+  return {
+    exercise: sanitizePlainText(entry?.exercise, fallback.exercise || "Nouvel exercice"),
+    kind: ["barbell", "machine", "dumbbell", "isolation"].includes(entry?.kind)
+      ? entry.kind
+      : fallback.kind || "isolation",
+    series: sanitizePlainText(entry?.series, fallback.series || "Serie 1"),
+    targetLabel: formatTargetLabelFromRange(minReps, maxReps),
+    minReps,
+    maxReps,
+    rest: sanitizePositiveInteger(entry?.rest, fallback.rest ?? 60, 0),
+    defaultLoad,
+    loadLabel,
+  };
+}
+
+function sanitizeProgram(program) {
+  const nextProgram = {};
+
+  Object.keys(PROGRAM).forEach((day) => {
+    const fallbackEntries = PROGRAM[day] || [];
+    const sourceEntries = Array.isArray(program?.[day]) ? program[day] : fallbackEntries;
+    nextProgram[day] = sourceEntries.map((entry, index) =>
+      normalizeProgramEntry(entry, fallbackEntries[index] || fallbackEntries[fallbackEntries.length - 1] || {})
+    );
+  });
+
+  return nextProgram;
+}
 
 function formatTimer(seconds) {
   const minutes = Math.floor(seconds / 60);
@@ -205,7 +280,7 @@ function buildExerciseKey(day, exercise, series) {
 }
 
 function getExercises() {
-  return PROGRAM[state.day] || [];
+  return state.program[state.day] || [];
 }
 
 function getActiveExercise() {
@@ -300,6 +375,8 @@ function saveState() {
     STORAGE_KEY,
     JSON.stringify({
       screen: state.screen,
+      program: state.program,
+      programEditorDay: state.programEditorDay,
       exerciseData: state.exerciseData,
       history: state.history,
       day: state.day,
@@ -323,11 +400,18 @@ function restoreState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
+    state.program = sanitizeProgram(parsed.program);
     state.screen = parsed.screen || "dashboard";
     state.exerciseData = parsed.exerciseData || {};
     state.history = parsed.history || [];
-    state.day = parsed.day || "Push";
-    state.currentIndex = parsed.currentIndex || 0;
+    state.day = getProgramDays().includes(parsed.day) ? parsed.day : "Push";
+    state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
+      ? parsed.programEditorDay
+      : state.day;
+    state.currentIndex = Math.min(
+      parsed.currentIndex || 0,
+      Math.max(0, (state.program[state.day] || []).length - 1)
+    );
     state.timer = parsed.timer || { seconds: 0, active: false };
     state.rpe = parsed.rpe ?? 8;
     state.repsInput = parsed.repsInput || "";
@@ -379,6 +463,7 @@ function resetWorkoutState() {
 }
 
 function startWorkoutDay(day) {
+  if (!getProgramDays().includes(day)) return;
   state.day = day;
   state.pendingSession = [];
   resetWorkoutState();
@@ -476,6 +561,8 @@ function finalizeWorkout() {
 
 function clearAllData() {
   localStorage.removeItem(STORAGE_KEY);
+  state.program = createProgramCopy();
+  state.programEditorDay = "Push";
   state.exerciseData = {};
   state.history = [];
   state.pendingSession = [];
@@ -484,6 +571,7 @@ function clearAllData() {
   state.onboardingCompleted = false;
   state.onboardingStep = 0;
   resetWorkoutState();
+  state.day = "Push";
   state.screen = "dashboard";
   seedPreviewData();
   renderApp();
@@ -491,6 +579,109 @@ function clearAllData() {
 
 function dismissInstallHint() {
   state.installHintDismissed = true;
+  saveState();
+  renderApp();
+}
+
+function setProgramEditorDay(day) {
+  if (!getProgramDays().includes(day)) return;
+  state.programEditorDay = day;
+  saveState();
+  renderApp();
+}
+
+function updateProgramEntry(day, index, field, value) {
+  const dayEntries = [...(state.program[day] || [])];
+  const currentEntry = dayEntries[index];
+  if (!currentEntry) return;
+
+  const nextEntry = { ...currentEntry };
+
+  if (field === "exercise" || field === "series" || field === "loadLabel") {
+    nextEntry[field] = sanitizePlainText(value, currentEntry[field]);
+  }
+
+  if (field === "kind") {
+    nextEntry.kind = ["barbell", "machine", "dumbbell", "isolation"].includes(value)
+      ? value
+      : currentEntry.kind;
+  }
+
+  if (field === "minReps") {
+    nextEntry.minReps = sanitizePositiveInteger(value, currentEntry.minReps, 1);
+  }
+
+  if (field === "maxReps") {
+    nextEntry.maxReps = sanitizePositiveInteger(value, currentEntry.maxReps, 1);
+  }
+
+  if (field === "rest") {
+    nextEntry.rest = sanitizePositiveInteger(value, currentEntry.rest, 0);
+  }
+
+  if (field === "defaultLoad") {
+    nextEntry.defaultLoad = sanitizeLoadNumber(value, currentEntry.defaultLoad);
+    if (!nextEntry.loadLabel || nextEntry.loadLabel === currentEntry.loadLabel) {
+      nextEntry.loadLabel = isNumericLoad(nextEntry.defaultLoad)
+        ? `${nextEntry.defaultLoad} kg`
+        : "Charge libre";
+    }
+  }
+
+  dayEntries[index] = normalizeProgramEntry(nextEntry, currentEntry);
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+
+  saveState();
+  renderApp();
+}
+
+function addProgramEntry(day) {
+  const dayEntries = [...(state.program[day] || [])];
+  const nextIndex = dayEntries.length + 1;
+  const nextEntry = normalizeProgramEntry({
+    exercise: `Nouvel exercice ${nextIndex}`,
+    kind: "isolation",
+    series: `Serie ${nextIndex}`,
+    minReps: 10,
+    maxReps: 12,
+    rest: 60,
+    defaultLoad: null,
+    loadLabel: "Charge libre",
+  });
+
+  state.program = {
+    ...state.program,
+    [day]: [...dayEntries, nextEntry],
+  };
+  state.programEditorDay = day;
+  saveState();
+  renderApp();
+}
+
+function removeProgramEntry(day, index) {
+  const dayEntries = [...(state.program[day] || [])];
+  if (!dayEntries[index]) return;
+
+  dayEntries.splice(index, 1);
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+
+  if (state.day === day && state.currentIndex >= dayEntries.length) {
+    state.currentIndex = Math.max(0, dayEntries.length - 1);
+  }
+
+  saveState();
+  renderApp();
+}
+
+function resetProgram() {
+  state.program = createProgramCopy();
+  state.programEditorDay = state.day;
   saveState();
   renderApp();
 }
@@ -827,13 +1018,13 @@ function renderDashboard() {
       </section>
 
       <section class="day-list">
-        ${Object.keys(PROGRAM)
+        ${getProgramDays()
           .map(
             (day) => `
               <button class="day-button" data-day="${day}">
                 <div>
                   <div class="day-button__title">${day.toUpperCase()}</div>
-                  <div class="muted">${PROGRAM[day].length} exercices</div>
+                  <div class="muted">${state.program[day].length} exercices</div>
                 </div>
                 <div class="day-button__arrow">›</div>
               </button>
@@ -864,13 +1055,13 @@ function getRecentSets(days = 7) {
 function renderPremiumDayList() {
   return `
     <section class="day-list">
-      ${Object.keys(PROGRAM)
+      ${getProgramDays()
         .map(
           (day) => `
             <button class="day-button" data-day="${day}">
               <div>
                 <div class="day-button__title">${day.toUpperCase()}</div>
-                <div class="muted">${PROGRAM[day].length} exercices</div>
+                <div class="muted">${state.program[day].length} exercices</div>
               </div>
               <div class="day-button__arrow">â€º</div>
             </button>
@@ -886,14 +1077,14 @@ function renderPremiumDashboard() {
   const historyKeys = getHistoryKeys();
   const sessionCount = getSessionCount();
   const recentSets = getRecentSets();
-  const uniqueExercises = new Set((PROGRAM[state.day] || []).map((item) => item.exercise)).size;
+  const uniqueExercises = new Set((state.program[state.day] || []).map((item) => item.exercise)).size;
   const heroActionLabel = hasWorkoutInProgress()
     ? "Reprendre la seance"
     : `Lancer ${state.day}`;
   const heroBadge = hasWorkoutInProgress() ? "Session active" : "Programme pret";
   const heroCopy = hasWorkoutInProgress()
     ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${state.day.toUpperCase()}.`
-    : `${state.day.toUpperCase()} regroupe ${uniqueExercises} exercices distincts et ${PROGRAM[state.day].length} series programmees.`;
+    : `${state.day.toUpperCase()} regroupe ${uniqueExercises} exercices distincts et ${state.program[state.day].length} series programmees.`;
 
   return `
     <section class="stack-md">
@@ -986,7 +1177,7 @@ function renderPremiumDashboard() {
           <div class="label">Choix des seances</div>
           <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
         </div>
-        <div class="muted">${Object.keys(PROGRAM).length} blocs</div>
+        <div class="muted">${getProgramDays().length} blocs</div>
       </div>
 
       ${renderPremiumDayList()}
@@ -1236,6 +1427,204 @@ function renderHistory() {
   `;
 }
 
+function renderProgramEditor() {
+  const day = state.programEditorDay;
+  const entries = state.program[day] || [];
+
+  return `
+    <article class="surface surface-pad stack-md program-editor">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Modifier le programme</div>
+          <h3 class="section-title dashboard-section-head__title">Edition directe</h3>
+        </div>
+        <div class="label">Sauvegarde auto</div>
+      </div>
+
+      <div class="program-hint">
+        Modifie les exercices, les reps, le repos et les charges de depart directement depuis l'iPhone.
+      </div>
+
+      <div class="program-day-tabs">
+        ${getProgramDays()
+          .map(
+            (programDay) => `
+              <button
+                class="program-day-tab ${programDay === day ? "is-active" : ""}"
+                data-program-day="${programDay}"
+              >
+                ${programDay}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="program-editor-list">
+        ${
+          entries.length
+            ? entries
+                .map(
+                  (entry, index) => `
+                    <article class="surface surface--soft surface-pad program-entry">
+                      <div class="program-entry__head">
+                        <div class="stack-sm">
+                          <div class="label">Exercice ${index + 1}</div>
+                          <div class="program-entry__title">${entry.exercise}</div>
+                          <div class="program-entry__meta">${entry.series} · ${entry.targetLabel} reps · ${entry.rest}s</div>
+                        </div>
+                        <button
+                          class="program-entry__remove"
+                          data-action="remove-program-entry"
+                          data-program-day="${day}"
+                          data-program-index="${index}"
+                          aria-label="Supprimer ${entry.exercise}"
+                        >
+                          Suppr
+                        </button>
+                      </div>
+
+                      <div class="program-grid">
+                        <div class="field-wrap field-wrap--wide">
+                          <label class="label">Nom</label>
+                          <input
+                            class="input input--editor"
+                            type="text"
+                            value="${entry.exercise}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="exercise"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Serie</label>
+                          <input
+                            class="input input--editor"
+                            type="text"
+                            value="${entry.series}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="series"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Type</label>
+                          <select
+                            class="select select--editor"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="kind"
+                          >
+                            <option value="barbell" ${entry.kind === "barbell" ? "selected" : ""}>Barre</option>
+                            <option value="machine" ${entry.kind === "machine" ? "selected" : ""}>Machine</option>
+                            <option value="dumbbell" ${entry.kind === "dumbbell" ? "selected" : ""}>Halteres</option>
+                            <option value="isolation" ${entry.kind === "isolation" ? "selected" : ""}>Isolation</option>
+                          </select>
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Min reps</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            value="${entry.minReps}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="minReps"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Max reps</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            value="${entry.maxReps}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="maxReps"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Repos</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="0"
+                            inputmode="numeric"
+                            value="${entry.rest}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="rest"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Charge dep.</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            inputmode="decimal"
+                            value="${entry.defaultLoad ?? ""}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="defaultLoad"
+                          />
+                        </div>
+
+                        <div class="field-wrap field-wrap--wide">
+                          <label class="label">Libelle charge</label>
+                          <input
+                            class="input input--editor"
+                            type="text"
+                            value="${entry.loadLabel}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="loadLabel"
+                          />
+                        </div>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")
+            : `
+                <article class="surface surface--soft surface-pad">
+                  <div class="muted">Aucun exercice sur ce bloc pour le moment.</div>
+                </article>
+              `
+        }
+      </div>
+
+      <div class="program-actions">
+        <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
+          Ajouter un exercice
+        </button>
+        <button class="button button--ghost" data-action="reset-program">
+          Revenir au programme de base
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function renderSettings() {
   return `
     <section class="stack-md">
@@ -1257,6 +1646,8 @@ function renderSettings() {
           Reinitialiser toutes les donnees
         </button>
       </article>
+
+      ${renderProgramEditor()}
     </section>
   `;
 }
@@ -1330,6 +1721,10 @@ function bindEvents() {
     button.onclick = () => startWorkoutDay(button.dataset.day);
   });
 
+  document.querySelectorAll(".program-day-tab").forEach((button) => {
+    button.onclick = () => setProgramEditorDay(button.dataset.programDay);
+  });
+
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.onclick = () => {
       const action = button.dataset.action;
@@ -1386,6 +1781,21 @@ function bindEvents() {
         clearAllData();
       }
 
+      if (action === "add-program-entry") {
+        addProgramEntry(button.dataset.programDay || state.programEditorDay);
+      }
+
+      if (action === "remove-program-entry") {
+        removeProgramEntry(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programIndex)
+        );
+      }
+
+      if (action === "reset-program") {
+        resetProgram();
+      }
+
       if (action === "dismiss-install") {
         dismissInstallHint();
       }
@@ -1405,6 +1815,17 @@ function bindEvents() {
       if (action === "onboarding-skip" || action === "onboarding-finish") {
         completeOnboarding();
       }
+    };
+  });
+
+  document.querySelectorAll("[data-program-input]").forEach((input) => {
+    input.onchange = (event) => {
+      updateProgramEntry(
+        event.target.dataset.programDay,
+        Number(event.target.dataset.programIndex),
+        event.target.dataset.programField,
+        event.target.value
+      );
     };
   });
 
