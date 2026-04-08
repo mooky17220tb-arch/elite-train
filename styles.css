@@ -519,19 +519,138 @@ button {
 }
 
 .day-button {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 26px;
   padding: 18px;
-  background: rgba(18, 22, 20, 0.92);
+  min-height: 184px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(9, 12, 11, 0.96);
   color: white;
   text-align: left;
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.26);
+}
+
+.day-button::before,
+.day-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.day-button::before {
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.02);
+  opacity: 0.96;
+}
+
+.day-button::after {
+  background:
+    linear-gradient(115deg, rgba(2, 4, 3, 0.08) 0%, rgba(2, 4, 3, 0) 30%),
+    linear-gradient(180deg, rgba(2, 4, 3, 0.14) 0%, rgba(2, 4, 3, 0.68) 62%, rgba(2, 4, 3, 0.92) 100%);
+}
+
+.day-button[data-day="Push"] {
+  border-color: rgba(255, 112, 101, 0.26);
+}
+
+.day-button[data-day="Push"]::before {
+  background-image: url("./assets/push-card.svg");
+}
+
+.day-button[data-day="Pull"] {
+  border-color: rgba(65, 210, 214, 0.24);
+}
+
+.day-button[data-day="Pull"]::before {
+  background-image: url("./assets/pull-card.svg");
+}
+
+.day-button[data-day="Legs"] {
+  border-color: rgba(255, 182, 88, 0.26);
+}
+
+.day-button[data-day="Legs"]::before {
+  background-image: url("./assets/legs-card.svg");
+}
+
+.day-button[data-day="Upper"] {
+  border-color: rgba(112, 231, 176, 0.28);
+}
+
+.day-button[data-day="Upper"]::before {
+  background-image: url("./assets/upper-card.svg");
+}
+
+.day-button > * {
+  position: relative;
+  z-index: 1;
+}
+
+.day-button > div:first-child {
+  display: grid;
+  gap: 6px;
+  max-width: 250px;
+}
+
+.day-button > div:first-child::before {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 2px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(6, 9, 8, 0.54);
+  backdrop-filter: blur(12px);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.day-button[data-day="Push"] > div:first-child::before {
+  content: "Focus haut du corps";
+}
+
+.day-button[data-day="Pull"] > div:first-child::before {
+  content: "Dos et tirage";
+}
+
+.day-button[data-day="Legs"] > div:first-child::before {
+  content: "Force et stabilite";
+}
+
+.day-button[data-day="Upper"] > div:first-child::before {
+  content: "Bloc complet";
 }
 
 .day-button__title {
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 950;
   letter-spacing: -0.04em;
+  line-height: 0.94;
+}
+
+.day-button .muted {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(6, 9, 8, 0.54);
+  backdrop-filter: blur(12px);
+  color: #dbe5e0;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .day-button__arrow {
@@ -540,9 +659,15 @@ button {
   border-radius: 16px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 22px;
+  background: rgba(6, 9, 8, 0.54);
+  backdrop-filter: blur(12px);
+  font-size: 0;
   font-weight: 900;
+}
+
+.day-button__arrow::before {
+  content: "›";
+  font-size: 22px;
 }
 
 .stat-card {

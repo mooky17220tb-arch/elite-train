@@ -1,4 +1,4 @@
-const CACHE_NAME = "elite-train-iphone-cache-v1";
+const CACHE_NAME = "elite-train-iphone-cache-v2";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -6,6 +6,10 @@ const APP_ASSETS = [
   "./app.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./assets/push-card.svg",
+  "./assets/pull-card.svg",
+  "./assets/legs-card.svg",
+  "./assets/upper-card.svg",
 ];
 
 self.addEventListener("install", (event) => {

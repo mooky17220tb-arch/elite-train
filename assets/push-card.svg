@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="80" x2="1430" y2="860" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10231E"/>
+      <stop offset="0.58" stop-color="#08110E"/>
+      <stop offset="1" stop-color="#040605"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1180 180) rotate(90) scale(320 360)">
+      <stop stop-color="#FC5754" stop-opacity=".58"/>
+      <stop offset="1" stop-color="#FC5754" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(470 250) rotate(90) scale(300 300)">
+      <stop stop-color="#18C77F" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#18C77F" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="muscle" x1="715" y1="248" x2="930" y2="608" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF7B6B"/>
+      <stop offset="1" stop-color="#F03E39"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="48" fill="url(#bg)"/>
+  <rect x="64" y="64" width="1472" height="772" rx="36" stroke="rgba(255,255,255,.08)"/>
+  <circle cx="1192" cy="176" r="328" fill="url(#glowA)"/>
+  <circle cx="446" cy="252" r="292" fill="url(#glowB)"/>
+  <g opacity=".16" stroke="#9DE7C4" stroke-width="2">
+    <path d="M76 722C302 674 424 632 602 488"/>
+    <path d="M116 788C338 738 462 696 700 512"/>
+    <path d="M1156 102C1278 164 1384 246 1492 382"/>
+  </g>
+  <g opacity=".24">
+    <circle cx="1260" cy="640" r="210" stroke="#2AE09D" stroke-width="26"/>
+    <circle cx="1258" cy="640" r="150" stroke="#2AE09D" stroke-opacity=".35" stroke-width="10"/>
+  </g>
+  <g transform="translate(0 8)">
+    <circle cx="800" cy="166" r="66" fill="#111917"/>
+    <rect x="756" y="220" width="88" height="64" rx="34" fill="#111917"/>
+    <path d="M654 270C690 232 744 214 800 214C856 214 910 232 946 270L1000 414C1028 486 1002 620 948 680L898 726H702L652 680C598 620 572 486 600 414L654 270Z" fill="#111917"/>
+    <path d="M598 302L518 344C468 370 438 422 434 478L426 582C424 626 446 662 484 680L552 712L596 618L568 588L590 430L654 324L598 302Z" fill="#111917"/>
+    <path d="M1002 302L1082 344C1132 370 1162 422 1166 478L1174 582C1176 626 1154 662 1116 680L1048 712L1004 618L1032 588L1010 430L946 324L1002 302Z" fill="#111917"/>
+    <path d="M724 726H876L910 844H820L800 786L780 844H690L724 726Z" fill="#111917"/>
+    <path d="M724 262C748 242 772 234 800 234C828 234 852 242 876 262L846 420H754L724 262Z" fill="url(#muscle)"/>
+    <path d="M684 270C710 244 734 232 760 232L742 428H654L638 314L684 270Z" fill="url(#muscle)"/>
+    <path d="M916 270C890 244 866 232 840 232L858 428H946L962 314L916 270Z" fill="url(#muscle)"/>
+    <path d="M578 342L640 328L674 420L652 580L610 592L564 510L578 342Z" fill="url(#muscle)"/>
+    <path d="M1022 342L960 328L926 420L948 580L990 592L1036 510L1022 342Z" fill="url(#muscle)"/>
+    <circle cx="664" cy="298" r="42" fill="#FF8A79"/>
+    <circle cx="936" cy="298" r="42" fill="#FF8A79"/>
+  </g>
+</svg>
