@@ -687,6 +687,165 @@ button {
   margin-top: 4px;
 }
 
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  background:
+    linear-gradient(180deg, rgba(3, 5, 4, 0.22) 0%, rgba(3, 5, 4, 0.84) 100%),
+    rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(14px);
+}
+
+.onboarding-card {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 430px;
+  min-height: 540px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 34px;
+  background: rgba(7, 10, 9, 0.98);
+  box-shadow: 0 36px 80px rgba(0, 0, 0, 0.38);
+}
+
+.onboarding-card__media,
+.onboarding-card__shade {
+  position: absolute;
+  inset: 0;
+}
+
+.onboarding-card__media {
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.04);
+}
+
+.onboarding-card[data-day="Push"] .onboarding-card__media {
+  background-image: url("./assets/push-card.svg");
+}
+
+.onboarding-card[data-day="Pull"] .onboarding-card__media {
+  background-image: url("./assets/pull-card.svg");
+}
+
+.onboarding-card[data-day="Legs"] .onboarding-card__media {
+  background-image: url("./assets/legs-card.svg");
+}
+
+.onboarding-card[data-day="Upper"] .onboarding-card__media {
+  background-image: url("./assets/upper-card.svg");
+}
+
+.onboarding-card__shade {
+  background:
+    radial-gradient(circle at 84% 14%, rgba(255, 255, 255, 0.16), transparent 20%),
+    linear-gradient(180deg, rgba(3, 5, 4, 0.18) 0%, rgba(3, 5, 4, 0.54) 46%, rgba(3, 5, 4, 0.94) 100%);
+}
+
+.onboarding-card__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: space-between;
+  min-height: 540px;
+  padding: 24px;
+}
+
+.onboarding-card__top,
+.onboarding-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.onboarding-card__label,
+.onboarding-card__skip,
+.onboarding-card__point {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(6, 9, 8, 0.54);
+  backdrop-filter: blur(12px);
+  color: #f4f7f5;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.onboarding-card__skip {
+  min-height: auto;
+  cursor: pointer;
+}
+
+.onboarding-card__body {
+  align-self: end;
+  display: grid;
+  gap: 14px;
+}
+
+.onboarding-card__counter {
+  display: flex;
+  gap: 8px;
+}
+
+.onboarding-card__dot {
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.onboarding-card__dot.is-active {
+  background: linear-gradient(90deg, #16c47f 0%, #7ff1c1 100%);
+}
+
+.onboarding-card__title {
+  margin: 0;
+  max-width: 280px;
+  font-size: 40px;
+  line-height: 0.96;
+  font-weight: 980;
+  letter-spacing: -0.05em;
+}
+
+.onboarding-card__text {
+  margin: 0;
+  max-width: 300px;
+  color: rgba(234, 240, 237, 0.84);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.onboarding-card__points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.onboarding-card__point {
+  color: #a6f2cf;
+  background: rgba(22, 196, 127, 0.14);
+  border-color: rgba(22, 196, 127, 0.24);
+}
+
+.onboarding-card__actions {
+  align-items: stretch;
+}
+
+.onboarding-card__actions .button {
+  flex: 1;
+}
+
 .day-list {
   display: grid;
   gap: 12px;

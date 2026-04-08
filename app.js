@@ -100,6 +100,8 @@ const state = {
   selectedChartKey: "",
   pendingSession: [],
   installHintDismissed: false,
+  onboardingCompleted: false,
+  onboardingStep: 0,
 };
 
 const root = document.getElementById("app");
@@ -310,6 +312,8 @@ function saveState() {
       pendingSession: state.pendingSession,
       selectedChartKey: state.selectedChartKey,
       installHintDismissed: state.installHintDismissed,
+      onboardingCompleted: state.onboardingCompleted,
+      onboardingStep: state.onboardingStep,
     })
   );
 }
@@ -332,6 +336,8 @@ function restoreState() {
     state.pendingSession = parsed.pendingSession || [];
     state.selectedChartKey = parsed.selectedChartKey || "";
     state.installHintDismissed = Boolean(parsed.installHintDismissed);
+    state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
+    state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
   } catch (error) {
     console.error("Erreur localStorage", error);
   }
@@ -475,6 +481,8 @@ function clearAllData() {
   state.pendingSession = [];
   state.selectedChartKey = "";
   state.installHintDismissed = false;
+  state.onboardingCompleted = false;
+  state.onboardingStep = 0;
   resetWorkoutState();
   state.screen = "dashboard";
   seedPreviewData();
@@ -485,6 +493,105 @@ function dismissInstallHint() {
   state.installHintDismissed = true;
   saveState();
   renderApp();
+}
+
+function getOnboardingSlides() {
+  return [
+    {
+      label: "Bienvenue",
+      title: "ELITE TRAIN sur iPhone",
+      text: "Ton carnet d'entrainement, ton timer et ta progression reunis dans une interface simple et propre.",
+      points: ["Programme clair", "Rendu premium", "Navigation rapide"],
+    },
+    {
+      label: "Comment ca marche",
+      title: "Valide chaque serie en quelques secondes",
+      text: "Tu renseignes tes reps, ton RPE, puis l'app calcule automatiquement la suite de ta progression.",
+      points: ["Charge cible", "Conseil auto", "Historique visuel"],
+    },
+    {
+      label: "Installation",
+      title: "Ajoute-la a ton ecran d'accueil",
+      text: "Ouvre le site dans Safari, touche Partager puis Ajouter a l'ecran d'accueil pour un vrai rendu d'app.",
+      points: ["Mode plein ecran", "Acces rapide", "Cache hors ligne"],
+    },
+  ];
+}
+
+function completeOnboarding() {
+  state.onboardingCompleted = true;
+  state.onboardingStep = 0;
+  state.installHintDismissed = true;
+  state.screen = "dashboard";
+  saveState();
+  renderApp();
+}
+
+function renderOnboardingOverlay() {
+  const slides = getOnboardingSlides();
+  const slide = slides[state.onboardingStep] || slides[0];
+  const isLast = state.onboardingStep === slides.length - 1;
+
+  return `
+    <div class="onboarding-overlay">
+      <article class="onboarding-card" data-day="${state.day}">
+        <div class="onboarding-card__media"></div>
+        <div class="onboarding-card__shade"></div>
+        <div class="onboarding-card__content">
+          <div class="onboarding-card__top">
+            <span class="onboarding-card__label">${slide.label}</span>
+            <button class="onboarding-card__skip" data-action="onboarding-skip">
+              Passer
+            </button>
+          </div>
+
+          <div class="onboarding-card__body">
+            <div class="onboarding-card__counter">
+              ${slides
+                .map(
+                  (_, index) => `
+                    <span class="onboarding-card__dot ${
+                      index === state.onboardingStep ? "is-active" : ""
+                    }"></span>
+                  `
+                )
+                .join("")}
+            </div>
+            <h2 class="onboarding-card__title">${slide.title}</h2>
+            <p class="onboarding-card__text">${slide.text}</p>
+            <div class="onboarding-card__points">
+              ${slide.points
+                .map(
+                  (point) => `
+                    <span class="onboarding-card__point">${point}</span>
+                  `
+                )
+                .join("")}
+            </div>
+          </div>
+
+          <div class="onboarding-card__actions">
+            ${
+              state.onboardingStep > 0
+                ? `
+                    <button class="button button--ghost" data-action="onboarding-prev">
+                      Retour
+                    </button>
+                  `
+                : `
+                    <button class="button button--ghost" data-action="onboarding-skip">
+                      Plus tard
+                    </button>
+                  `
+            }
+            <button class="button button--primary" data-action="${isLast ? "onboarding-finish" : "onboarding-next"}">
+              ${isLast ? "Entrer dans l'app" : "Continuer"}
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+  `;
 }
 
 function hasWorkoutInProgress() {
@@ -1202,6 +1309,8 @@ function renderApp() {
           </button>
         </div>
       </nav>
+
+      ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
     </div>
   `;
 
@@ -1279,6 +1388,22 @@ function bindEvents() {
 
       if (action === "dismiss-install") {
         dismissInstallHint();
+      }
+
+      if (action === "onboarding-next") {
+        state.onboardingStep = Math.min(state.onboardingStep + 1, getOnboardingSlides().length - 1);
+        saveState();
+        renderApp();
+      }
+
+      if (action === "onboarding-prev") {
+        state.onboardingStep = Math.max(state.onboardingStep - 1, 0);
+        saveState();
+        renderApp();
+      }
+
+      if (action === "onboarding-skip" || action === "onboarding-finish") {
+        completeOnboarding();
       }
     };
   });
