@@ -92,6 +92,7 @@ const state = {
   currentIndex: 0,
   program: createProgramCopy(),
   programEditorDay: "Push",
+  cycle: createDefaultCycle(),
   exerciseData: {},
   history: [],
   timer: { seconds: 0, active: false },
@@ -114,6 +115,34 @@ let restAudioContext = null;
 
 function createProgramCopy() {
   return JSON.parse(JSON.stringify(PROGRAM));
+}
+
+function createDefaultCycle() {
+  return {
+    goal: "hypertrophy",
+    length: 6,
+    week: 1,
+    startedAt: new Date().toISOString(),
+  };
+}
+
+function sanitizeCycle(cycle = {}) {
+  const allowedGoals = ["hypertrophy", "strength"];
+  const allowedLengths = [4, 6, 8];
+  const goal = allowedGoals.includes(cycle?.goal) ? cycle.goal : "hypertrophy";
+  const length = allowedLengths.includes(Number(cycle?.length)) ? Number(cycle.length) : 6;
+  const week = Math.min(length, sanitizePositiveInteger(cycle?.week, 1, 1));
+  const startedAt =
+    typeof cycle?.startedAt === "string" && cycle.startedAt
+      ? cycle.startedAt
+      : new Date().toISOString();
+
+  return {
+    goal,
+    length,
+    week,
+    startedAt,
+  };
 }
 
 function getProgramDays() {
@@ -509,6 +538,7 @@ function buildPersistedState() {
     screen: state.screen,
     program: state.program,
     programEditorDay: state.programEditorDay,
+    cycle: state.cycle,
     exerciseData: state.exerciseData,
     history: state.history,
     day: state.day,
@@ -534,6 +564,7 @@ function hydrateState(parsed = {}) {
   state.screen = parsed.screen || "dashboard";
   state.exerciseData = parsed.exerciseData || {};
   state.history = parsed.history || [];
+  state.cycle = sanitizeCycle(parsed.cycle);
   state.day = getProgramDays().includes(parsed.day) ? parsed.day : "Push";
   state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
     ? parsed.programEditorDay
@@ -708,6 +739,7 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY);
   state.program = createProgramCopy();
   state.programEditorDay = "Push";
+  state.cycle = createDefaultCycle();
   state.exerciseData = {};
   state.history = [];
   state.pendingSession = [];
@@ -1561,6 +1593,213 @@ function renderRecordsSection() {
   `;
 }
 
+function getCycleGoalLabel(goal) {
+  return goal === "strength" ? "Force" : "Hypertrophie";
+}
+
+function getCycleBlueprint(goal, length) {
+  const hypertrophyPlans = {
+    4: [
+      { phase: "Base", tone: "hold", focus: "Volume propre", target: "RIR 2", prescription: "Installe les charges de travail et remplis la fourchette sans aller a l'echec." },
+      { phase: "Accumulation", tone: "progress", focus: "Plus de reps", target: "RIR 1-2", prescription: "Cherche 1 rep de plus sur les tops sets ou un petit palier si tout est propre." },
+      { phase: "Intensification", tone: "progress", focus: "Petit palier", target: "Lourd propre", prescription: "Monte legerement sur les mouvements forts et garde le volume stable." },
+      { phase: "Deload", tone: "reduce", focus: "Recuperation", target: "-30% volume", prescription: "Retire 1 a 2 series par exercice ou baisse d'un palier pour relancer le bloc." },
+    ],
+    6: [
+      { phase: "Base", tone: "hold", focus: "Calage", target: "RIR 2", prescription: "Pose tes charges de reference et reste technique sur toutes les series." },
+      { phase: "Accumulation 1", tone: "progress", focus: "Reps", target: "Milieu de fourchette", prescription: "Ajoute des reps propres avant de monter la charge." },
+      { phase: "Accumulation 2", tone: "progress", focus: "Volume", target: "Haut de fourchette", prescription: "Essaie de valider le haut des reps sur les mouvements principaux." },
+      { phase: "Intensification", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Monte d'un cran sur les tops sets si les validations restent propres." },
+      { phase: "Consolidation", tone: "hold", focus: "Verrouillage", target: "Charge tenue", prescription: "Stabilise les nouveaux paliers avant de chercher a remonter." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Volume bas", prescription: "Baisse clairement le volume et garde du jus pour repartir sur un nouveau bloc." },
+    ],
+    8: [
+      { phase: "Base", tone: "hold", focus: "Reference", target: "RIR 2", prescription: "Installe un point de depart propre sur tous les mouvements." },
+      { phase: "Accumulation 1", tone: "progress", focus: "Reps", target: "Milieu de fourchette", prescription: "Monte les reps progressivement sans griller la technique." },
+      { phase: "Accumulation 2", tone: "progress", focus: "Volume", target: "Haut de fourchette", prescription: "Pousse le volume utile sur les exos prioritaires." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids sur les tops sets validés." },
+      { phase: "Build 2", tone: "progress", focus: "Charge + reps", target: "Solide", prescription: "Essaie de tenir la nouvelle charge avec des reps propres." },
+      { phase: "Intensification", tone: "hold", focus: "Stabilite", target: "Lourd propre", prescription: "Freine le volume et verrouille les mouvements forts." },
+      { phase: "Pic", tone: "progress", focus: "Validation", target: "Top performance", prescription: "Cherche une grosse seance sans disperser le volume." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Volume bas", prescription: "Deload complet avant de relancer un nouveau cycle." },
+    ],
+  };
+
+  const strengthPlans = {
+    4: [
+      { phase: "Technique", tone: "hold", focus: "Barre propre", target: "Qualite", prescription: "Travaille les mouvements forts avec un peu plus de marge et des repos complets." },
+      { phase: "Charge", tone: "progress", focus: "Petit palier", target: "RPE controle", prescription: "Ajoute un palier sur les tops sets si la technique tient." },
+      { phase: "Intensif", tone: "progress", focus: "Lourd", target: "Top set", prescription: "Priorite aux grosses charges, reduis les accessoires si besoin." },
+      { phase: "Deload", tone: "reduce", focus: "Recuperation", target: "Vitesse", prescription: "Baisse franchement la charge et garde seulement des series faciles." },
+    ],
+    6: [
+      { phase: "Base", tone: "hold", focus: "Calage", target: "Vitesse", prescription: "Fixe les charges de reference avec une execution nickel." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Monte legerement sur les tops sets validés." },
+      { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue a charger sans perdre la vitesse de barre." },
+      { phase: "Intensification", tone: "hold", focus: "Lourd propre", target: "Bas de fourchette", prescription: "Garde les accessoires simples et concentre-toi sur les mouvements forts." },
+      { phase: "Pic", tone: "progress", focus: "Validation", target: "Perf", prescription: "Cherche une grosse validation sur les principaux lifts." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Barre facile", prescription: "Semaine legere pour absorber le bloc et repartir propre." },
+    ],
+    8: [
+      { phase: "Technique", tone: "hold", focus: "Bar path", target: "Qualite", prescription: "Verrouille la technique et les repos sur les lifts principaux." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids progressivement sans te crisper." },
+      { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue la montée de charge sur les mouvements forts." },
+      { phase: "Build 3", tone: "progress", focus: "Charge tenue", target: "Reps bas propres", prescription: "Garde le bas de fourchette avec une execution propre." },
+      { phase: "Intensification", tone: "hold", focus: "Nerveux", target: "Repos longs", prescription: "Diminue un peu le volume accessoire pour garder du jus." },
+      { phase: "Intensification 2", tone: "hold", focus: "Lourd stable", target: "Top sets", prescription: "Ne cherche pas a tout monter: verrouille les charges lourdes." },
+      { phase: "Pic", tone: "progress", focus: "Validation", target: "Meilleure seance", prescription: "Cherche une vraie seance reference sur les lifts du bloc." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Barre rapide", prescription: "Reviens leger et rapide avant de repartir sur un nouveau cycle." },
+    ],
+  };
+
+  const catalog = goal === "strength" ? strengthPlans : hypertrophyPlans;
+  return catalog[length] || hypertrophyPlans[6];
+}
+
+function getCycleSnapshot() {
+  const cycle = sanitizeCycle(state.cycle);
+  const plan = getCycleBlueprint(cycle.goal, cycle.length);
+  const current = plan[Math.max(0, Math.min(cycle.week - 1, plan.length - 1))];
+  const next = cycle.week < cycle.length ? plan[cycle.week] : null;
+
+  return {
+    ...cycle,
+    goalLabel: getCycleGoalLabel(cycle.goal),
+    progress: Math.round((cycle.week / cycle.length) * 100),
+    current,
+    next,
+    startedLabel: formatDate(cycle.startedAt),
+  };
+}
+
+function setCycleGoal(goal) {
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    goal,
+  });
+  saveState();
+  renderApp();
+}
+
+function setCycleLength(length) {
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    length: Number(length),
+  });
+  saveState();
+  renderApp();
+}
+
+function changeCycleWeek(delta) {
+  const nextWeek = Math.max(1, Math.min(state.cycle.length, state.cycle.week + delta));
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    week: nextWeek,
+  });
+  saveState();
+  renderApp();
+}
+
+function resetCycleBlock() {
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    week: 1,
+    startedAt: new Date().toISOString(),
+  });
+  saveState();
+  renderApp();
+}
+
+function renderCycleSection() {
+  const cycle = getCycleSnapshot();
+
+  return `
+    <article class="surface surface-pad cycle-shell cycle-shell--${cycle.current.tone}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Bloc de progression</div>
+          <h3 class="section-title dashboard-section-head__title">Semaine ${cycle.week} / ${cycle.length} · ${cycle.current.phase}</h3>
+        </div>
+        <div class="cycle-badge">${cycle.goalLabel}</div>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">Avancement du bloc</div>
+          <div class="label">${cycle.progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${cycle.progress}%"></div>
+        </div>
+      </div>
+
+      <div class="cycle-grid">
+        <div class="cycle-card">
+          <div class="label">Focus</div>
+          <div class="cycle-card__value">${cycle.current.focus}</div>
+          <div class="cycle-card__meta">${cycle.current.target}</div>
+        </div>
+        <div class="cycle-card">
+          <div class="label">Ensuite</div>
+          <div class="cycle-card__value">${cycle.next ? cycle.next.phase : "Fin de bloc"}</div>
+          <div class="cycle-card__meta">${cycle.next ? cycle.next.focus : "Relancer un nouveau cycle"}</div>
+        </div>
+      </div>
+
+      <div class="cycle-note">${cycle.current.prescription}</div>
+    </article>
+  `;
+}
+
+function renderCycleSettings() {
+  const cycle = getCycleSnapshot();
+
+  return `
+    <article class="surface surface-pad stack-md cycle-settings">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Cycle de progression</div>
+          <h3 class="section-title dashboard-section-head__title">Bloc en cours</h3>
+        </div>
+        <div class="label">Depart ${cycle.startedLabel}</div>
+      </div>
+
+      <div class="cycle-settings__summary">
+        <span class="cycle-settings__chip">${cycle.goalLabel}</span>
+        <span class="cycle-settings__chip">Semaine ${cycle.week}/${cycle.length}</span>
+        <span class="cycle-settings__chip">${cycle.current.phase}</span>
+      </div>
+
+      <div class="grid-2">
+        <div class="field-wrap">
+          <label class="label" for="cycle-goal-select">Objectif</label>
+          <select id="cycle-goal-select" class="select">
+            <option value="hypertrophy" ${cycle.goal === "hypertrophy" ? "selected" : ""}>Hypertrophie</option>
+            <option value="strength" ${cycle.goal === "strength" ? "selected" : ""}>Force</option>
+          </select>
+        </div>
+
+        <div class="field-wrap">
+          <label class="label" for="cycle-length-select">Duree</label>
+          <select id="cycle-length-select" class="select">
+            <option value="4" ${cycle.length === 4 ? "selected" : ""}>4 semaines</option>
+            <option value="6" ${cycle.length === 6 ? "selected" : ""}>6 semaines</option>
+            <option value="8" ${cycle.length === 8 ? "selected" : ""}>8 semaines</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="cycle-note">${cycle.current.prescription}</div>
+
+      <div class="cycle-settings__actions">
+        <button class="button button--ghost" data-action="cycle-prev-week">Semaine -</button>
+        <button class="button button--primary" data-action="cycle-next-week">Semaine +</button>
+        <button class="button button--ghost" data-action="cycle-reset">Redemarrer bloc</button>
+      </div>
+    </article>
+  `;
+}
+
 function getWeeklySessionCount(days = 7) {
   const now = Date.now();
   const range = days * 24 * 60 * 60 * 1000;
@@ -2173,6 +2412,7 @@ function getFatigueProfile() {
 function getCoachSnapshot() {
   const resume = getSmartResumeData();
   const day = resume?.day || getNextTrainingDay();
+  const cycle = getCycleSnapshot();
   const focusEntry = pickCoachFocusEntry(day);
   const fatigue = getFatigueProfile();
   const stagnation = focusEntry ? getStagnationInsight(focusEntry.key) : null;
@@ -2185,7 +2425,12 @@ function getCoachSnapshot() {
   let signal = focusEntry ? "Routine" : "Reference";
   let note = `Prochaine ${day}: construis une reference propre et reguliere.`;
 
-  if (fatigue.label === "Deload") {
+  if (cycle.current.tone === "reduce") {
+    tone = "reduce";
+    action = "Deload";
+    signal = cycle.current.phase;
+    note = `${cycle.current.phase} sur ton bloc ${cycle.goalLabel.toLowerCase()}. ${cycle.current.prescription}`;
+  } else if (fatigue.label === "Deload") {
     tone = "reduce";
     action = "Deload";
     signal = "Fatigue";
@@ -2204,12 +2449,12 @@ function getCoachSnapshot() {
     tone = "progress";
     action = "Monter";
     signal = "Progression";
-    note = `${shortenLabel(focusEntry.exercise, 24)} valide le haut de fourchette. Monte d'un palier a la prochaine ${day}.`;
+    note = `${shortenLabel(focusEntry.exercise, 24)} valide le haut de fourchette. Monte d'un palier a la prochaine ${day} dans la phase ${cycle.current.phase.toLowerCase()}.`;
   } else if (focusEntry) {
     tone = "hold";
     action = "Garder";
-    signal = "Stable";
-    note = `${shortenLabel(focusEntry.exercise, 24)} est globalement propre. Verrouille encore cette charge avant de monter.`;
+    signal = cycle.current.phase;
+    note = `${shortenLabel(focusEntry.exercise, 24)} est globalement propre. ${cycle.current.prescription}`;
   }
 
   return {
@@ -2225,6 +2470,7 @@ function getCoachSnapshot() {
       : "Pas encore assez de data sur ce bloc",
     signal,
     note,
+    cycleLabel: `S${cycle.week}/${cycle.length} · ${cycle.current.phase}`,
     scoreText: `${fatigue.score}/4`,
     streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
   };
@@ -2255,7 +2501,7 @@ function renderCoachSection() {
         <div class="coach-card">
           <div class="label">Signal</div>
           <div class="coach-card__value">${coach.signal}</div>
-          <div class="coach-card__meta">${coach.streakText}</div>
+          <div class="coach-card__meta">${coach.cycleLabel} · ${coach.streakText}</div>
         </div>
       </div>
 
@@ -2332,6 +2578,7 @@ function renderPremiumDashboard() {
       ${getInstallHintHtml()}
       ${renderResumeCard()}
       ${renderWeeklyPlanner()}
+      ${renderCycleSection()}
       ${renderCoachSection()}
 
       <article class="surface surface-pad chart-shell">
@@ -2866,6 +3113,7 @@ function renderSettings() {
         <div class="install-hint">
           Les donnees sont stockees localement sur l'appareil via le navigateur.
         </div>
+        ${renderCycleSettings()}
         <article class="surface surface--soft surface-pad backup-shell">
           <div class="dashboard-section-head">
             <div>
@@ -3043,6 +3291,18 @@ function bindEvents() {
         document.getElementById("backup-input")?.click();
       }
 
+      if (action === "cycle-prev-week") {
+        changeCycleWeek(-1);
+      }
+
+      if (action === "cycle-next-week") {
+        changeCycleWeek(1);
+      }
+
+      if (action === "cycle-reset") {
+        resetCycleBlock();
+      }
+
       if (action === "toggle-rest-sound") {
         toggleRestPreference("restSoundEnabled");
       }
@@ -3126,6 +3386,20 @@ function bindEvents() {
       const file = event.target.files?.[0];
       event.target.value = "";
       await importBackupFromFile(file);
+    };
+  }
+
+  const cycleGoalSelect = document.getElementById("cycle-goal-select");
+  if (cycleGoalSelect) {
+    cycleGoalSelect.onchange = (event) => {
+      setCycleGoal(event.target.value);
+    };
+  }
+
+  const cycleLengthSelect = document.getElementById("cycle-length-select");
+  if (cycleLengthSelect) {
+    cycleLengthSelect.onchange = (event) => {
+      setCycleLength(event.target.value);
     };
   }
 
