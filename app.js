@@ -2025,6 +2025,357 @@ function renderPremiumDashboard() {
   `;
 }
 
+function getRecentTrainingStreak(days = 7) {
+  const planner = getWeeklyPlanner(days).slice().reverse();
+  let streak = 0;
+  let started = false;
+
+  for (const day of planner) {
+    if (!started && day.count === 0) continue;
+    if (day.count > 0) {
+      started = true;
+      streak += 1;
+      continue;
+    }
+    if (started) break;
+  }
+
+  return streak;
+}
+
+function getLatestSessionEntriesByDay(day) {
+  const entries = getSortedHistory().filter((item) => item.day === day);
+  if (!entries.length) return [];
+
+  const latestKey = getDayKey(entries[0].date);
+  return entries.filter((item) => item.day === day && getDayKey(item.date) === latestKey);
+}
+
+function pickCoachFocusEntry(day) {
+  const entries = getLatestSessionEntriesByDay(day);
+  return (
+    entries.find((item) => String(item.series || "").toLowerCase().includes("top set")) ||
+    entries.find((item) => isNumericLoad(item.load)) ||
+    entries[0] ||
+    getSortedHistory().find((item) => item.day === day) ||
+    null
+  );
+}
+
+function getStagnationInsight(key) {
+  const entries = getSortedHistory().filter((item) => item.key === key).slice(0, 3);
+  if (entries.length < 3) {
+    return {
+      stalled: false,
+      label: "Peu de recul",
+      detail: "Encore 1 a 2 seances pour lire une vraie tendance",
+    };
+  }
+
+  const reps = entries.map((item) => item.reps);
+  const repSpread = Math.max(...reps) - Math.min(...reps);
+  const allNumeric = entries.every((item) => isNumericLoad(item.load));
+
+  if (allNumeric) {
+    const sameLoad = entries.every((item) => item.load === entries[0].load);
+    const bestReps = Math.max(...reps);
+
+    if (sameLoad && repSpread <= 1 && bestReps < entries[0].maxReps) {
+      return {
+        stalled: true,
+        label: "Stagnation",
+        detail: "Meme charge et presque le meme score sur 3 seances",
+      };
+    }
+  }
+
+  if (repSpread === 0) {
+    return {
+      stalled: true,
+      label: "Stagnation",
+      detail: "Le score reps ne bouge plus depuis 3 passages",
+    };
+  }
+
+  return {
+    stalled: false,
+    label: "Ca bouge",
+    detail: "Les derniers passages montrent encore du mouvement",
+  };
+}
+
+function getFatigueProfile() {
+  if (!state.history.length) {
+    return {
+      score: 0,
+      label: "Depart",
+      tone: "hold",
+      detail: "Commence a logger pour affiner les recommandations",
+      weeklySessions: 0,
+      recentSets: 0,
+      reduceSignals: 0,
+      streak: 0,
+    };
+  }
+
+  const recentEntries = getSortedHistory().slice(0, 12);
+  const weeklySessions = getWeeklySessionCount(7);
+  const recentSets = getRecentSets(7);
+  const reduceSignals = recentEntries.filter(
+    (entry) => getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe).type === "reduce"
+  ).length;
+  const streak = getRecentTrainingStreak(7);
+
+  let score = 0;
+  if (weeklySessions >= 4) score += 1;
+  if (recentSets >= 18) score += 1;
+  if (reduceSignals >= 2) score += 1;
+  if (streak >= 3) score += 1;
+
+  if (score >= 4) {
+    return {
+      score,
+      label: "Deload",
+      tone: "reduce",
+      detail: "Volume charge et plusieurs signaux bas cette semaine",
+      weeklySessions,
+      recentSets,
+      reduceSignals,
+      streak,
+    };
+  }
+
+  if (score >= 2) {
+    return {
+      score,
+      label: "A surveiller",
+      tone: "hold",
+      detail: "Garde un peu de marge sur les gros mouvements",
+      weeklySessions,
+      recentSets,
+      reduceSignals,
+      streak,
+    };
+  }
+
+  return {
+    score,
+    label: "Frais",
+    tone: "progress",
+    detail: "Bonne fenetre pour pousser si la technique reste propre",
+    weeklySessions,
+    recentSets,
+    reduceSignals,
+    streak,
+  };
+}
+
+function getCoachSnapshot() {
+  const resume = getSmartResumeData();
+  const day = resume?.day || getNextTrainingDay();
+  const focusEntry = pickCoachFocusEntry(day);
+  const fatigue = getFatigueProfile();
+  const stagnation = focusEntry ? getStagnationInsight(focusEntry.key) : null;
+  const focusAdvice = focusEntry
+    ? getAdvice(focusEntry.reps, focusEntry.minReps, focusEntry.maxReps, focusEntry.rpe ?? 8)
+    : null;
+
+  let tone = "hold";
+  let action = focusEntry ? "Garder" : "Lancer";
+  let signal = focusEntry ? "Routine" : "Reference";
+  let note = `Prochaine ${day}: construis une reference propre et reguliere.`;
+
+  if (fatigue.label === "Deload") {
+    tone = "reduce";
+    action = "Deload";
+    signal = "Fatigue";
+    note = `Le volume recent est charge. Sur ${day}, baisse d'un palier ou retire 1 a 2 series pour repartir propre.`;
+  } else if (focusEntry && focusAdvice?.type === "reduce") {
+    tone = "reduce";
+    action = "Baisser";
+    signal = "Sous cible";
+    note = `${shortenLabel(focusEntry.exercise, 24)} est passe sous la cible. Redescends d'un palier a la prochaine ${day}.`;
+  } else if (focusEntry && stagnation?.stalled) {
+    tone = "hold";
+    action = "Garder";
+    signal = "Stagnation";
+    note = `${shortenLabel(focusEntry.exercise, 24)} stagne depuis 3 passages. Garde la charge et vise 1 rep propre en plus.`;
+  } else if (focusEntry && focusAdvice?.type === "progress" && fatigue.score <= 1) {
+    tone = "progress";
+    action = "Monter";
+    signal = "Progression";
+    note = `${shortenLabel(focusEntry.exercise, 24)} valide le haut de fourchette. Monte d'un palier a la prochaine ${day}.`;
+  } else if (focusEntry) {
+    tone = "hold";
+    action = "Garder";
+    signal = "Stable";
+    note = `${shortenLabel(focusEntry.exercise, 24)} est globalement propre. Verrouille encore cette charge avant de monter.`;
+  }
+
+  return {
+    day,
+    tone,
+    action,
+    readiness: fatigue.label,
+    readinessTone: fatigue.tone,
+    readinessDetail: fatigue.detail,
+    focus: focusEntry ? shortenLabel(focusEntry.exercise, 20) : day,
+    focusMeta: focusEntry
+      ? `${focusEntry.series} - ${focusEntry.reps} reps au dernier passage`
+      : "Pas encore assez de data sur ce bloc",
+    signal,
+    note,
+    scoreText: `${fatigue.score}/4`,
+    streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
+  };
+}
+
+function renderCoachSection() {
+  const coach = getCoachSnapshot();
+
+  return `
+    <article class="surface surface-pad coach-shell coach-shell--${coach.tone}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Coach intelligent</div>
+          <h3 class="section-title dashboard-section-head__title">Prochaine ${coach.day}: ${coach.action}</h3>
+        </div>
+        <div class="coach-score coach-score--${coach.readinessTone}">
+          <span>${coach.readiness}</span>
+          <strong>${coach.scoreText}</strong>
+        </div>
+      </div>
+
+      <div class="coach-grid">
+        <div class="coach-card">
+          <div class="label">Focus</div>
+          <div class="coach-card__value">${coach.focus}</div>
+          <div class="coach-card__meta">${coach.focusMeta}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Signal</div>
+          <div class="coach-card__value">${coach.signal}</div>
+          <div class="coach-card__meta">${coach.streakText}</div>
+        </div>
+      </div>
+
+      <div class="coach-note">${coach.note}</div>
+
+      <div class="coach-tags">
+        <span class="coach-tag">Fatigue ${coach.readiness}</span>
+        <span class="coach-tag">Lecture ${coach.signal}</span>
+        <span class="coach-tag">Bloc ${coach.day}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const weeklySessions = getWeeklySessionCount();
+  const recentSets = getRecentSets();
+  const resume = getSmartResumeData();
+  const heroDay = resume?.day || state.day;
+  const heroSummary = getDaySummary(heroDay);
+  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionAttrs = resume?.mode === "active"
+    ? `data-action="resume-workout"`
+    : `data-day="${heroDay}"`;
+  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
+  const heroCopy = resume?.mode === "active"
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
+    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-day="${heroDay}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${heroDay}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
+              <span class="dashboard-hero__stat-label">Semaine</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Total</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">Series 7j</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" ${heroActionAttrs}>
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+      ${renderWeeklyPlanner()}
+      ${renderCoachSection()}
+
+      <article class="surface surface-pad chart-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+          </div>
+          <div class="label">${chart.entries.length} points - ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} - ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
 function renderPlateView(settings) {
   const plates = calculatePlates(settings.load);
   return `

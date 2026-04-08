@@ -1569,6 +1569,7 @@ button {
 }
 
 .planner-shell,
+.coach-shell,
 .records-shell,
 .backup-shell {
   display: grid;
@@ -1640,6 +1641,96 @@ button {
   font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.coach-shell {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.coach-shell--progress {
+  border-color: rgba(22, 196, 127, 0.22);
+  background: rgba(22, 196, 127, 0.08);
+}
+
+.coach-shell--reduce {
+  border-color: rgba(245, 166, 35, 0.22);
+  background: rgba(245, 166, 35, 0.08);
+}
+
+.coach-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.coach-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.coach-card__value {
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.coach-card__meta,
+.coach-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.coach-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.coach-score strong {
+  font-size: 12px;
+  color: #f5f7f6;
+}
+
+.coach-score--progress {
+  color: #9df0ca;
+}
+
+.coach-score--hold {
+  color: #dce4e0;
+}
+
+.coach-score--reduce {
+  color: #ffd27a;
+}
+
+.coach-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.coach-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce4e0;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .history-list {
@@ -1899,6 +1990,18 @@ button {
     font-size: 16px;
   }
 
+  .coach-grid {
+    gap: 8px;
+  }
+
+  .coach-card {
+    padding: 12px;
+  }
+
+  .coach-card__value {
+    font-size: 18px;
+  }
+
   .smart-resume__chip {
     font-size: 11px;
     padding: 9px 10px;
@@ -1914,6 +2017,7 @@ button {
     font-size: 24px;
   }
 
+  .coach-grid,
   .records-summary,
   .backup-actions,
   .dashboard-mini-grid--insights,
