@@ -738,6 +738,155 @@ function renderDashboard() {
   `;
 }
 
+function getSessionCount() {
+  const sessions = new Set(
+    state.history.map((item) => `${item.day}-${String(item.date || "").slice(0, 10)}`)
+  );
+  return sessions.size;
+}
+
+function getRecentSets(days = 7) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  return state.history.filter((item) => {
+    const time = new Date(item.date).getTime();
+    return Number.isFinite(time) && now - time <= range;
+  }).length;
+}
+
+function renderPremiumDayList() {
+  return `
+    <section class="day-list">
+      ${Object.keys(PROGRAM)
+        .map(
+          (day) => `
+            <button class="day-button" data-day="${day}">
+              <div>
+                <div class="day-button__title">${day.toUpperCase()}</div>
+                <div class="muted">${PROGRAM[day].length} exercices</div>
+              </div>
+              <div class="day-button__arrow">â€º</div>
+            </button>
+          `
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const recentSets = getRecentSets();
+  const uniqueExercises = new Set((PROGRAM[state.day] || []).map((item) => item.exercise)).size;
+  const heroActionLabel = hasWorkoutInProgress()
+    ? "Reprendre la seance"
+    : `Lancer ${state.day}`;
+  const heroBadge = hasWorkoutInProgress() ? "Session active" : "Programme pret";
+  const heroCopy = hasWorkoutInProgress()
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${state.day.toUpperCase()}.`
+    : `${state.day.toUpperCase()} regroupe ${uniqueExercises} exercices distincts et ${PROGRAM[state.day].length} series programmees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-day="${state.day}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${state.day}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${state.day.toUpperCase()}</h2>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${state.history.length}</span>
+              <span class="dashboard-hero__stat-label">Series</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Seances</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">7 jours</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" data-day="${state.day}">
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+
+      <section class="dashboard-mini-grid">
+        <article class="surface dashboard-mini-card">
+          <div class="label">Bloc actif</div>
+          <div class="dashboard-mini-card__value">${state.day}</div>
+          <div class="dashboard-mini-card__meta">${uniqueExercises} exercices distincts</div>
+        </article>
+        <article class="surface dashboard-mini-card">
+          <div class="label">Volume recent</div>
+          <div class="dashboard-mini-card__value">${recentSets}</div>
+          <div class="dashboard-mini-card__meta">series sur 7 jours</div>
+        </article>
+      </section>
+
+      <article class="surface surface-pad chart-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+          </div>
+          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} · ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${Object.keys(PROGRAM).length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
 function renderPlateView(settings) {
   const plates = calculatePlates(settings.load);
   return `
@@ -1006,7 +1155,7 @@ function renderSettings() {
 }
 
 function renderBody() {
-  if (state.screen === "dashboard") return renderDashboard();
+  if (state.screen === "dashboard") return renderPremiumDashboard();
   if (state.screen === "history") return renderHistory();
   if (state.screen === "settings") return renderSettings();
   return renderWorkout();
