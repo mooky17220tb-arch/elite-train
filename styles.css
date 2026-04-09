@@ -283,6 +283,12 @@ button {
   color: white;
 }
 
+.button:disabled,
+.input:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .hero-title {
   margin: 14px 0 8px;
   font-size: 36px;

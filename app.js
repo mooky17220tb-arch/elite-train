@@ -103,6 +103,7 @@ const state = {
   repsInput: "",
   showPlates: false,
   workoutFinished: false,
+  pendingAdvance: null,
   selectedChartKey: "",
   pendingSession: [],
   installHintDismissed: false,
@@ -231,6 +232,15 @@ function sanitizePositiveInteger(value, fallback, minimum = 1) {
   return Math.max(minimum, parsed);
 }
 
+function sanitizePendingAdvance(value) {
+  if (!value || typeof value !== "object") return null;
+
+  return {
+    nextIndex: sanitizePositiveInteger(value.nextIndex, 0, 0),
+    shouldFinish: Boolean(value.shouldFinish),
+  };
+}
+
 function sanitizeLoadNumber(value, fallback = null) {
   if (value === "" || value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -250,10 +260,14 @@ function formatTargetLabelFromRange(minReps, maxReps) {
 }
 
 function getRestAlertCopy() {
-  const upcoming = getActiveExercise();
+  const pendingAdvance = state.pendingAdvance;
+  const upcoming =
+    pendingAdvance && !pendingAdvance.shouldFinish
+      ? getExercises()[pendingAdvance.nextIndex] || null
+      : null;
   return {
     title: "Repos termine",
-    text: upcoming
+    text: pendingAdvance?.shouldFinish ? "Tu peux terminer ta seance." : upcoming
       ? `Tu peux repartir sur ${upcoming.exercise} · ${upcoming.series}.`
       : "Tu peux reprendre ton entrainement.",
   };
@@ -559,6 +573,34 @@ function getCurrentAdvice() {
   return getAdvice(reps, active.minReps, active.maxReps, state.rpe);
 }
 
+function getValidationButtonLabel(advice = getCurrentAdvice()) {
+  if (state.pendingAdvance) {
+    if (state.restAlertVisible || state.timer.seconds <= 0) {
+      return "Attends l'alerte";
+    }
+    return `Repos : ${formatTimer(state.timer.seconds)}`;
+  }
+
+  if (!advice) return "Valider";
+
+  const nextStep =
+    advice.type === "progress"
+      ? "Monter"
+      : advice.type === "reduce"
+      ? "Baisser"
+      : "Garder";
+
+  return `Prochaine : ${nextStep}`;
+}
+
+function syncValidationButton() {
+  const button = document.getElementById("validate-set-button");
+  if (!button) return;
+  const label = getValidationButtonLabel();
+  button.textContent = label;
+  button.setAttribute("aria-label", label);
+}
+
 function getProgressPercent() {
   const exercises = getExercises();
   if (!exercises.length) return 0;
@@ -630,6 +672,7 @@ function buildPersistedState() {
     repsInput: state.repsInput,
     showPlates: state.showPlates,
     workoutFinished: state.workoutFinished,
+    pendingAdvance: state.pendingAdvance,
     pendingSession: state.pendingSession,
     selectedChartKey: state.selectedChartKey,
     installHintDismissed: state.installHintDismissed,
@@ -660,6 +703,7 @@ function hydrateState(parsed = {}) {
   state.repsInput = parsed.repsInput || "";
   state.showPlates = Boolean(parsed.showPlates);
   state.workoutFinished = Boolean(parsed.workoutFinished);
+  state.pendingAdvance = sanitizePendingAdvance(parsed.pendingAdvance);
   state.pendingSession = parsed.pendingSession || [];
   state.selectedChartKey = parsed.selectedChartKey || "";
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
@@ -714,6 +758,7 @@ function resetWorkoutState() {
   state.showPlates = false;
   state.timer = { seconds: 0, active: false };
   state.workoutFinished = false;
+  state.pendingAdvance = null;
 }
 
 function startWorkoutDay(day) {
@@ -729,7 +774,7 @@ function startWorkoutDay(day) {
 function handleValidation() {
   const active = getActiveExercise();
   const reps = parseInt(state.repsInput, 10);
-  if (!active || Number.isNaN(reps) || reps <= 0) return;
+  if (!active || state.pendingAdvance || Number.isNaN(reps) || reps <= 0) return;
 
   state.restAlertVisible = false;
   state.pendingSession.push({
@@ -749,15 +794,17 @@ function handleValidation() {
     date: new Date().toISOString(),
   });
 
-  state.timer = { seconds: active.rest, active: true };
+  const isLastExercise = state.currentIndex >= getExercises().length - 1;
+  state.pendingAdvance = {
+    nextIndex: isLastExercise ? 0 : state.currentIndex + 1,
+    shouldFinish: isLastExercise,
+  };
+  state.timer = { seconds: active.rest, active: active.rest > 0 };
   state.repsInput = "";
 
-  if (state.currentIndex < getExercises().length - 1) {
-    state.currentIndex += 1;
-  } else {
-    state.workoutFinished = true;
-    state.currentIndex = 0;
-    state.timer = { seconds: 0, active: false };
+  if (active.rest <= 0) {
+    triggerRestAlert();
+    return;
   }
 
   saveState();
@@ -827,6 +874,7 @@ function clearAllData() {
   state.onboardingCompleted = false;
   state.onboardingStep = 0;
   state.restAlertVisible = false;
+  state.pendingAdvance = null;
   state.restSoundEnabled = true;
   state.restVibrationEnabled = true;
   resetWorkoutState();
@@ -1005,6 +1053,20 @@ function toggleRestPreference(key) {
 
 function dismissRestAlert() {
   state.restAlertVisible = false;
+  if (state.pendingAdvance) {
+    const nextIndex = state.pendingAdvance.nextIndex;
+    const shouldFinish = state.pendingAdvance.shouldFinish;
+
+    state.pendingAdvance = null;
+    state.timer = { seconds: 0, active: false };
+
+    if (shouldFinish) {
+      state.workoutFinished = true;
+      state.currentIndex = 0;
+    } else {
+      state.currentIndex = Math.min(nextIndex, Math.max(0, getExercises().length - 1));
+    }
+  }
   saveState();
   renderApp();
 }
@@ -1135,7 +1197,9 @@ function hasWorkoutInProgress() {
     state.pendingSession.length > 0 ||
     state.currentIndex > 0 ||
     state.workoutFinished ||
-    state.timer.seconds > 0
+    state.pendingAdvance !== null ||
+    state.timer.seconds > 0 ||
+    state.restAlertVisible
   );
 }
 
@@ -2769,6 +2833,7 @@ function renderWorkout() {
   const settings = getCurrentSettings();
   const last = getLastPerformance();
   const advice = getCurrentAdvice();
+  const isRestLocked = state.pendingAdvance !== null;
 
   if (state.workoutFinished) {
     return `
@@ -2784,7 +2849,7 @@ function renderWorkout() {
           </div>
           <div class="stack-sm">
             <button class="button button--primary" data-action="finalize-workout">
-              Enregistrer la seance
+              Terminer la seance
             </button>
             <button class="button button--ghost" data-action="restart-workout">
               Annuler et recommencer
@@ -2841,15 +2906,20 @@ function renderWorkout() {
             type="number"
             min="1"
             inputmode="numeric"
-            placeholder="${active.targetLabel}"
+            placeholder="${isRestLocked ? "Repos..." : active.targetLabel}"
             value="${state.repsInput}"
+            ${isRestLocked ? "disabled" : ""}
           />
         </div>
 
-        ${renderCompactNextCue(advice)}
-
-        <button class="button button--primary" data-action="validate-set">
-          Serie terminee
+        <button
+          id="validate-set-button"
+          class="button button--primary"
+          data-action="validate-set"
+          aria-label="${getValidationButtonLabel(advice)}"
+          ${isRestLocked ? "disabled" : ""}
+        >
+          ${getValidationButtonLabel(advice)}
         </button>
       </div>
     </section>
@@ -3487,6 +3557,7 @@ function bindEvents() {
     repsInput.oninput = (event) => {
       state.repsInput = event.target.value;
       saveState();
+      syncValidationButton();
     };
     repsInput.onkeydown = (event) => {
       if (event.key === "Enter") {
