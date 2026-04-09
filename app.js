@@ -260,14 +260,10 @@ function formatTargetLabelFromRange(minReps, maxReps) {
 }
 
 function getRestAlertCopy() {
-  const pendingAdvance = state.pendingAdvance;
-  const upcoming =
-    pendingAdvance && !pendingAdvance.shouldFinish
-      ? getExercises()[pendingAdvance.nextIndex] || null
-      : null;
+  const upcoming = state.workoutFinished ? null : getActiveExercise();
   return {
     title: "Repos termine",
-    text: pendingAdvance?.shouldFinish ? "Tu peux terminer ta seance." : upcoming
+    text: state.workoutFinished ? "Tu peux terminer ta seance." : upcoming
       ? `Tu peux repartir sur ${upcoming.exercise} · ${upcoming.series}.`
       : "Tu peux reprendre ton entrainement.",
   };
@@ -292,29 +288,40 @@ function playRestSound() {
   if (!state.restSoundEnabled) return;
 
   primeAudioEngine();
-  if (!restAudioContext || restAudioContext.state !== "running") return;
+  if (!restAudioContext) return;
 
-  const now = restAudioContext.currentTime;
-  const notes = [
-    { start: 0, freq: 880, duration: 0.12 },
-    { start: 0.17, freq: 1174, duration: 0.18 },
-  ];
+  const playChime = () => {
+    if (!restAudioContext || restAudioContext.state !== "running") return;
 
-  notes.forEach((note) => {
-    const oscillator = restAudioContext.createOscillator();
-    const gainNode = restAudioContext.createGain();
+    const now = restAudioContext.currentTime;
+    const notes = [
+      { start: 0, freq: 880, duration: 0.12 },
+      { start: 0.17, freq: 1174, duration: 0.18 },
+    ];
 
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(note.freq, now + note.start);
-    gainNode.gain.setValueAtTime(0.0001, now + note.start);
-    gainNode.gain.exponentialRampToValueAtTime(0.18, now + note.start + 0.02);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
+    notes.forEach((note) => {
+      const oscillator = restAudioContext.createOscillator();
+      const gainNode = restAudioContext.createGain();
 
-    oscillator.connect(gainNode);
-    gainNode.connect(restAudioContext.destination);
-    oscillator.start(now + note.start);
-    oscillator.stop(now + note.start + note.duration + 0.04);
-  });
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(note.freq, now + note.start);
+      gainNode.gain.setValueAtTime(0.0001, now + note.start);
+      gainNode.gain.exponentialRampToValueAtTime(0.18, now + note.start + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(restAudioContext.destination);
+      oscillator.start(now + note.start);
+      oscillator.stop(now + note.start + note.duration + 0.04);
+    });
+  };
+
+  if (restAudioContext.state === "suspended") {
+    restAudioContext.resume().then(playChime).catch(() => {});
+    return;
+  }
+
+  playChime();
 }
 
 function vibrateRestAlert() {
@@ -574,13 +581,6 @@ function getCurrentAdvice() {
 }
 
 function getValidationButtonLabel(advice = getCurrentAdvice()) {
-  if (state.pendingAdvance) {
-    if (state.restAlertVisible || state.timer.seconds <= 0) {
-      return "Attends l'alerte";
-    }
-    return `Repos : ${formatTimer(state.timer.seconds)}`;
-  }
-
   if (!advice) return "Valider";
 
   const nextStep =
@@ -774,7 +774,7 @@ function startWorkoutDay(day) {
 function handleValidation() {
   const active = getActiveExercise();
   const reps = parseInt(state.repsInput, 10);
-  if (!active || state.pendingAdvance || Number.isNaN(reps) || reps <= 0) return;
+  if (!active || Number.isNaN(reps) || reps <= 0) return;
 
   state.restAlertVisible = false;
   state.pendingSession.push({
@@ -795,16 +795,17 @@ function handleValidation() {
   });
 
   const isLastExercise = state.currentIndex >= getExercises().length - 1;
-  state.pendingAdvance = {
-    nextIndex: isLastExercise ? 0 : state.currentIndex + 1,
-    shouldFinish: isLastExercise,
-  };
-  state.timer = { seconds: active.rest, active: active.rest > 0 };
+  state.pendingAdvance = null;
+  state.timer = isLastExercise
+    ? { seconds: 0, active: false }
+    : { seconds: active.rest, active: active.rest > 0 };
   state.repsInput = "";
 
-  if (active.rest <= 0) {
-    triggerRestAlert();
-    return;
+  if (isLastExercise) {
+    state.workoutFinished = true;
+    state.currentIndex = 0;
+  } else {
+    state.currentIndex += 1;
   }
 
   saveState();
@@ -1053,20 +1054,7 @@ function toggleRestPreference(key) {
 
 function dismissRestAlert() {
   state.restAlertVisible = false;
-  if (state.pendingAdvance) {
-    const nextIndex = state.pendingAdvance.nextIndex;
-    const shouldFinish = state.pendingAdvance.shouldFinish;
-
-    state.pendingAdvance = null;
-    state.timer = { seconds: 0, active: false };
-
-    if (shouldFinish) {
-      state.workoutFinished = true;
-      state.currentIndex = 0;
-    } else {
-      state.currentIndex = Math.min(nextIndex, Math.max(0, getExercises().length - 1));
-    }
-  }
+  state.pendingAdvance = null;
   saveState();
   renderApp();
 }
@@ -1197,7 +1185,6 @@ function hasWorkoutInProgress() {
     state.pendingSession.length > 0 ||
     state.currentIndex > 0 ||
     state.workoutFinished ||
-    state.pendingAdvance !== null ||
     state.timer.seconds > 0 ||
     state.restAlertVisible
   );
@@ -2833,7 +2820,6 @@ function renderWorkout() {
   const settings = getCurrentSettings();
   const last = getLastPerformance();
   const advice = getCurrentAdvice();
-  const isRestLocked = state.pendingAdvance !== null;
 
   if (state.workoutFinished) {
     return `
@@ -2906,9 +2892,8 @@ function renderWorkout() {
             type="number"
             min="1"
             inputmode="numeric"
-            placeholder="${isRestLocked ? "Repos..." : active.targetLabel}"
+            placeholder="${active.targetLabel}"
             value="${state.repsInput}"
-            ${isRestLocked ? "disabled" : ""}
           />
         </div>
 
@@ -2917,7 +2902,6 @@ function renderWorkout() {
           class="button button--primary"
           data-action="validate-set"
           aria-label="${getValidationButtonLabel(advice)}"
-          ${isRestLocked ? "disabled" : ""}
         >
           ${getValidationButtonLabel(advice)}
         </button>
