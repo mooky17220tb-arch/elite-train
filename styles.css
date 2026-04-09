@@ -48,6 +48,10 @@ select {
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
@@ -212,6 +216,7 @@ button {
 .nav-button,
 .button,
 .day-button {
+  touch-action: manipulation;
   transition:
     transform 160ms ease,
     background-color 160ms ease,

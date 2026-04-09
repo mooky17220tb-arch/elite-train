@@ -3574,6 +3574,12 @@ function bindEvents() {
       renderApp();
     };
   }
+
+  document.ondblclick = (event) => {
+    if (event.target.closest("button")) {
+      event.preventDefault();
+    }
+  };
 }
 
 function tickTimer() {
