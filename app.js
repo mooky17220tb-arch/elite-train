@@ -1,4 +1,6 @@
 const STORAGE_KEY = "elite-train-iphone-v1";
+const STORAGE_BACKUP_KEY = `${STORAGE_KEY}-backup`;
+const STORAGE_SCHEMA_VERSION = 2;
 const CURRENT_REST_PROFILE_VERSION = 2;
 
 const PROGRAM = {
@@ -114,6 +116,12 @@ const state = {
   onboardingCompleted: false,
   onboardingStep: 0,
   historyEditor: null,
+  storageMeta: {
+    lastSavedAt: "",
+    backupAvailable: false,
+    recoveredFromBackup: false,
+    saveError: "",
+  },
 };
 
 const root = document.getElementById("app");
@@ -625,6 +633,20 @@ function formatDate(iso) {
   });
 }
 
+function formatDateTimeShort(iso) {
+  if (!iso) return "Aucune";
+
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "Aucune";
+
+  return value.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function isNumericLoad(value) {
   return typeof value === "number" && !Number.isNaN(value);
 }
@@ -915,6 +937,117 @@ function getCurrentAdvice() {
   return getAdvice(reps, active.minReps, active.maxReps, state.rpe);
 }
 
+function hasValidRepsInput() {
+  const reps = parseInt(state.repsInput, 10);
+  return Number.isInteger(reps) && reps > 0;
+}
+
+function setRepsInputValue(value) {
+  const nextValue = sanitizePositiveInteger(value, 0, 1);
+  if (!nextValue) return;
+
+  state.repsInput = String(nextValue);
+  saveState();
+
+  const input = document.getElementById("reps-input");
+  if (input) {
+    input.value = state.repsInput;
+  }
+
+  syncValidationButton();
+}
+
+function getRepQuickPicks() {
+  const active = getActiveExercise();
+  if (!active) return [];
+
+  const midpoint =
+    active.minReps === active.maxReps
+      ? active.maxReps
+      : Math.round((active.minReps + active.maxReps) / 2);
+  const last = getLastPerformance();
+  const picks = [];
+
+  if (last?.reps) {
+    picks.push({ value: last.reps, label: `${last.reps}`, meta: "Dernier" });
+  }
+
+  [
+    { value: active.minReps, meta: "Min" },
+    { value: midpoint, meta: "Cible" },
+    { value: active.maxReps, meta: "Max" },
+  ].forEach((pick) => {
+    if (!picks.some((item) => item.value === pick.value)) {
+      picks.push({ value: pick.value, label: `${pick.value}`, meta: pick.meta });
+    }
+  });
+
+  return picks.slice(0, 4);
+}
+
+function renderRepQuickPicks() {
+  const picks = getRepQuickPicks();
+  if (!picks.length) return "";
+
+  return `
+    <div class="rep-quick-picks">
+      ${picks
+        .map(
+          (pick) => `
+            <button
+              class="rep-quick-pick ${String(pick.value) === state.repsInput ? "is-active" : ""}"
+              type="button"
+              data-action="pick-reps"
+              data-reps-value="${pick.value}"
+              aria-label="Utiliser ${pick.value} reps"
+            >
+              <strong>${pick.label}</strong>
+              <span>${pick.meta}</span>
+            </button>
+          `
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function getNextExercisePreview() {
+  const exercises = getExercises();
+  const next = exercises[state.currentIndex + 1];
+
+  if (!next) {
+    return {
+      title: "Derniere serie",
+      meta: "Fin de seance juste apres validation",
+      tone: "finish",
+    };
+  }
+
+  const key = buildExerciseKey(state.day, next.exercise, next.series);
+  const nextSettings = state.exerciseData[key] || {
+    load: next.defaultLoad,
+    loadLabel: next.loadLabel,
+  };
+
+  return {
+    title: `${next.exercise} · ${next.series}`,
+    meta: `${formatLoad(nextSettings.load, nextSettings.loadLabel)} · ${next.rest}s de repos`,
+    tone: "next",
+  };
+}
+
+function renderNextExercisePreview() {
+  const preview = getNextExercisePreview();
+
+  return `
+    <div class="workout-preview workout-preview--${preview.tone}">
+      <span class="workout-preview__eyebrow">${preview.tone === "finish" ? "Apres cette serie" : "Serie d'apres"}</span>
+      <strong class="workout-preview__title">${preview.title}</strong>
+      <span class="workout-preview__meta">${preview.meta}</span>
+    </div>
+  `;
+}
+
 function getValidationButtonLabel(advice = getCurrentAdvice()) {
   if (!advice) return "Valider";
 
@@ -934,6 +1067,7 @@ function syncValidationButton() {
   const label = getValidationButtonLabel();
   button.textContent = label;
   button.setAttribute("aria-label", label);
+  button.disabled = !hasValidRepsInput();
 }
 
 function getExerciseIndexForEntry(entry, day = state.day) {
@@ -1251,7 +1385,9 @@ function getChartData() {
 
 function buildPersistedState() {
   return {
+    schemaVersion: STORAGE_SCHEMA_VERSION,
     restProfileVersion: CURRENT_REST_PROFILE_VERSION,
+    savedAt: new Date().toISOString(),
     screen: state.screen,
     program: state.program,
     programEditorDay: state.programEditorDay,
@@ -1312,6 +1448,10 @@ function hydrateState(parsed = {}) {
   state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
   state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
   state.historyEditor = null;
+  state.storageMeta.recoveredFromBackup = false;
+  state.storageMeta.backupAvailable = Boolean(localStorage.getItem(STORAGE_BACKUP_KEY));
+  state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+  state.storageMeta.saveError = "";
 
   const savedRestProfileVersion = sanitizePositiveInteger(
     parsed.restProfileVersion,
@@ -1335,17 +1475,57 @@ function hydrateState(parsed = {}) {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(buildPersistedState()));
+  try {
+    const payload = buildPersistedState();
+    const serialized = JSON.stringify(payload);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
+    state.storageMeta.lastSavedAt = payload.savedAt;
+    state.storageMeta.backupAvailable = true;
+    state.storageMeta.saveError = "";
+  } catch (error) {
+    console.error("Erreur sauvegarde localStorage", error);
+    state.storageMeta.saveError = "Sauvegarde locale incomplete";
+  }
 }
 
 function restoreState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    hydrateState(JSON.parse(raw));
+    const backupRaw = localStorage.getItem(STORAGE_BACKUP_KEY);
+    let parsed = null;
+    let recoveredFromBackup = false;
+
+    state.storageMeta.backupAvailable = Boolean(backupRaw);
+
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        console.error("Erreur lecture stockage principal", error);
+      }
+    }
+
+    if (!parsed && backupRaw) {
+      try {
+        parsed = JSON.parse(backupRaw);
+        recoveredFromBackup = true;
+      } catch (error) {
+        console.error("Erreur lecture backup local", error);
+      }
+    }
+
+    if (!parsed) return;
+
+    hydrateState(parsed);
+    state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+    state.storageMeta.recoveredFromBackup = recoveredFromBackup;
+    state.storageMeta.backupAvailable = true;
+    state.storageMeta.saveError = "";
     saveState();
   } catch (error) {
     console.error("Erreur localStorage", error);
+    state.storageMeta.saveError = "Lecture locale impossible";
   }
 }
 
@@ -1479,6 +1659,7 @@ function finalizeWorkout() {
 
 function clearAllData() {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_BACKUP_KEY);
   state.program = createProgramCopy();
   state.programEditorDay = "Push";
   state.cycle = createDefaultCycle();
@@ -1496,6 +1677,12 @@ function clearAllData() {
   state.restVibrationEnabled = true;
   state.focusWorkoutMode = false;
   state.historyEditor = null;
+  state.storageMeta = {
+    lastSavedAt: "",
+    backupAvailable: false,
+    recoveredFromBackup: false,
+    saveError: "",
+  };
   resetWorkoutState();
   state.day = "Push";
   state.screen = "dashboard";
@@ -1504,7 +1691,7 @@ function clearAllData() {
 
 function exportBackup() {
   const payload = {
-    version: 1,
+    version: STORAGE_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     source: "elite-train-iphone",
     data: buildPersistedState(),
@@ -2595,6 +2782,42 @@ function getDaySummary(day) {
   };
 }
 
+function getDayTheme(day) {
+  return {
+    Push: {
+      subtitle: "Pecs · epaules · triceps",
+      cue: "Poussee lourde et propre",
+    },
+    Pull: {
+      subtitle: "Dos · biceps · arriere d'epaules",
+      cue: "Tirages solides et amplitude",
+    },
+    Legs: {
+      subtitle: "Quadris · ischios · fessiers",
+      cue: "Jambes, gainage et moteur",
+    },
+    Upper: {
+      subtitle: "Haut du corps complet",
+      cue: "Equilibre pecs, dos et bras",
+    },
+  }[day] || {
+    subtitle: "Bloc complet",
+    cue: "Construis une seance propre",
+  };
+}
+
+function getDayAverageRest(day) {
+  const entries = state.program[day] || [];
+  if (!entries.length) return 0;
+
+  const total = entries.reduce(
+    (sum, entry) => sum + sanitizePositiveInteger(entry.rest, 0, 0),
+    0
+  );
+
+  return Math.round(total / entries.length);
+}
+
 function shortenLabel(text, maxLength = 18) {
   const value = String(text || "");
   if (value.length <= maxLength) return value;
@@ -2740,17 +2963,21 @@ function renderPremiumDayList() {
   return `
     <section class="day-list">
       ${getProgramDays()
-        .map(
-          (day) => `
+        .map((day) => {
+          const summary = getDaySummary(day);
+          const theme = getDayTheme(day);
+
+          return `
             <button class="day-button" data-day="${day}">
               <div>
+                <div class="day-button__eyebrow">${theme.subtitle}</div>
                 <div class="day-button__title">${day.toUpperCase()}</div>
-                <div class="muted">${state.program[day].length} exercices</div>
+                <div class="day-button__meta">${theme.cue} · ${summary.exerciseCount} exos · ${summary.setCount} series</div>
               </div>
               <div class="day-button__arrow">â€º</div>
             </button>
-          `
-        )
+          `;
+        })
         .join("")}
     </section>
   `;
@@ -3185,6 +3412,52 @@ function getCoachSnapshot() {
   const focusAdvice = focusEntry
     ? getAdvice(focusEntry.reps, focusEntry.minReps, focusEntry.maxReps, focusEntry.rpe ?? 8)
     : null;
+  const averageRest = getDayAverageRest(day);
+  const volumeCall =
+    cycle.current.tone === "reduce" || fatigue.score >= 4
+      ? {
+          value: "Alleger",
+          meta: "Retire 1 a 2 series sur les mouvements qui piquent",
+        }
+      : fatigue.score >= 2
+      ? {
+          value: "Stable",
+          meta: `${fatigue.recentSets} series sur 7 jours, garde ce volume`,
+        }
+      : {
+          value: "Complet",
+          meta: `${fatigue.recentSets} series sur 7 jours, volume plein autorise`,
+        };
+  const intensityCall =
+    cycle.current.tone === "reduce" || fatigue.score >= 4
+      ? {
+          value: "Technique",
+          meta: "Reste a 1-2 reps de marge sur les gros exos",
+        }
+      : focusAdvice?.type === "progress" && fatigue.score <= 1
+      ? {
+          value: "Offensif",
+          meta: "Tu peux pousser les top sets si la forme reste propre",
+        }
+      : stagnation?.stalled
+      ? {
+          value: "Controle",
+          meta: "Garde la charge et vole une rep propre",
+        }
+      : {
+          value: "Stable",
+          meta: cycle.current.prescription,
+        };
+  const recoveryCall =
+    fatigue.score >= 2
+      ? {
+          value: `${averageRest}s`,
+          meta: "Prends tes repos pleins sur les mouvements cles",
+        }
+      : {
+          value: `${averageRest}s`,
+          meta: "Relance des que la qualite reste propre",
+        };
 
   let tone = "hold";
   let action = focusEntry ? "Garder" : "Lancer";
@@ -3239,6 +3512,9 @@ function getCoachSnapshot() {
     cycleLabel: `S${cycle.week}/${cycle.length} · ${cycle.current.phase}`,
     scoreText: `${fatigue.score}/4`,
     streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
+    intensityCall,
+    volumeCall,
+    recoveryCall,
   };
 }
 
@@ -3258,20 +3534,38 @@ function renderCoachSection() {
         </div>
       </div>
 
-      <div class="coach-grid">
+      <div class="coach-grid coach-grid--triple">
         <div class="coach-card">
-          <div class="label">Focus</div>
-          <div class="coach-card__value">${coach.focus}</div>
-          <div class="coach-card__meta">${coach.focusMeta}</div>
+          <div class="label">Charge</div>
+          <div class="coach-card__value">${coach.action}</div>
+          <div class="coach-card__meta">${coach.focus} · ${coach.signal}</div>
         </div>
         <div class="coach-card">
-          <div class="label">Signal</div>
-          <div class="coach-card__value">${coach.signal}</div>
+          <div class="label">Intensite</div>
+          <div class="coach-card__value">${coach.intensityCall.value}</div>
           <div class="coach-card__meta">${coach.cycleLabel} · ${coach.streakText}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Volume</div>
+          <div class="coach-card__value">${coach.volumeCall.value}</div>
+          <div class="coach-card__meta">${coach.volumeCall.meta}</div>
         </div>
       </div>
 
       <div class="coach-note">${coach.note}</div>
+
+      <div class="coach-pulse-grid">
+        <div class="coach-pulse">
+          <span class="label">Recup</span>
+          <strong>${coach.recoveryCall.value}</strong>
+          <span>${coach.recoveryCall.meta}</span>
+        </div>
+        <div class="coach-pulse">
+          <span class="label">Bloc</span>
+          <strong>${coach.cycleLabel}</strong>
+          <span>${coach.focusMeta}</span>
+        </div>
+      </div>
 
       <div class="coach-tags">
         <span class="coach-tag">Fatigue ${coach.readiness}</span>
@@ -3291,6 +3585,7 @@ function renderPremiumDashboard() {
   const resume = getSmartResumeData();
   const heroDay = resume?.day || state.day;
   const heroSummary = getDaySummary(heroDay);
+  const heroTheme = getDayTheme(heroDay);
   const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
   const heroActionAttrs = resume?.mode === "active"
     ? `data-action="resume-workout"`
@@ -3312,6 +3607,7 @@ function renderPremiumDashboard() {
           <div class="dashboard-hero__copy">
             <div class="label dashboard-hero__label">Accueil premium</div>
             <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <div class="dashboard-hero__subtag">${heroTheme.subtitle}</div>
             <p class="dashboard-hero__text">${heroCopy}</p>
           </div>
 
@@ -3596,6 +3892,7 @@ function renderWorkout() {
       }
 
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
+      ${renderNextExercisePreview()}
 
       <div class="stack-md">
         <div class="field-wrap">
@@ -3611,11 +3908,14 @@ function renderWorkout() {
           />
         </div>
 
+        ${renderRepQuickPicks()}
+
         <button
           id="validate-set-button"
           class="button button--primary"
           data-action="validate-set"
           aria-label="${getValidationButtonLabel(advice)}"
+          ${hasValidRepsInput() ? "" : "disabled"}
         >
           ${getValidationButtonLabel(advice)}
         </button>
@@ -3951,6 +4251,47 @@ function renderRestAlertOverlay() {
   `;
 }
 
+function renderStorageConfidenceSection() {
+  const lastSavedLabel = formatDateTimeShort(state.storageMeta.lastSavedAt);
+  const backupLabel = state.storageMeta.backupAvailable ? "Actif" : "Absent";
+  const recoveryLabel = state.storageMeta.recoveredFromBackup ? "Oui" : "Non";
+  const healthLabel = state.storageMeta.saveError ? "A surveiller" : "OK";
+  const healthMeta = state.storageMeta.saveError || "Autosauvegarde locale + copie de secours";
+
+  return `
+    <article class="surface surface-pad stack-md storage-shell">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Confiance</div>
+          <h3 class="section-title dashboard-section-head__title">Sauvegarde locale</h3>
+        </div>
+        <div class="label">Auto</div>
+      </div>
+
+      <div class="storage-grid">
+        <div class="metric">
+          <div class="label">Derniere sauvegarde</div>
+          <div class="metric__value metric__value--text">${lastSavedLabel}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Copie de secours</div>
+          <div class="metric__value">${backupLabel}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Recuperee</div>
+          <div class="metric__value">${recoveryLabel}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Etat</div>
+          <div class="metric__value">${healthLabel}</div>
+        </div>
+      </div>
+
+      <div class="confidence-note">${healthMeta}</div>
+    </article>
+  `;
+}
+
 function renderSettings() {
   return `
     <section class="stack-md settings-shell">
@@ -3978,6 +4319,7 @@ function renderSettings() {
 
       ${renderCycleSettings()}
       ${renderRestSettings()}
+      ${renderStorageConfidenceSection()}
 
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
@@ -4146,6 +4488,10 @@ function bindEvents() {
 
       if (action === "validate-set") {
         handleValidation();
+      }
+
+      if (action === "pick-reps") {
+        setRepsInputValue(button.dataset.repsValue);
       }
 
       if (action === "edit-last-set") {
