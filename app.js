@@ -1665,7 +1665,7 @@ function renderOnboardingOverlay() {
 
   return `
     <div class="onboarding-overlay">
-      <article class="onboarding-card" data-day="${state.day}">
+      <article class="onboarding-card" data-accent-day="${state.day}">
         <div class="onboarding-card__media"></div>
         <div class="onboarding-card__shade"></div>
         <div class="onboarding-card__content">
@@ -2681,7 +2681,7 @@ function renderPremiumDashboard() {
 
   return `
     <section class="stack-md">
-      <article class="dashboard-hero" data-day="${state.day}">
+      <article class="dashboard-hero" data-accent-day="${state.day}">
         <div class="dashboard-hero__content">
           <div class="dashboard-hero__top">
             <span class="dashboard-hero__badge">${heroBadge}</span>
@@ -2841,7 +2841,7 @@ function renderPremiumDashboard() {
 
   return `
     <section class="stack-md">
-      <article class="dashboard-hero" data-day="${heroDay}">
+      <article class="dashboard-hero" data-accent-day="${heroDay}">
         <div class="dashboard-hero__content">
           <div class="dashboard-hero__top">
             <span class="dashboard-hero__badge">${heroBadge}</span>
@@ -3211,7 +3211,7 @@ function renderPremiumDashboard() {
 
   return `
     <section class="stack-md">
-      <article class="dashboard-hero" data-day="${heroDay}">
+      <article class="dashboard-hero" data-accent-day="${heroDay}">
         <div class="dashboard-hero__content">
           <div class="dashboard-hero__top">
             <span class="dashboard-hero__badge">${heroBadge}</span>
@@ -3462,7 +3462,7 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-lg workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-day="${state.day}">
+    <section class="surface surface-pad-lg stack-lg workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
       <div class="row row-start">
         <div>
           <span class="pill">${active.series}</span>
@@ -3996,7 +3996,7 @@ function bindEvents() {
     };
   });
 
-  document.querySelectorAll("[data-day]").forEach((button) => {
+  document.querySelectorAll("button[data-day]").forEach((button) => {
     button.onclick = () => {
       primeAudioEngine();
       startWorkoutDay(button.dataset.day);

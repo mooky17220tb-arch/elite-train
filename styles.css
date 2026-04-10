@@ -740,19 +740,19 @@ button {
     linear-gradient(180deg, rgba(2, 4, 3, 0.1) 0%, rgba(2, 4, 3, 0.52) 52%, rgba(2, 4, 3, 0.92) 100%);
 }
 
-.dashboard-hero[data-day="Push"]::before {
+.dashboard-hero[data-accent-day="Push"]::before {
   background-image: url("./assets/push-card.svg");
 }
 
-.dashboard-hero[data-day="Pull"]::before {
+.dashboard-hero[data-accent-day="Pull"]::before {
   background-image: url("./assets/pull-card.svg");
 }
 
-.dashboard-hero[data-day="Legs"]::before {
+.dashboard-hero[data-accent-day="Legs"]::before {
   background-image: url("./assets/legs-card.svg");
 }
 
-.dashboard-hero[data-day="Upper"]::before {
+.dashboard-hero[data-accent-day="Upper"]::before {
   background-image: url("./assets/upper-card.svg");
 }
 
@@ -988,19 +988,19 @@ button {
   transform: scale(1.04);
 }
 
-.onboarding-card[data-day="Push"] .onboarding-card__media {
+.onboarding-card[data-accent-day="Push"] .onboarding-card__media {
   background-image: url("./assets/push-card.svg");
 }
 
-.onboarding-card[data-day="Pull"] .onboarding-card__media {
+.onboarding-card[data-accent-day="Pull"] .onboarding-card__media {
   background-image: url("./assets/pull-card.svg");
 }
 
-.onboarding-card[data-day="Legs"] .onboarding-card__media {
+.onboarding-card[data-accent-day="Legs"] .onboarding-card__media {
   background-image: url("./assets/legs-card.svg");
 }
 
-.onboarding-card[data-day="Upper"] .onboarding-card__media {
+.onboarding-card[data-accent-day="Upper"] .onboarding-card__media {
   background-image: url("./assets/upper-card.svg");
 }
 
@@ -2216,19 +2216,19 @@ button {
   pointer-events: none;
 }
 
-.workout-shell[data-day="Push"]::before {
+.workout-shell[data-accent-day="Push"]::before {
   background: radial-gradient(circle at top right, rgba(255, 120, 120, 0.16), transparent 38%);
 }
 
-.workout-shell[data-day="Pull"]::before {
+.workout-shell[data-accent-day="Pull"]::before {
   background: radial-gradient(circle at top right, rgba(113, 182, 255, 0.16), transparent 38%);
 }
 
-.workout-shell[data-day="Legs"]::before {
+.workout-shell[data-accent-day="Legs"]::before {
   background: radial-gradient(circle at top right, rgba(255, 170, 92, 0.16), transparent 38%);
 }
 
-.workout-shell[data-day="Upper"]::before {
+.workout-shell[data-accent-day="Upper"]::before {
   background: radial-gradient(circle at top right, rgba(125, 245, 196, 0.16), transparent 38%);
 }
 
