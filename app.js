@@ -989,24 +989,27 @@ function renderRepQuickPicks() {
   const picks = getRepQuickPicks();
   if (!picks.length) return "";
 
+  const buttons = picks
+    .map((pick) => {
+      const activeClass = String(pick.value) === state.repsInput ? " is-active" : "";
+      return `
+        <button
+          class="rep-quick-pick${activeClass}"
+          type="button"
+          data-action="pick-reps"
+          data-reps-value="${pick.value}"
+          aria-label="Utiliser ${pick.value} reps"
+        >
+          <strong>${pick.label}</strong>
+          <span>${pick.meta}</span>
+        </button>
+      `;
+    })
+    .join("");
+
   return `
     <div class="rep-quick-picks">
-      ${picks
-        .map(
-          (pick) => `
-            <button
-              class="rep-quick-pick ${String(pick.value) === state.repsInput ? "is-active" : ""}"
-              type="button"
-              data-action="pick-reps"
-              data-reps-value="${pick.value}"
-              aria-label="Utiliser ${pick.value} reps"
-            >
-              <strong>${pick.label}</strong>
-              <span>${pick.meta}</span>
-            </button>
-          `
-        })
-        .join("")}
+      ${buttons}
     </div>
   `;
 }
