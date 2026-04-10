@@ -1014,6 +1014,64 @@ function renderRepQuickPicks() {
   `;
 }
 
+function getAdviceShortLabel(adviceType) {
+  if (adviceType === "progress") {
+    return { icon: "+", label: "Monte" };
+  }
+  if (adviceType === "reduce") {
+    return { icon: "-", label: "Baisse" };
+  }
+  if (adviceType === "empty") {
+    return { icon: ".", label: "Start" };
+  }
+  return { icon: "=", label: "Garde" };
+}
+
+function getLastPerformancePreviewCard() {
+  const active = getActiveExercise();
+  const last = getLastPerformance();
+
+  if (!active || !last) {
+    const verdict = getAdviceShortLabel("empty");
+    return {
+      tone: "empty",
+      eyebrow: "Derniere fois",
+      verdict,
+      title: "Pas encore de serie sur ce slot",
+      meta: `Objectif ${active?.targetLabel || "-"} reps`,
+    };
+  }
+
+  const advice = getAdvice(last.reps, last.minReps, last.maxReps, last.rpe ?? 8);
+  const verdict = getAdviceShortLabel(advice.type);
+
+  return {
+    tone: advice.type,
+    eyebrow: "Derniere fois",
+    verdict,
+    title: `${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}`,
+    meta: `${last.series} · ${formatDate(last.date)}`,
+  };
+}
+
+function renderLastPerformancePreviewCard() {
+  const preview = getLastPerformancePreviewCard();
+
+  return `
+    <div class="workout-preview workout-preview--${preview.tone}">
+      <div class="workout-preview__top">
+        <span class="workout-preview__eyebrow">${preview.eyebrow}</span>
+        <span class="workout-preview__badge workout-preview__badge--${preview.tone}">
+          <span class="workout-preview__badge-icon">${preview.verdict.icon}</span>
+          <span class="workout-preview__badge-text">${preview.verdict.label}</span>
+        </span>
+      </div>
+      <strong class="workout-preview__title">${preview.title}</strong>
+      <span class="workout-preview__meta">${preview.meta}</span>
+    </div>
+  `;
+}
+
 function getNextExercisePreview() {
   const exercises = getExercises();
   const next = exercises[state.currentIndex + 1];
@@ -3896,7 +3954,7 @@ function renderWorkout() {
       }
 
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
-      ${renderNextExercisePreview()}
+      ${renderLastPerformancePreviewCard()}
 
       <div class="stack-md">
         <div class="field-wrap">

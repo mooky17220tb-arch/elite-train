@@ -2795,9 +2795,26 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.035);
 }
 
+.workout-preview--progress {
+  border-color: rgba(22, 196, 127, 0.22);
+  background: rgba(22, 196, 127, 0.08);
+}
+
+.workout-preview--reduce {
+  border-color: rgba(245, 166, 35, 0.22);
+  background: rgba(245, 166, 35, 0.08);
+}
+
 .workout-preview--finish {
   border-color: rgba(22, 196, 127, 0.22);
   background: rgba(22, 196, 127, 0.08);
+}
+
+.workout-preview__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .workout-preview__eyebrow {
@@ -2805,6 +2822,66 @@ select:focus-visible {
   font-weight: 900;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--muted);
+}
+
+.workout-preview__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef3f0;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.workout-preview__badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.workout-preview__badge-text {
+  line-height: 1;
+}
+
+.workout-preview__badge--progress {
+  border-color: rgba(22, 196, 127, 0.24);
+  background: linear-gradient(180deg, rgba(22, 196, 127, 0.18), rgba(22, 196, 127, 0.1));
+  color: #93efc6;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 16px rgba(22, 196, 127, 0.14);
+}
+
+.workout-preview__badge--reduce {
+  border-color: rgba(245, 166, 35, 0.24);
+  background: linear-gradient(180deg, rgba(245, 166, 35, 0.18), rgba(245, 166, 35, 0.1));
+  color: #ffd27a;
+}
+
+.workout-preview__badge--hold {
+  color: #e7ece9;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+}
+
+.workout-preview__badge--empty {
   color: var(--muted);
 }
 
