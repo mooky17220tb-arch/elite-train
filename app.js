@@ -1,4 +1,5 @@
 const STORAGE_KEY = "elite-train-iphone-v1";
+const CURRENT_REST_PROFILE_VERSION = 2;
 
 const PROGRAM = {
   Push: [
@@ -129,7 +130,9 @@ let pwaUpdateDismissed = false;
 let pwaReloadOnControllerChange = false;
 
 function createProgramCopy() {
-  return ensureActivationSeriesForProgram(JSON.parse(JSON.stringify(PROGRAM)));
+  return applyRecommendedRestProfile(
+    ensureActivationSeriesForProgram(JSON.parse(JSON.stringify(PROGRAM)))
+  );
 }
 
 function createDefaultCycle() {
@@ -141,6 +144,74 @@ function createDefaultCycle() {
   };
 }
 
+function matchesExerciseKeyword(exercise, keywords = []) {
+  const value = String(exercise || "").toLowerCase();
+  return keywords.some((keyword) => value.includes(keyword));
+}
+
+function getRecommendedRest(entry = {}) {
+  const exercise = String(entry.exercise || "").toLowerCase();
+  const series = String(entry.series || "").toLowerCase();
+  const kind = entry.kind || "isolation";
+  const maxReps = sanitizePositiveInteger(entry.maxReps, 12, 1);
+  const isActivation = series.includes("activation");
+  const isTopSet = series.includes("top set");
+  const isBackoff = series.includes("back-off") || series.includes("backoff");
+  const isLowerBody = matchesExerciseKeyword(exercise, [
+    "squat",
+    "fentes",
+    "hip thrust",
+    "leg",
+    "mollets",
+  ]);
+  const isShoulderIsolation = matchesExerciseKeyword(exercise, [
+    "laterales",
+    "oiseau",
+  ]);
+
+  if (isActivation) return 45;
+
+  if (kind === "barbell") {
+    if (isTopSet) return 180;
+    if (isLowerBody) return 150;
+    return maxReps <= 8 || isBackoff ? 150 : 120;
+  }
+
+  if (kind === "machine") {
+    if (isTopSet) return 120;
+    if (isLowerBody) return 75;
+    return maxReps <= 10 ? 105 : 90;
+  }
+
+  if (kind === "dumbbell") {
+    if (isLowerBody) return 120;
+    if (isTopSet) return 120;
+    return maxReps <= 10 ? 105 : 90;
+  }
+
+  if (kind === "isolation") {
+    if (isShoulderIsolation || exercise.includes("mollets") || maxReps >= 15) {
+      return 45;
+    }
+    return 60;
+  }
+
+  return 75;
+}
+
+function applyRecommendedRestProfile(program = {}) {
+  const nextProgram = {};
+
+  Object.keys(PROGRAM).forEach((day) => {
+    nextProgram[day] = (program[day] || []).map((entry) => ({
+      ...entry,
+      rest: getRecommendedRest(entry),
+    }));
+  });
+
+  return nextProgram;
+}
+
 function getActivationPreset(day) {
   const presets = {
     Push: {
@@ -149,7 +220,7 @@ function getActivationPreset(day) {
       targetLabel: "15",
       minReps: 15,
       maxReps: 15,
-      rest: 60,
+      rest: 45,
       defaultLoad: 12,
       loadLabel: "12-15 kg",
     },
@@ -159,7 +230,7 @@ function getActivationPreset(day) {
       targetLabel: "15",
       minReps: 15,
       maxReps: 15,
-      rest: 60,
+      rest: 45,
       defaultLoad: 20,
       loadLabel: "20 kg",
     },
@@ -169,7 +240,7 @@ function getActivationPreset(day) {
       targetLabel: "15",
       minReps: 15,
       maxReps: 15,
-      rest: 60,
+      rest: 45,
       defaultLoad: 25,
       loadLabel: "25 kg",
     },
@@ -179,7 +250,7 @@ function getActivationPreset(day) {
       targetLabel: "15",
       minReps: 15,
       maxReps: 15,
-      rest: 60,
+      rest: 45,
       defaultLoad: 12,
       loadLabel: "12-15 kg",
     },
@@ -1180,6 +1251,7 @@ function getChartData() {
 
 function buildPersistedState() {
   return {
+    restProfileVersion: CURRENT_REST_PROFILE_VERSION,
     screen: state.screen,
     program: state.program,
     programEditorDay: state.programEditorDay,
@@ -1241,6 +1313,15 @@ function hydrateState(parsed = {}) {
   state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
   state.historyEditor = null;
 
+  const savedRestProfileVersion = sanitizePositiveInteger(
+    parsed.restProfileVersion,
+    1,
+    1
+  );
+  if (savedRestProfileVersion < CURRENT_REST_PROFILE_VERSION) {
+    state.program = applyRecommendedRestProfile(state.program);
+  }
+
   if (state.timer.active && state.timerEndsAt > 0) {
     const remainingMs = state.timerEndsAt - Date.now();
     if (remainingMs <= 0) {
@@ -1262,6 +1343,7 @@ function restoreState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     hydrateState(JSON.parse(raw));
+    saveState();
   } catch (error) {
     console.error("Erreur localStorage", error);
   }
@@ -1488,6 +1570,7 @@ function updateProgramEntry(day, index, field, value) {
   if (!currentEntry) return;
 
   const nextEntry = { ...currentEntry };
+  const currentRecommendedRest = getRecommendedRest(currentEntry);
 
   if (field === "exercise" || field === "series" || field === "loadLabel") {
     nextEntry[field] = sanitizePlainText(value, currentEntry[field]);
@@ -1521,6 +1604,13 @@ function updateProgramEntry(day, index, field, value) {
   }
 
   const normalizedEntry = normalizeProgramEntry(nextEntry, currentEntry);
+  if (
+    field !== "rest" &&
+    ["exercise", "series", "kind", "minReps", "maxReps"].includes(field) &&
+    currentEntry.rest === currentRecommendedRest
+  ) {
+    normalizedEntry.rest = getRecommendedRest(normalizedEntry);
+  }
   dayEntries[index] = normalizedEntry;
   state.program = {
     ...state.program,
@@ -1545,6 +1635,7 @@ function addProgramEntry(day) {
     defaultLoad: null,
     loadLabel: "Charge libre",
   });
+  nextEntry.rest = getRecommendedRest(nextEntry);
 
   state.program = {
     ...state.program,
@@ -3338,7 +3429,8 @@ function renderWeightView(settings, active, last, isFocusMode = false) {
         }
       </div>
       <div class="goal-line">
-        <span>Objectif : ${active.targetLabel} reps · Repos : ${active.rest}s</span>
+        <span class="goal-line__chip">Objectif ${active.targetLabel} reps</span>
+        <span class="goal-line__chip">Repos ${active.rest}s</span>
       </div>
       ${
         isNumericLoad(settings.load) && !isFocusMode
