@@ -2989,6 +2989,7 @@ function renderPremiumDashboard() {
   const sessionCount = getSessionCount();
   const recentSets = getRecentSets();
   const uniqueExercises = new Set((state.program[state.day] || []).map((item) => item.exercise)).size;
+  const heroTheme = getDayTheme(state.day);
   const heroActionLabel = hasWorkoutInProgress()
     ? "Reprendre la seance"
     : `Lancer ${state.day}`;

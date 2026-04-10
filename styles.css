@@ -26,6 +26,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  background-color: #070908;
   background:
     radial-gradient(circle at top, rgba(22, 196, 127, 0.18), transparent 28%),
     linear-gradient(180deg, #08110d 0%, #070908 42%, #050605 100%);
@@ -56,11 +57,13 @@ button {
 
 #app {
   min-height: 100vh;
+  background-color: #070908;
 }
 
 .app-shell {
   min-height: 100vh;
   padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  background-color: #070908;
 }
 
 .app-width {
@@ -1955,6 +1958,7 @@ button {
   bottom: 0;
   z-index: 14;
   padding-bottom: env(safe-area-inset-bottom);
+  background-color: rgba(4, 6, 5, 0.96);
   background: rgba(4, 6, 5, 0.84);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(18px);
@@ -2553,6 +2557,7 @@ body {
 
 .bottom-nav {
   border-top: 0;
+  background-color: rgba(4, 6, 5, 0.96);
   background: linear-gradient(180deg, rgba(4, 6, 5, 0) 0%, rgba(4, 6, 5, 0.76) 22%, rgba(4, 6, 5, 0.94) 100%);
   pointer-events: none;
 }
