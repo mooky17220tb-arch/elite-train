@@ -1,11 +1,12 @@
-const CACHE_NAME = "elite-train-iphone-cache-v31";
+const CACHE_NAME = "elite-train-iphone-cache-v32";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icon.svg",
+  "./index.html?v=32",
+  "./styles.css?v=32",
+  "./app.js?v=32",
+  "./manifest.webmanifest?v=32",
+  "./icon.svg?v=32",
   "./assets/push-card.svg",
   "./assets/pull-card.svg",
   "./assets/legs-card.svg",
@@ -37,10 +38,37 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+
+  const accept = event.request.headers.get("accept") || "";
+  const isDocumentRequest =
+    event.request.mode === "navigate" || accept.includes("text/html");
+
+  if (isDocumentRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => response)
+        .catch(
+          () =>
+            caches.match(event.request).then((cached) => {
+              if (cached) return cached;
+              return (
+                caches.match("./index.html?v=32") ||
+                caches.match("./index.html") ||
+                caches.match("./")
+              );
+            })
+        )
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).catch(() => caches.match("./index.html"));
+      return fetch(event.request).catch(
+        () => caches.match("./index.html?v=32") || caches.match("./index.html")
+      );
     })
   );
 });
