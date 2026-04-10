@@ -102,13 +102,17 @@ const state = {
   rpe: 8,
   repsInput: "",
   showPlates: false,
+  focusWorkoutMode: false,
   workoutFinished: false,
   pendingAdvance: null,
+  timerEndsAt: 0,
+  workoutStartedAt: "",
   selectedChartKey: "",
   pendingSession: [],
   installHintDismissed: false,
   onboardingCompleted: false,
   onboardingStep: 0,
+  historyEditor: null,
 };
 
 const root = document.getElementById("app");
@@ -119,6 +123,10 @@ let restAudioUnlocked = false;
 let scheduledRestToneNodes = [];
 let scheduledRestSoundTimeoutId = null;
 let hasScheduledRestSound = false;
+let pwaRegistration = null;
+let pwaUpdateReady = false;
+let pwaUpdateDismissed = false;
+let pwaReloadOnControllerChange = false;
 
 function createProgramCopy() {
   return ensureActivationSeriesForProgram(JSON.parse(JSON.stringify(PROGRAM)));
@@ -247,6 +255,11 @@ function sanitizePendingAdvance(value) {
   };
 }
 
+function sanitizeTimestamp(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 function sanitizeLoadNumber(value, fallback = null) {
   if (value === "" || value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -371,45 +384,18 @@ function clearScheduledRestSound() {
 function scheduleRestSound(secondsFromNow) {
   clearScheduledRestSound();
 
-  if (
-    !state.restSoundEnabled ||
-    !restAudioContext ||
-    restAudioContext.state !== "running" ||
-    secondsFromNow <= 0
-  ) {
+  if (!state.restSoundEnabled || secondsFromNow <= 0) {
     return false;
   }
 
-  const startAt = restAudioContext.currentTime + secondsFromNow;
-  const notes = [
-    { start: 0, freq: 880, duration: 0.12 },
-    { start: 0.17, freq: 1174, duration: 0.18 },
-  ];
+  primeAudioEngine();
+  hasScheduledRestSound = false;
 
-  scheduledRestToneNodes = notes.map((note) => {
-    const oscillator = restAudioContext.createOscillator();
-    const gainNode = restAudioContext.createGain();
-
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(note.freq, startAt + note.start);
-    gainNode.gain.setValueAtTime(0.0001, startAt + note.start);
-    gainNode.gain.exponentialRampToValueAtTime(0.2, startAt + note.start + 0.02);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + note.start + note.duration);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(restAudioContext.destination);
-    oscillator.start(startAt + note.start);
-    oscillator.stop(startAt + note.start + note.duration + 0.04);
-
-    return { oscillator, gainNode };
-  });
-
-  hasScheduledRestSound = true;
+  const prewarmDelay = Math.max(0, Math.round((secondsFromNow - 1) * 1000));
   scheduledRestSoundTimeoutId = window.setTimeout(() => {
-    hasScheduledRestSound = false;
-    scheduledRestToneNodes = [];
+    primeAudioEngine();
     scheduledRestSoundTimeoutId = null;
-  }, Math.ceil((secondsFromNow + 1) * 1000));
+  }, prewarmDelay);
 
   return true;
 }
@@ -723,6 +709,103 @@ function buildExerciseKey(day, exercise, series) {
   return `${day}__${exercise}__${series}`;
 }
 
+function getNextLoadSettingsFromEntry(entry) {
+  const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
+  let nextLoad = entry.load;
+  let deload = false;
+  const increment = getIncrement(entry.kind);
+  const minimumLoad = getMinimumLoad(entry.kind);
+
+  if (advice.action === "Augmenter" && isNumericLoad(entry.load)) {
+    nextLoad = roundToIncrement(entry.load + increment, increment);
+  }
+
+  if (advice.action === "Baisser 5%" && isNumericLoad(entry.load)) {
+    nextLoad = Math.max(
+      minimumLoad,
+      roundToIncrement(entry.load * 0.95, increment, "down")
+    );
+    deload = true;
+  }
+
+  if (advice.fatigue) {
+    deload = true;
+  }
+
+  return {
+    load: nextLoad,
+    loadLabel: entry.loadLabel,
+    deload,
+  };
+}
+
+function recomputeExerciseDataForKey(key) {
+  if (!key) return;
+
+  const nextExerciseData = { ...state.exerciseData };
+  const latestEntry = state.history
+    .filter((item) => item.key === key)
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+  if (!latestEntry) {
+    delete nextExerciseData[key];
+    state.exerciseData = nextExerciseData;
+    return;
+  }
+
+  nextExerciseData[key] = getNextLoadSettingsFromEntry(latestEntry);
+  state.exerciseData = nextExerciseData;
+}
+
+function migrateExerciseIdentity(day, previousEntry, nextEntry) {
+  if (!previousEntry || !nextEntry) return;
+
+  const oldKey = buildExerciseKey(day, previousEntry.exercise, previousEntry.series);
+  const newKey = buildExerciseKey(day, nextEntry.exercise, nextEntry.series);
+
+  if (oldKey === newKey) return;
+
+  const nextExerciseData = { ...state.exerciseData };
+  if (Object.prototype.hasOwnProperty.call(nextExerciseData, oldKey)) {
+    nextExerciseData[newKey] = nextExerciseData[oldKey];
+    delete nextExerciseData[oldKey];
+  }
+  state.exerciseData = nextExerciseData;
+
+  state.history = state.history.map((item) =>
+    item.key === oldKey
+      ? {
+          ...item,
+          key: newKey,
+          day,
+          exercise: nextEntry.exercise,
+          series: nextEntry.series,
+        }
+      : item
+  );
+
+  state.pendingSession = state.pendingSession.map((item) =>
+    item.key === oldKey
+      ? {
+          ...item,
+          key: newKey,
+          day,
+          exercise: nextEntry.exercise,
+          series: nextEntry.series,
+        }
+      : item
+  );
+
+  if (state.selectedChartKey === oldKey) {
+    state.selectedChartKey = newKey;
+  }
+}
+
+function getTimerEndTimestamp(seconds) {
+  return seconds > 0 ? Date.now() + seconds * 1000 : 0;
+}
+
 function getExercises() {
   return state.program[state.day] || [];
 }
@@ -780,6 +863,266 @@ function syncValidationButton() {
   const label = getValidationButtonLabel();
   button.textContent = label;
   button.setAttribute("aria-label", label);
+}
+
+function getExerciseIndexForEntry(entry, day = state.day) {
+  if (!entry) return -1;
+  return (state.program[day] || []).findIndex(
+    (item) => item.exercise === entry.exercise && item.series === entry.series
+  );
+}
+
+function reopenLastPendingSet(prefill = false) {
+  const lastEntry = state.pendingSession.pop();
+  if (!lastEntry) return;
+
+  clearScheduledRestSound();
+  state.day = lastEntry.day;
+  state.screen = "workout";
+  state.restAlertVisible = false;
+  state.timer = { seconds: 0, active: false };
+  state.timerEndsAt = 0;
+  state.workoutFinished = false;
+  state.pendingAdvance = null;
+  state.currentIndex = Math.max(0, getExerciseIndexForEntry(lastEntry, lastEntry.day));
+  state.repsInput = prefill ? String(lastEntry.reps) : "";
+  state.selectedChartKey = lastEntry.key || state.selectedChartKey;
+
+  if (!state.pendingSession.length) {
+    state.workoutStartedAt = new Date().toISOString();
+  }
+
+  saveState();
+  renderApp();
+}
+
+function getLastPendingEntry() {
+  return state.pendingSession[state.pendingSession.length - 1] || null;
+}
+
+function getWorkoutDurationLabel() {
+  const startValue = state.workoutStartedAt || state.pendingSession[0]?.date;
+  if (!startValue) return "0 min";
+
+  const startTime = new Date(startValue).getTime();
+  const endSource = state.pendingSession[state.pendingSession.length - 1]?.date || new Date().toISOString();
+  const endTime = new Date(endSource).getTime();
+
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    return "0 min";
+  }
+
+  const totalMinutes = Math.max(1, Math.round((endTime - startTime) / 60000));
+  return `${totalMinutes} min`;
+}
+
+function getWorkoutCompletionSummary() {
+  if (!state.pendingSession.length) return null;
+
+  const counts = { progress: 0, hold: 0, reduce: 0 };
+  const exercises = new Set();
+  let volume = 0;
+
+  state.pendingSession.forEach((entry) => {
+    const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
+    counts[advice.type] += 1;
+    exercises.add(entry.exercise);
+
+    if (isNumericLoad(entry.load)) {
+      volume += entry.load * entry.reps;
+    }
+  });
+
+  const dominantAction =
+    counts.progress >= counts.hold && counts.progress >= counts.reduce
+      ? "progress"
+      : counts.reduce > counts.hold
+      ? "reduce"
+      : "hold";
+
+  const coachLine =
+    dominantAction === "progress"
+      ? "Tu as valide la seance. Continue sur cette dynamique."
+      : dominantAction === "reduce"
+      ? "On ajuste legerement et on repart plus propre la prochaine fois."
+      : "Bonne seance. On verrouille encore avant de monter.";
+
+  return {
+    setCount: state.pendingSession.length,
+    exerciseCount: exercises.size,
+    counts,
+    volumeLabel: volume > 0 ? `${Math.round(volume)} kg` : "Charge libre",
+    durationLabel: getWorkoutDurationLabel(),
+    coachLine,
+  };
+}
+
+function renderLastSetActions() {
+  const lastEntry = getLastPendingEntry();
+  if (!lastEntry || state.workoutFinished) return "";
+
+  return `
+    <div class="last-set-card">
+      <div class="last-set-card__copy">
+        <span class="label">Derniere serie</span>
+        <strong>${lastEntry.exercise}</strong>
+        <span>${lastEntry.reps} reps · ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+      </div>
+      <div class="last-set-card__actions">
+        <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
+        <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
+      </div>
+    </div>
+  `;
+}
+
+function toggleFocusWorkoutMode() {
+  state.focusWorkoutMode = !state.focusWorkoutMode;
+  saveState();
+  renderApp();
+}
+
+function ensureSelectedChartKeyIsValid() {
+  if (state.selectedChartKey && state.history.some((item) => item.key === state.selectedChartKey)) {
+    return;
+  }
+
+  state.selectedChartKey = state.history[0]?.key || "";
+}
+
+function openHistoryEditor(index) {
+  const sortedHistory = getSortedHistory();
+  const entry = sortedHistory[index];
+  if (!entry) return;
+
+  const originalIndex = state.history.findIndex(
+    (item) => item.key === entry.key && item.date === entry.date && item.series === entry.series
+  );
+  if (originalIndex < 0) return;
+
+  state.historyEditor = {
+    index: originalIndex,
+    reps: String(entry.reps ?? ""),
+    load: isNumericLoad(entry.load) ? String(entry.load) : "",
+    loadLabel: sanitizePlainText(entry.loadLabel, entry.loadLabel || ""),
+  };
+  renderApp();
+}
+
+function closeHistoryEditor() {
+  state.historyEditor = null;
+  renderApp();
+}
+
+function saveHistoryEditor() {
+  if (!state.historyEditor) return;
+
+  const nextHistory = [...state.history];
+  const entry = nextHistory[state.historyEditor.index];
+  if (!entry) {
+    state.historyEditor = null;
+    renderApp();
+    return;
+  }
+
+  const reps = sanitizePositiveInteger(state.historyEditor.reps, entry.reps, 1);
+  const load = state.historyEditor.load === "" ? null : sanitizeLoadNumber(state.historyEditor.load, entry.load);
+  const loadLabel = sanitizePlainText(
+    state.historyEditor.loadLabel,
+    isNumericLoad(load) ? `${load} kg` : entry.loadLabel || "Charge libre"
+  );
+
+  nextHistory[state.historyEditor.index] = {
+    ...entry,
+    reps,
+    load,
+    loadLabel,
+  };
+
+  const affectedKey = entry.key;
+  state.history = nextHistory;
+  state.historyEditor = null;
+  recomputeExerciseDataForKey(affectedKey);
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function deleteHistoryEntry() {
+  if (!state.historyEditor) return;
+  if (!window.confirm("Supprimer cette serie de l'historique ?")) return;
+
+  const affectedKey = state.history[state.historyEditor.index]?.key;
+  state.history = state.history.filter((_, index) => index !== state.historyEditor.index);
+  state.historyEditor = null;
+  recomputeExerciseDataForKey(affectedKey);
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function renderHistoryEditorOverlay() {
+  if (!state.historyEditor) return "";
+
+  const currentEntry = state.history[state.historyEditor.index];
+  if (!currentEntry) return "";
+
+  return `
+    <div class="sheet-overlay">
+      <article class="sheet-card">
+        <div class="sheet-card__head">
+          <div>
+            <div class="label">Historique</div>
+            <h3 class="section-title">Modifier la serie</h3>
+          </div>
+          <button class="icon-button" data-action="close-history-editor" aria-label="Fermer l'edition">
+            X
+          </button>
+        </div>
+
+        <div class="sheet-card__body">
+          <div class="muted">${currentEntry.exercise} · ${currentEntry.series} · ${formatDate(currentEntry.date)}</div>
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="history-editor-reps">Reps</label>
+              <input id="history-editor-reps" class="input input--editor" type="number" min="1" value="${state.historyEditor.reps}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label" for="history-editor-load">Charge</label>
+              <input id="history-editor-load" class="input input--editor" type="number" min="0" step="0.5" value="${state.historyEditor.load}" />
+            </div>
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="history-editor-label">Libelle charge</label>
+            <input id="history-editor-label" class="input input--editor" type="text" value="${state.historyEditor.loadLabel}" />
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--danger" data-action="delete-history-entry">Supprimer</button>
+          <button class="button button--ghost" data-action="close-history-editor">Annuler</button>
+          <button class="button button--primary" data-action="save-history-entry">Enregistrer</button>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderPwaUpdateBanner() {
+  if (!pwaUpdateReady || pwaUpdateDismissed) return "";
+
+  return `
+    <div class="update-banner">
+      <div class="update-banner__copy">
+        <span class="label">Mise a jour</span>
+        <strong>Une nouvelle version est disponible.</strong>
+      </div>
+      <div class="update-banner__actions">
+        <button class="button button--ghost button--compact" data-action="dismiss-update-banner">Plus tard</button>
+        <button class="button button--primary button--compact" data-action="refresh-app">Recharger</button>
+      </div>
+    </div>
+  `;
 }
 
 function getProgressPercent() {
@@ -852,8 +1195,11 @@ function buildPersistedState() {
     rpe: state.rpe,
     repsInput: state.repsInput,
     showPlates: state.showPlates,
+    focusWorkoutMode: state.focusWorkoutMode,
     workoutFinished: state.workoutFinished,
     pendingAdvance: state.pendingAdvance,
+    timerEndsAt: state.timerEndsAt,
+    workoutStartedAt: state.workoutStartedAt,
     pendingSession: state.pendingSession,
     selectedChartKey: state.selectedChartKey,
     installHintDismissed: state.installHintDismissed,
@@ -883,13 +1229,28 @@ function hydrateState(parsed = {}) {
   state.rpe = parsed.rpe ?? 8;
   state.repsInput = parsed.repsInput || "";
   state.showPlates = Boolean(parsed.showPlates);
+  state.focusWorkoutMode = Boolean(parsed.focusWorkoutMode);
   state.workoutFinished = Boolean(parsed.workoutFinished);
   state.pendingAdvance = sanitizePendingAdvance(parsed.pendingAdvance);
+  state.timerEndsAt = sanitizeTimestamp(parsed.timerEndsAt);
+  state.workoutStartedAt = typeof parsed.workoutStartedAt === "string" ? parsed.workoutStartedAt : "";
   state.pendingSession = parsed.pendingSession || [];
   state.selectedChartKey = parsed.selectedChartKey || "";
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
   state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
   state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
+  state.historyEditor = null;
+
+  if (state.timer.active && state.timerEndsAt > 0) {
+    const remainingMs = state.timerEndsAt - Date.now();
+    if (remainingMs <= 0) {
+      state.timer = { seconds: 0, active: false };
+      state.timerEndsAt = 0;
+      state.restAlertVisible = true;
+    } else {
+      state.timer.seconds = Math.ceil(remainingMs / 1000);
+    }
+  }
 }
 
 function saveState() {
@@ -938,8 +1299,10 @@ function resetWorkoutState() {
   state.rpe = 8;
   state.showPlates = false;
   state.timer = { seconds: 0, active: false };
+  state.timerEndsAt = 0;
   state.workoutFinished = false;
   state.pendingAdvance = null;
+  state.workoutStartedAt = "";
   clearScheduledRestSound();
 }
 
@@ -948,6 +1311,7 @@ function startWorkoutDay(day) {
   state.day = day;
   state.pendingSession = [];
   resetWorkoutState();
+  state.workoutStartedAt = new Date().toISOString();
   state.screen = "workout";
   saveState();
   renderApp();
@@ -957,6 +1321,9 @@ function handleValidation() {
   const active = getActiveExercise();
   const reps = parseInt(state.repsInput, 10);
   if (!active || Number.isNaN(reps) || reps <= 0) return;
+  if (!state.workoutStartedAt) {
+    state.workoutStartedAt = new Date().toISOString();
+  }
 
   state.restAlertVisible = false;
   state.pendingSession.push({
@@ -981,6 +1348,7 @@ function handleValidation() {
   state.timer = isLastExercise
     ? { seconds: 0, active: false }
     : { seconds: active.rest, active: active.rest > 0 };
+  state.timerEndsAt = isLastExercise || active.rest <= 0 ? 0 : getTimerEndTimestamp(active.rest);
   state.repsInput = "";
 
   if (!isLastExercise && active.rest > 0) {
@@ -1003,6 +1371,7 @@ function handleValidation() {
 function finalizeWorkout() {
   if (!state.pendingSession.length) {
     state.workoutFinished = false;
+    state.workoutStartedAt = "";
     state.screen = "dashboard";
     renderApp();
     return;
@@ -1011,33 +1380,7 @@ function finalizeWorkout() {
   const nextExerciseData = { ...state.exerciseData };
 
   state.pendingSession.forEach((entry) => {
-    const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
-    let nextLoad = entry.load;
-    let deload = false;
-    const increment = getIncrement(entry.kind);
-    const minimumLoad = getMinimumLoad(entry.kind);
-
-    if (advice.action === "Augmenter" && isNumericLoad(entry.load)) {
-      nextLoad = roundToIncrement(entry.load + increment, increment);
-    }
-
-    if (advice.action === "Baisser 5%" && isNumericLoad(entry.load)) {
-      nextLoad = Math.max(
-        minimumLoad,
-        roundToIncrement(entry.load * 0.95, increment, "down")
-      );
-      deload = true;
-    }
-
-    if (advice.fatigue) {
-      deload = true;
-    }
-
-    nextExerciseData[entry.key] = {
-      load: nextLoad,
-      loadLabel: entry.loadLabel,
-      deload,
-    };
+    nextExerciseData[entry.key] = getNextLoadSettingsFromEntry(entry);
   });
 
   state.history = [...state.pendingSession.slice().reverse(), ...state.history];
@@ -1045,6 +1388,8 @@ function finalizeWorkout() {
   state.selectedChartKey = state.pendingSession[state.pendingSession.length - 1]?.key || "";
   state.pendingSession = [];
   state.workoutFinished = false;
+  state.timerEndsAt = 0;
+  state.workoutStartedAt = "";
   state.screen = "dashboard";
   saveState();
   renderApp();
@@ -1064,12 +1409,14 @@ function clearAllData() {
   state.onboardingStep = 0;
   state.restAlertVisible = false;
   state.pendingAdvance = null;
+  state.timerEndsAt = 0;
   state.restSoundEnabled = true;
   state.restVibrationEnabled = true;
+  state.focusWorkoutMode = false;
+  state.historyEditor = null;
   resetWorkoutState();
   state.day = "Push";
   state.screen = "dashboard";
-  seedPreviewData();
   renderApp();
 }
 
@@ -1173,11 +1520,13 @@ function updateProgramEntry(day, index, field, value) {
     }
   }
 
-  dayEntries[index] = normalizeProgramEntry(nextEntry, currentEntry);
+  const normalizedEntry = normalizeProgramEntry(nextEntry, currentEntry);
+  dayEntries[index] = normalizedEntry;
   state.program = {
     ...state.program,
     [day]: dayEntries,
   };
+  migrateExerciseIdentity(day, currentEntry, normalizedEntry);
 
   saveState();
   renderApp();
@@ -1220,6 +1569,7 @@ function removeProgramEntry(day, index) {
     state.currentIndex = Math.max(0, dayEntries.length - 1);
   }
 
+  ensureSelectedChartKeyIsValid();
   saveState();
   renderApp();
 }
@@ -1227,6 +1577,7 @@ function removeProgramEntry(day, index) {
 function resetProgram() {
   state.program = createProgramCopy();
   state.programEditorDay = state.day;
+  ensureSelectedChartKeyIsValid();
   saveState();
   renderApp();
 }
@@ -1255,6 +1606,7 @@ function extendRest(seconds = 30) {
     seconds,
     active: true,
   };
+  state.timerEndsAt = getTimerEndTimestamp(seconds);
   state.restAlertVisible = false;
   scheduleRestSound(seconds);
   saveState();
@@ -1262,14 +1614,9 @@ function extendRest(seconds = 30) {
 }
 
 function triggerRestAlert(options = {}) {
-  const { skipSound = false } = options;
-  if (!skipSound) {
-    clearScheduledRestSound();
-  }
+  clearScheduledRestSound();
   state.restAlertVisible = true;
-  if (!skipSound) {
-    playRestSound();
-  }
+  playRestSound();
   vibrateRestAlert();
   saveState();
   renderApp();
@@ -2974,9 +3321,9 @@ function renderPlateView(settings) {
   `;
 }
 
-function renderWeightView(settings, active, last) {
+function renderWeightView(settings, active, last, isFocusMode = false) {
   return `
-    <div class="weight-card">
+    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}">
       ${
         settings.deload
           ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
@@ -2994,7 +3341,7 @@ function renderWeightView(settings, active, last) {
         <span>Objectif : ${active.targetLabel} reps · Repos : ${active.rest}s</span>
       </div>
       ${
-        isNumericLoad(settings.load)
+        isNumericLoad(settings.load) && !isFocusMode
           ? `
               <div class="load-actions">
                 <button class="icon-button" data-action="decrease-load" aria-label="Baisser la charge">-</button>
@@ -3005,11 +3352,93 @@ function renderWeightView(settings, active, last) {
           : ""
       }
       ${
-        last
+        last && !isFocusMode
           ? `<div class="last-performance">Precedent : <strong>${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}</strong></div>`
           : ""
       }
     </div>
+  `;
+}
+
+function renderWorkoutCompletionScreen() {
+  const summary = getWorkoutCompletionSummary();
+  const lastEntry = getLastPendingEntry();
+
+  if (!summary) {
+    return `
+      <section class="stack-md">
+        <section class="surface surface-pad-lg center-block stack-md">
+          <div class="trophy">T</div>
+          <div class="stack-sm">
+            <h2 class="section-title">Seance terminee</h2>
+          </div>
+          <button class="button button--primary" data-action="finalize-workout">
+            Terminer la seance
+          </button>
+        </section>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="stack-md">
+      <section class="surface surface-pad-lg session-finish">
+        <div class="session-finish__hero">
+          <div class="trophy">T</div>
+          <div class="stack-sm">
+            <div class="label">Fin de seance</div>
+            <h2 class="section-title session-finish__title">Belle seance.</h2>
+            <div class="muted">${summary.coachLine}</div>
+          </div>
+        </div>
+
+        <div class="grid-2 session-finish__stats">
+          <article class="dashboard-mini-card">
+            <div class="label">Series</div>
+            <div class="dashboard-mini-card__value">${summary.setCount}</div>
+            <div class="dashboard-mini-card__meta">${summary.exerciseCount} exos</div>
+          </article>
+          <article class="dashboard-mini-card">
+            <div class="label">Duree</div>
+            <div class="dashboard-mini-card__value">${summary.durationLabel}</div>
+            <div class="dashboard-mini-card__meta">${summary.volumeLabel} de volume</div>
+          </article>
+        </div>
+
+        <div class="session-finish__verdicts">
+          <span class="verdict-chip verdict-chip--progress">Monter ${summary.counts.progress}</span>
+          <span class="verdict-chip verdict-chip--hold">Garder ${summary.counts.hold}</span>
+          <span class="verdict-chip verdict-chip--reduce">Baisser ${summary.counts.reduce}</span>
+        </div>
+
+        ${
+          lastEntry
+            ? `
+                <div class="last-set-card last-set-card--summary">
+                  <div class="last-set-card__copy">
+                    <span class="label">Derniere serie</span>
+                    <strong>${lastEntry.exercise}</strong>
+                    <span>${lastEntry.reps} reps · ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+                  </div>
+                  <div class="last-set-card__actions">
+                    <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
+                    <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
+                  </div>
+                </div>
+              `
+            : ""
+        }
+
+        <div class="stack-sm">
+          <button class="button button--primary" data-action="finalize-workout">
+            Enregistrer la seance
+          </button>
+          <button class="button button--ghost" data-action="restart-workout">
+            Annuler et recommencer
+          </button>
+        </div>
+      </section>
+    </section>
   `;
 }
 
@@ -3018,30 +3447,10 @@ function renderWorkout() {
   const settings = getCurrentSettings();
   const last = getLastPerformance();
   const advice = getCurrentAdvice();
+  const isFocusMode = state.focusWorkoutMode;
 
   if (state.workoutFinished) {
-    return `
-      <section class="stack-md">
-        <section class="surface surface-pad-lg center-block stack-md">
-          <div class="trophy">T</div>
-          <div class="stack-sm">
-            <h2 class="section-title">Seance terminee</h2>
-            <div class="muted">
-              Valide la fin de seance pour enregistrer les performances et calculer
-              automatiquement les prochains poids.
-            </div>
-          </div>
-          <div class="stack-sm">
-            <button class="button button--primary" data-action="finalize-workout">
-              Terminer la seance
-            </button>
-            <button class="button button--ghost" data-action="restart-workout">
-              Annuler et recommencer
-            </button>
-          </div>
-        </section>
-      </section>
-    `;
+    return renderWorkoutCompletionScreen();
   }
 
   if (!active) {
@@ -3053,33 +3462,48 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-lg">
+    <section class="surface surface-pad-lg stack-lg workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-day="${state.day}">
       <div class="row row-start">
         <div>
           <span class="pill">${active.series}</span>
           <h2 class="hero-title">${active.exercise}</h2>
-          <div class="hero-subtitle">Exercice ${state.currentIndex + 1} sur ${getExercises().length}</div>
+          ${isFocusMode ? "" : `<div class="hero-subtitle">Exercice ${state.currentIndex + 1} sur ${getExercises().length}</div>`}
         </div>
-        <button
-          class="icon-button ${state.showPlates ? "is-active" : ""}"
-          data-action="toggle-plates"
-          aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
-        >
-          ${state.showPlates ? "KG" : "DB"}
-        </button>
+        <div class="workout-shell__tools">
+          <button
+            class="icon-button ${state.focusWorkoutMode ? "is-active" : ""}"
+            data-action="toggle-focus-workout"
+            aria-label="${state.focusWorkoutMode ? "Quitter le mode focus" : "Activer le mode focus"}"
+          >
+            ${state.focusWorkoutMode ? "FOC" : "ZEN"}
+          </button>
+          <button
+            class="icon-button ${state.showPlates ? "is-active" : ""}"
+            data-action="toggle-plates"
+            aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
+          >
+            ${state.showPlates ? "KG" : "DB"}
+          </button>
+        </div>
       </div>
 
-      <div class="progress-wrap">
-        <div class="row">
-          <div class="label">Progression seance</div>
-          <div class="label">${getProgressPercent()}%</div>
-        </div>
-        <div class="progress">
-          <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
-        </div>
-      </div>
+      ${
+        isFocusMode
+          ? ""
+          : `
+              <div class="progress-wrap">
+                <div class="row">
+                  <div class="label">Progression seance</div>
+                  <div class="label">${getProgressPercent()}%</div>
+                </div>
+                <div class="progress">
+                  <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
+                </div>
+              </div>
+            `
+      }
 
-      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last)}
+      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
 
       <div class="stack-md">
         <div class="field-wrap">
@@ -3103,6 +3527,8 @@ function renderWorkout() {
         >
           ${getValidationButtonLabel(advice)}
         </button>
+
+        ${renderLastSetActions()}
       </div>
     </section>
   `;
@@ -3120,21 +3546,27 @@ function renderHistory() {
     `;
   }
 
+  const sortedHistory = getSortedHistory().slice(0, 24);
+
   return `
     <section class="history-list">
       ${renderRecordsSection()}
       <h2 class="section-title">Historique</h2>
-      ${state.history
-        .slice(0, 24)
+      ${sortedHistory
         .map(
-          (item) => `
-            <article class="surface surface-pad">
+          (item, index) => `
+            <article class="surface surface-pad history-card">
               <div class="row row-start">
                 <div>
                   <div class="section-title" style="font-size:22px">${item.exercise}</div>
                   <div class="label" style="margin-top:4px">${item.day} · ${item.series}</div>
                 </div>
-                <span class="pill pill--outline">${formatDate(item.date)}</span>
+                <div class="history-card__head-tools">
+                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
+                    Modifier
+                  </button>
+                </div>
               </div>
               <div class="metric-grid">
                 <div class="metric">
@@ -3429,9 +3861,15 @@ function renderRestAlertOverlay() {
 
 function renderSettings() {
   return `
-    <section class="stack-md">
-      <article class="surface surface-pad stack-md">
-        <h2 class="section-title">Reglages</h2>
+    <section class="stack-md settings-shell">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">App iPhone</div>
+            <h2 class="section-title dashboard-section-head__title">Reglages</h2>
+          </div>
+          <div class="label">PWA</div>
+        </div>
         <div class="install-hint">
           Pour l'avoir sur iPhone :
           <br />
@@ -3444,34 +3882,36 @@ function renderSettings() {
         <div class="install-hint">
           Les donnees sont stockees localement sur l'appareil via le navigateur.
         </div>
-        ${renderCycleSettings()}
-        <article class="surface surface--soft surface-pad backup-shell">
-          <div class="dashboard-section-head">
-            <div>
-              <div class="label">Backup</div>
-              <h3 class="section-title dashboard-section-head__title">Export et import</h3>
-            </div>
-            <div class="label">JSON</div>
+      </article>
+
+      ${renderCycleSettings()}
+      ${renderRestSettings()}
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Donnees</div>
+            <h3 class="section-title dashboard-section-head__title">Backup et nettoyage</h3>
           </div>
-          <div class="muted">
-            Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
-          </div>
-          <div class="backup-actions">
-            <button class="button button--ghost" data-action="export-backup">
-              Exporter mes donnees
-            </button>
-            <button class="button button--primary" data-action="import-backup">
-              Importer un backup
-            </button>
-          </div>
-          <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
-        </article>
+          <div class="label">JSON</div>
+        </div>
+        <div class="muted">
+          Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
+        </div>
+        <div class="backup-actions">
+          <button class="button button--ghost" data-action="export-backup">
+            Exporter mes donnees
+          </button>
+          <button class="button button--primary" data-action="import-backup">
+            Importer un backup
+          </button>
+        </div>
+        <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
         <button class="button button--danger" data-action="clear-data">
           Reinitialiser toutes les donnees
         </button>
       </article>
 
-      ${renderRestSettings()}
       ${renderProgramEditor()}
     </section>
   `;
@@ -3486,9 +3926,10 @@ function renderBody() {
 
 function renderApp() {
   const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
 
   root.innerHTML = `
-    <div class="app-shell">
+    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""}">
       <header class="app-header">
         <div class="app-width app-header__inner">
           <div>
@@ -3507,29 +3948,38 @@ function renderApp() {
         </div>
       </header>
 
+      ${renderPwaUpdateBanner()}
+
       <main class="app-width page">
         ${renderBody()}
       </main>
 
-      <nav class="bottom-nav">
-        <div class="bottom-nav__inner">
-          <button class="nav-button ${state.screen === "dashboard" ? "is-active" : ""}" data-screen="dashboard">
-            Dash
-          </button>
-          <button class="nav-button ${state.screen === "workout" ? "is-active" : ""}" data-screen="workout">
-            Train
-          </button>
-          <button class="nav-button ${state.screen === "history" ? "is-active" : ""}" data-screen="history">
-            Hist
-          </button>
-          <button class="nav-button ${state.screen === "settings" ? "is-active" : ""}" data-screen="settings">
-            Set
-          </button>
-        </div>
-      </nav>
+      ${
+        hideBottomNav
+          ? ""
+          : `
+              <nav class="bottom-nav">
+                <div class="bottom-nav__inner">
+                  <button class="nav-button ${state.screen === "dashboard" ? "is-active" : ""}" data-screen="dashboard">
+                    Dash
+                  </button>
+                  <button class="nav-button ${state.screen === "workout" ? "is-active" : ""}" data-screen="workout">
+                    Train
+                  </button>
+                  <button class="nav-button ${state.screen === "history" ? "is-active" : ""}" data-screen="history">
+                    Hist
+                  </button>
+                  <button class="nav-button ${state.screen === "settings" ? "is-active" : ""}" data-screen="settings">
+                    Set
+                  </button>
+                </div>
+              </nav>
+            `
+      }
 
       ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
       ${renderRestAlertOverlay()}
+      ${renderHistoryEditorOverlay()}
     </div>
   `;
 
@@ -3563,11 +4013,18 @@ function bindEvents() {
       const action = button.dataset.action;
 
       if (action === "toggle-timer") {
-        state.timer.active = state.timer.seconds > 0 ? !state.timer.active : false;
-        if (state.timer.active) {
-          scheduleRestSound(state.timer.seconds);
-        } else {
+        if (state.timer.seconds <= 0) {
+          state.timer.active = false;
+          state.timerEndsAt = 0;
           clearScheduledRestSound();
+        } else if (state.timer.active) {
+          state.timer.active = false;
+          state.timerEndsAt = 0;
+          clearScheduledRestSound();
+        } else {
+          state.timer.active = true;
+          state.timerEndsAt = getTimerEndTimestamp(state.timer.seconds);
+          scheduleRestSound(state.timer.seconds);
         }
         saveState();
         renderApp();
@@ -3577,6 +4034,10 @@ function bindEvents() {
         state.showPlates = !state.showPlates;
         saveState();
         renderApp();
+      }
+
+      if (action === "toggle-focus-workout") {
+        toggleFocusWorkoutMode();
       }
 
       if (action === "increase-load") {
@@ -3593,6 +4054,14 @@ function bindEvents() {
 
       if (action === "validate-set") {
         handleValidation();
+      }
+
+      if (action === "edit-last-set") {
+        reopenLastPendingSet(true);
+      }
+
+      if (action === "undo-last-set") {
+        reopenLastPendingSet(false);
       }
 
       if (action === "finalize-workout") {
@@ -3676,6 +4145,37 @@ function bindEvents() {
 
       if (action === "dismiss-install") {
         dismissInstallHint();
+      }
+
+      if (action === "open-history-editor") {
+        openHistoryEditor(Number(button.dataset.historyIndex));
+      }
+
+      if (action === "close-history-editor") {
+        closeHistoryEditor();
+      }
+
+      if (action === "save-history-entry") {
+        saveHistoryEditor();
+      }
+
+      if (action === "delete-history-entry") {
+        deleteHistoryEntry();
+      }
+
+      if (action === "dismiss-update-banner") {
+        pwaUpdateDismissed = true;
+        renderApp();
+      }
+
+      if (action === "refresh-app") {
+        pwaUpdateDismissed = false;
+        if (pwaRegistration?.waiting) {
+          pwaReloadOnControllerChange = true;
+          pwaRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+        } else {
+          window.location.reload();
+        }
       }
 
       if (action === "onboarding-next") {
@@ -3762,6 +4262,30 @@ function bindEvents() {
     };
   }
 
+  const historyEditorReps = document.getElementById("history-editor-reps");
+  if (historyEditorReps) {
+    historyEditorReps.oninput = (event) => {
+      if (!state.historyEditor) return;
+      state.historyEditor.reps = event.target.value;
+    };
+  }
+
+  const historyEditorLoad = document.getElementById("history-editor-load");
+  if (historyEditorLoad) {
+    historyEditorLoad.oninput = (event) => {
+      if (!state.historyEditor) return;
+      state.historyEditor.load = event.target.value;
+    };
+  }
+
+  const historyEditorLabel = document.getElementById("history-editor-label");
+  if (historyEditorLabel) {
+    historyEditorLabel.oninput = (event) => {
+      if (!state.historyEditor) return;
+      state.historyEditor.loadLabel = event.target.value;
+    };
+  }
+
   document.ondblclick = (event) => {
     if (event.target.closest("button")) {
       event.preventDefault();
@@ -3771,26 +4295,81 @@ function bindEvents() {
 
 function tickTimer() {
   if (!state.timer.active || state.timer.seconds <= 0) return;
+
+  if (state.timerEndsAt > 0) {
+    const remainingMs = state.timerEndsAt - Date.now();
+    if (remainingMs <= 0) {
+      state.timer.seconds = 0;
+      state.timer.active = false;
+      state.timerEndsAt = 0;
+      triggerRestAlert();
+      return;
+    }
+
+    state.timer.seconds = Math.ceil(remainingMs / 1000);
+    saveState();
+    renderApp();
+    return;
+  }
+
   state.timer.seconds -= 1;
   if (state.timer.seconds <= 0) {
     state.timer.seconds = 0;
     state.timer.active = false;
-    triggerRestAlert({ skipSound: hasScheduledRestSound });
+    state.timerEndsAt = 0;
+    triggerRestAlert();
     return;
   }
+
   saveState();
   renderApp();
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (pwaReloadOnControllerChange) {
+      window.location.reload();
+    }
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+      pwaRegistration = registration;
+
+      const showUpdateReady = () => {
+        pwaUpdateReady = true;
+        pwaUpdateDismissed = false;
+        renderApp();
+      };
+
+      if (registration.waiting) {
+        showUpdateReady();
+      }
+
+      registration.addEventListener("updatefound", () => {
+        const installingWorker = registration.installing;
+        if (!installingWorker) return;
+
+        installingWorker.addEventListener("statechange", () => {
+          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateReady();
+          }
+        });
+      });
+
+      registration.update().catch(() => {});
+    }).catch(() => {});
   });
 }
 
 restoreState();
-seedPreviewData();
 renderApp();
 registerServiceWorker();
 setInterval(tickTimer, 1000);
+window.addEventListener("focus", tickTimer);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    tickTimer();
+  }
+});

@@ -1,4 +1,4 @@
-const CACHE_NAME = "elite-train-iphone-cache-v23";
+const CACHE_NAME = "elite-train-iphone-cache-v25";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -26,8 +26,14 @@ self.addEventListener("activate", (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {
