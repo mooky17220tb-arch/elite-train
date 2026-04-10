@@ -113,6 +113,12 @@ const state = {
 
 const root = document.getElementById("app");
 let restAudioContext = null;
+let restAudioElement = null;
+let restAudioUrl = "";
+let restAudioUnlocked = false;
+let scheduledRestToneNodes = [];
+let scheduledRestSoundTimeoutId = null;
+let hasScheduledRestSound = false;
 
 function createProgramCopy() {
   return ensureActivationSeriesForProgram(JSON.parse(JSON.stringify(PROGRAM)));
@@ -269,18 +275,173 @@ function getRestAlertCopy() {
   };
 }
 
+function createRestAudioUrl() {
+  const sampleRate = 22050;
+  const duration = 0.52;
+  const frameCount = Math.floor(sampleRate * duration);
+  const pcmData = new Int16Array(frameCount);
+
+  for (let i = 0; i < frameCount; i += 1) {
+    const time = i / sampleRate;
+    let sample = 0;
+
+    if (time < 0.14) {
+      sample += Math.sin(2 * Math.PI * 880 * time) * 0.52;
+    } else if (time > 0.2 && time < 0.42) {
+      sample += Math.sin(2 * Math.PI * 1174 * time) * 0.6;
+    }
+
+    const fadeIn = Math.min(1, time / 0.012);
+    const fadeOut = Math.min(1, (duration - time) / 0.035);
+    const shaped = sample * fadeIn * fadeOut;
+    pcmData[i] = Math.max(-1, Math.min(1, shaped)) * 32767;
+  }
+
+  const wavBuffer = new ArrayBuffer(44 + pcmData.length * 2);
+  const view = new DataView(wavBuffer);
+  const writeAscii = (offset, text) => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+
+  writeAscii(0, "RIFF");
+  view.setUint32(4, 36 + pcmData.length * 2, true);
+  writeAscii(8, "WAVE");
+  writeAscii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, "data");
+  view.setUint32(40, pcmData.length * 2, true);
+
+  pcmData.forEach((value, index) => {
+    view.setInt16(44 + index * 2, value, true);
+  });
+
+  return URL.createObjectURL(new Blob([wavBuffer], { type: "audio/wav" }));
+}
+
+function ensureRestAudioElement() {
+  if (restAudioElement) return restAudioElement;
+
+  if (!restAudioUrl) {
+    restAudioUrl = createRestAudioUrl();
+  }
+
+  restAudioElement = new Audio(restAudioUrl);
+  restAudioElement.preload = "auto";
+  restAudioElement.playsInline = true;
+  restAudioElement.setAttribute("playsinline", "true");
+  restAudioElement.setAttribute("webkit-playsinline", "true");
+
+  return restAudioElement;
+}
+
+function clearScheduledRestSound() {
+  if (scheduledRestSoundTimeoutId) {
+    window.clearTimeout(scheduledRestSoundTimeoutId);
+    scheduledRestSoundTimeoutId = null;
+  }
+
+  hasScheduledRestSound = false;
+
+  scheduledRestToneNodes.forEach(({ oscillator, gainNode }) => {
+    try {
+      oscillator.onended = null;
+      oscillator.stop();
+    } catch (error) {}
+
+    try {
+      oscillator.disconnect();
+    } catch (error) {}
+
+    try {
+      gainNode.disconnect();
+    } catch (error) {}
+  });
+
+  scheduledRestToneNodes = [];
+}
+
+function scheduleRestSound(secondsFromNow) {
+  clearScheduledRestSound();
+
+  if (
+    !state.restSoundEnabled ||
+    !restAudioContext ||
+    restAudioContext.state !== "running" ||
+    secondsFromNow <= 0
+  ) {
+    return false;
+  }
+
+  const startAt = restAudioContext.currentTime + secondsFromNow;
+  const notes = [
+    { start: 0, freq: 880, duration: 0.12 },
+    { start: 0.17, freq: 1174, duration: 0.18 },
+  ];
+
+  scheduledRestToneNodes = notes.map((note) => {
+    const oscillator = restAudioContext.createOscillator();
+    const gainNode = restAudioContext.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(note.freq, startAt + note.start);
+    gainNode.gain.setValueAtTime(0.0001, startAt + note.start);
+    gainNode.gain.exponentialRampToValueAtTime(0.2, startAt + note.start + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + note.start + note.duration);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(restAudioContext.destination);
+    oscillator.start(startAt + note.start);
+    oscillator.stop(startAt + note.start + note.duration + 0.04);
+
+    return { oscillator, gainNode };
+  });
+
+  hasScheduledRestSound = true;
+  scheduledRestSoundTimeoutId = window.setTimeout(() => {
+    hasScheduledRestSound = false;
+    scheduledRestToneNodes = [];
+    scheduledRestSoundTimeoutId = null;
+  }, Math.ceil((secondsFromNow + 1) * 1000));
+
+  return true;
+}
+
 function primeAudioEngine() {
   if (!state.restSoundEnabled) return;
 
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
+  const audioElement = ensureRestAudioElement();
 
-  if (!restAudioContext) {
-    restAudioContext = new AudioContextClass();
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (AudioContextClass) {
+    if (!restAudioContext) {
+      restAudioContext = new AudioContextClass();
+    }
+
+    if (restAudioContext.state === "suspended") {
+      restAudioContext.resume().catch(() => {});
+    }
   }
 
-  if (restAudioContext.state === "suspended") {
-    restAudioContext.resume().catch(() => {});
+  if (audioElement && !restAudioUnlocked) {
+    audioElement.volume = 0.001;
+    audioElement.currentTime = 0;
+    audioElement
+      .play()
+      .then(() => {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        audioElement.volume = 1;
+        restAudioUnlocked = true;
+      })
+      .catch(() => {});
   }
 }
 
@@ -288,10 +449,10 @@ function playRestSound() {
   if (!state.restSoundEnabled) return;
 
   primeAudioEngine();
-  if (!restAudioContext) return;
+  const audioElement = ensureRestAudioElement();
 
-  const playChime = () => {
-    if (!restAudioContext || restAudioContext.state !== "running") return;
+  const playSynth = () => {
+    if (!restAudioContext || restAudioContext.state !== "running") return false;
 
     const now = restAudioContext.currentTime;
     const notes = [
@@ -314,14 +475,34 @@ function playRestSound() {
       oscillator.start(now + note.start);
       oscillator.stop(now + note.start + note.duration + 0.04);
     });
+
+    return true;
   };
 
-  if (restAudioContext.state === "suspended") {
-    restAudioContext.resume().then(playChime).catch(() => {});
+  if (audioElement) {
+    audioElement.pause();
+    audioElement.currentTime = 0;
+    audioElement.volume = 1;
+    audioElement.play().catch(() => {
+      if (restAudioContext?.state === "suspended") {
+        restAudioContext.resume().then(() => {
+          playSynth();
+        }).catch(() => {});
+        return;
+      }
+      playSynth();
+    });
     return;
   }
 
-  playChime();
+  if (restAudioContext?.state === "suspended") {
+    restAudioContext.resume().then(() => {
+      playSynth();
+    }).catch(() => {});
+    return;
+  }
+
+  playSynth();
 }
 
 function vibrateRestAlert() {
@@ -759,6 +940,7 @@ function resetWorkoutState() {
   state.timer = { seconds: 0, active: false };
   state.workoutFinished = false;
   state.pendingAdvance = null;
+  clearScheduledRestSound();
 }
 
 function startWorkoutDay(day) {
@@ -800,6 +982,12 @@ function handleValidation() {
     ? { seconds: 0, active: false }
     : { seconds: active.rest, active: active.rest > 0 };
   state.repsInput = "";
+
+  if (!isLastExercise && active.rest > 0) {
+    scheduleRestSound(active.rest);
+  } else {
+    clearScheduledRestSound();
+  }
 
   if (isLastExercise) {
     state.workoutFinished = true;
@@ -1048,6 +1236,9 @@ function toggleRestPreference(key) {
   if (key === "restSoundEnabled" && state[key]) {
     primeAudioEngine();
   }
+  if (key === "restSoundEnabled" && !state[key]) {
+    clearScheduledRestSound();
+  }
   saveState();
   renderApp();
 }
@@ -1065,13 +1256,18 @@ function extendRest(seconds = 30) {
     active: true,
   };
   state.restAlertVisible = false;
+  scheduleRestSound(seconds);
   saveState();
   renderApp();
 }
 
-function triggerRestAlert() {
+function triggerRestAlert(options = {}) {
+  const { skipSound = false } = options;
+  clearScheduledRestSound();
   state.restAlertVisible = true;
-  playRestSound();
+  if (!skipSound) {
+    playRestSound();
+  }
   vibrateRestAlert();
   saveState();
   renderApp();
@@ -3366,6 +3562,11 @@ function bindEvents() {
 
       if (action === "toggle-timer") {
         state.timer.active = state.timer.seconds > 0 ? !state.timer.active : false;
+        if (state.timer.active) {
+          scheduleRestSound(state.timer.seconds);
+        } else {
+          clearScheduledRestSound();
+        }
         saveState();
         renderApp();
       }
@@ -3572,7 +3773,7 @@ function tickTimer() {
   if (state.timer.seconds <= 0) {
     state.timer.seconds = 0;
     state.timer.active = false;
-    triggerRestAlert();
+    triggerRestAlert({ skipSound: hasScheduledRestSound });
     return;
   }
   saveState();
