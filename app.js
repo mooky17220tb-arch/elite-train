@@ -1263,7 +1263,9 @@ function extendRest(seconds = 30) {
 
 function triggerRestAlert(options = {}) {
   const { skipSound = false } = options;
-  clearScheduledRestSound();
+  if (!skipSound) {
+    clearScheduledRestSound();
+  }
   state.restAlertVisible = true;
   if (!skipSound) {
     playRestSound();
