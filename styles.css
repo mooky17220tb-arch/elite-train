@@ -279,6 +279,138 @@ button {
   color: white;
 }
 
+.validation-button {
+  position: relative;
+  overflow: hidden;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.validation-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 55%);
+  pointer-events: none;
+}
+
+.validation-button__row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.validation-button__cta {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.validation-button__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef3f0;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.validation-button__badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.validation-button__badge-text {
+  line-height: 1;
+}
+
+.validation-button--idle {
+  justify-content: center;
+}
+
+.validation-button--idle .validation-button__cta {
+  width: 100%;
+}
+
+.validation-button--progress {
+  background: linear-gradient(135deg, #14b874 0%, #44d89d 100%);
+  color: white;
+}
+
+.validation-button--progress .validation-button__badge {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(7, 31, 19, 0.24);
+  color: #dffbf0;
+}
+
+.validation-button--hold {
+  background: linear-gradient(135deg, #ffffff 0%, #edf4f0 100%);
+  color: #09100d;
+}
+
+.validation-button--hold .validation-button__badge {
+  border-color: rgba(9, 16, 13, 0.08);
+  background: rgba(9, 16, 13, 0.06);
+  color: #18211d;
+}
+
+.validation-button--hold .validation-button__badge-icon {
+  background: rgba(9, 16, 13, 0.1);
+}
+
+.validation-button--reduce {
+  background: linear-gradient(135deg, #f6aa3b 0%, #f28a2d 100%);
+  color: #201002;
+}
+
+.validation-button--reduce .validation-button__badge {
+  border-color: rgba(32, 16, 2, 0.08);
+  background: rgba(32, 16, 2, 0.1);
+  color: #fff1d4;
+}
+
+.validation-button--reduce .validation-button__badge-icon {
+  background: rgba(32, 16, 2, 0.14);
+}
+
+.validation-button:disabled {
+  box-shadow: none;
+}
+
 .button--ghost {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);

@@ -1109,25 +1109,60 @@ function renderNextExercisePreview() {
   `;
 }
 
+function getValidationButtonState(advice = getCurrentAdvice()) {
+  if (!advice) {
+    return {
+      tone: "idle",
+      badge: null,
+      cta: "Valider",
+      aria: "Valider la serie",
+    };
+  }
+
+  const verdict = getAdviceShortLabel(advice.type);
+
+  return {
+    tone: advice.type,
+    badge: verdict,
+    cta: "Valider",
+    aria: `Valider - prochaine ${verdict.label.toLowerCase()}`,
+  };
+}
+
+function renderValidationButtonContent(advice = getCurrentAdvice()) {
+  const buttonState = getValidationButtonState(advice);
+
+  if (!buttonState.badge) {
+    return `<span class="validation-button__cta">${buttonState.cta}</span>`;
+  }
+
+  return `
+    <span class="validation-button__row">
+      <span class="validation-button__badge validation-button__badge--${buttonState.tone}">
+        <span class="validation-button__badge-icon">${buttonState.badge.icon}</span>
+        <span class="validation-button__badge-text">${buttonState.badge.label}</span>
+      </span>
+      <span class="validation-button__cta">${buttonState.cta}</span>
+    </span>
+  `;
+}
+
+function getValidationButtonClass(advice = getCurrentAdvice()) {
+  const buttonState = getValidationButtonState(advice);
+  return `button button--primary validation-button validation-button--${buttonState.tone}`;
+}
+
 function getValidationButtonLabel(advice = getCurrentAdvice()) {
-  if (!advice) return "Valider";
-
-  const nextStep =
-    advice.type === "progress"
-      ? "Monter"
-      : advice.type === "reduce"
-      ? "Baisser"
-      : "Garder";
-
-  return `Prochaine : ${nextStep}`;
+  return getValidationButtonState(advice).aria;
 }
 
 function syncValidationButton() {
   const button = document.getElementById("validate-set-button");
   if (!button) return;
-  const label = getValidationButtonLabel();
-  button.textContent = label;
-  button.setAttribute("aria-label", label);
+  const advice = getCurrentAdvice();
+  button.className = getValidationButtonClass(advice);
+  button.innerHTML = renderValidationButtonContent(advice);
+  button.setAttribute("aria-label", getValidationButtonLabel(advice));
   button.disabled = !hasValidRepsInput();
 }
 
@@ -3974,12 +4009,12 @@ function renderWorkout() {
 
         <button
           id="validate-set-button"
-          class="button button--primary"
+          class="${getValidationButtonClass(advice)}"
           data-action="validate-set"
           aria-label="${getValidationButtonLabel(advice)}"
           ${hasValidRepsInput() ? "" : "disabled"}
         >
-          ${getValidationButtonLabel(advice)}
+          ${renderValidationButtonContent(advice)}
         </button>
 
         ${renderLastSetActions()}
