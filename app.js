@@ -2341,15 +2341,17 @@ function renderChart() {
   return `
     <div class="chart-bars">
       ${chart.entries
-        .map((entry) => {
+        .map((entry, index) => {
           const height = Math.max(24, Math.round((entry.chartValue / max) * 118));
           return `
-            <div class="chart-column">
+            <div class="chart-column ${index === chart.entries.length - 1 ? "is-latest" : ""}">
               <div class="chart-value">${entry.chartValue}${chart.metric === "load" ? "kg" : ""}</div>
-              <div
-                class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
-                style="height:${height}px"
-              ></div>
+              <div class="chart-track">
+                <div
+                  class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
+                  style="height:${height}px"
+                ></div>
+              </div>
               <div class="chart-date">${entry.shortDate}</div>
             </div>
           `;
@@ -2899,6 +2901,40 @@ function getDayTheme(day) {
   }[day] || {
     subtitle: "Bloc complet",
     cue: "Construis une seance propre",
+  };
+}
+
+function getDayTheme(day) {
+  return {
+    Push: {
+      subtitle: "Pecs - epaules - triceps",
+      cue: "Poussee lourde et propre",
+      badge: "Explosif",
+      mark: "PSH",
+    },
+    Pull: {
+      subtitle: "Dos - biceps - arriere d'epaules",
+      cue: "Tirages solides et amplitude",
+      badge: "Amplitude",
+      mark: "PUL",
+    },
+    Legs: {
+      subtitle: "Quadris - ischios - fessiers",
+      cue: "Jambes, gainage et moteur",
+      badge: "Moteur",
+      mark: "LEG",
+    },
+    Upper: {
+      subtitle: "Haut du corps complet",
+      cue: "Equilibre pecs, dos et bras",
+      badge: "Equilibre",
+      mark: "UPR",
+    },
+  }[day] || {
+    subtitle: "Bloc complet",
+    cue: "Construis une seance propre",
+    badge: "Elite",
+    mark: "ET",
   };
 }
 
@@ -4896,6 +4932,656 @@ function registerServiceWorker() {
       registration.update().catch(() => {});
     }).catch(() => {});
   });
+}
+
+function renderPremiumDayList() {
+  return `
+    <section class="day-list">
+      ${getProgramDays()
+        .map((day) => {
+          const summary = getDaySummary(day);
+          const theme = getDayTheme(day);
+
+          return `
+            <button class="day-button" data-day="${day}">
+              <div>
+                <div class="day-button__eyebrow">${theme.badge}</div>
+                <div class="day-button__title">${day.toUpperCase()}</div>
+                <div class="day-button__meta">${theme.cue}</div>
+                <div class="day-button__stats">
+                  <span>${summary.exerciseCount} exos</span>
+                  <span>${summary.setCount} series</span>
+                </div>
+              </div>
+              <div class="day-button__arrow">></div>
+            </button>
+          `;
+        })
+        .join("")}
+    </section>
+  `;
+}
+
+function renderResumeCard() {
+  const resume = getSmartResumeData();
+  if (!resume) return "";
+  const theme = getDayTheme(resume.day);
+
+  return `
+    <article class="surface surface-pad smart-resume" data-accent-day="${resume.day}">
+      <div class="row row-start">
+        <div class="stack-sm smart-resume__copy">
+          <div class="label">Reprise intelligente</div>
+          <h2 class="section-title smart-resume__title">${resume.title}</h2>
+          <div class="smart-resume__cue">${theme.cue}</div>
+          <div class="muted">${resume.subtitle}</div>
+          <div class="smart-resume__meta">
+            <span class="smart-resume__chip">${resume.day}</span>
+            <span class="smart-resume__chip">${resume.meta}</span>
+          </div>
+        </div>
+        <span class="pill">${resume.mode === "active" ? "Maintenant" : theme.badge}</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">${resume.mode === "active" ? "Progression" : "Preparation"}</div>
+          <div class="label">${resume.progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${resume.progress}%"></div>
+        </div>
+      </div>
+
+      <div class="smart-resume__actions">
+        <button class="button button--primary" ${resume.actionAttrs}>
+          ${resume.actionLabel}
+        </button>
+        <button class="button button--ghost" ${resume.secondaryAttrs}>
+          ${resume.secondaryLabel}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderWeeklyPlanner() {
+  const planner = getWeeklyPlanner();
+  const resume = getSmartResumeData();
+  const accentDay = resume?.day || getNextTrainingDay();
+  const theme = getDayTheme(accentDay);
+
+  return `
+    <article class="surface surface-pad planner-shell" data-accent-day="${accentDay}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Planning</div>
+          <h3 class="section-title dashboard-section-head__title">Semaine en cours</h3>
+        </div>
+        <div class="label">${getWeeklySessionCount()} seance(s)</div>
+      </div>
+
+      <div class="planner-grid">
+        ${planner
+          .map(
+            (day) => `
+              <div class="planner-day ${day.count ? "is-done" : ""} ${day.isToday ? "is-today" : ""}">
+                <div class="planner-day__label">${day.label}</div>
+                <div class="planner-day__count">${day.count || "-"}</div>
+                <div class="planner-day__date">${day.dateLabel}</div>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="planner-note">
+        <span class="planner-note__pill">${hasWorkoutInProgress() ? "A finir" : theme.badge}</span>
+        <span>${resume?.title || `Prochaine ${getNextTrainingDay()}`}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderRecordsSection() {
+  const records = getExerciseRecords();
+  const { heaviest, bestReps } = getGlobalRecords();
+
+  return `
+    <section class="stack-md">
+      <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Records</div>
+            <h3 class="section-title dashboard-section-head__title">PR et meilleures perfs</h3>
+          </div>
+          <div class="label">${records.length} exos</div>
+        </div>
+
+        <div class="records-summary">
+          <div class="metric metric--record">
+            <div class="label">Charge max</div>
+            <div class="metric__value">
+              ${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "-"}
+            </div>
+            <div class="records-summary__meta">
+              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} - ${heaviest.reps} reps` : "Pas encore de PR"}
+            </div>
+          </div>
+          <div class="metric metric--record">
+            <div class="label">Reps max</div>
+            <div class="metric__value">${bestReps ? bestReps.reps : "-"}</div>
+            <div class="records-summary__meta">
+              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
+            </div>
+          </div>
+        </div>
+
+        ${
+          records.length
+            ? `
+                <div class="records-list">
+                  ${records
+                    .map(
+                      (record) => `
+                        <article class="record-card">
+                          <div class="record-card__top">
+                            <div>
+                              <div class="record-card__eyebrow">Record local</div>
+                              <div class="record-card__title">${record.exercise}</div>
+                            </div>
+                            <div class="record-card__count">${record.count} serie(s)</div>
+                          </div>
+                          <div class="record-card__stats">
+                            <span class="record-card__stat"><strong>${formatLoad(record.bestLoad, record.bestLoadLabel)}</strong><em>Charge</em></span>
+                            <span class="record-card__stat"><strong>${record.bestReps}</strong><em>Reps</em></span>
+                          </div>
+                          <div class="record-card__meta">Derniere: ${formatDate(record.lastDate)}</div>
+                        </article>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+            : `<div class="chart-empty">Aucun record disponible pour le moment.</div>`
+        }
+      </article>
+    </section>
+  `;
+}
+
+function renderCoachSection() {
+  const coach = getCoachSnapshot();
+
+  return `
+    <article class="surface surface-pad coach-shell coach-shell--${coach.tone}" data-accent-day="${coach.day}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Coach intelligent</div>
+          <h3 class="section-title dashboard-section-head__title">Prochaine ${coach.day}: ${coach.action}</h3>
+        </div>
+        <div class="coach-score coach-score--${coach.readinessTone}">
+          <span>${coach.readiness}</span>
+          <strong>${coach.scoreText}</strong>
+        </div>
+      </div>
+
+      <div class="coach-grid coach-grid--triple">
+        <div class="coach-card">
+          <div class="label">Charge</div>
+          <div class="coach-card__value">${coach.action}</div>
+          <div class="coach-card__meta">${coach.focus} - ${coach.signal}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Intensite</div>
+          <div class="coach-card__value">${coach.intensityCall.value}</div>
+          <div class="coach-card__meta">${coach.cycleLabel} - ${coach.streakText}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Volume</div>
+          <div class="coach-card__value">${coach.volumeCall.value}</div>
+          <div class="coach-card__meta">${coach.volumeCall.meta}</div>
+        </div>
+      </div>
+
+      <div class="coach-note">${coach.note}</div>
+
+      <div class="coach-pulse-grid">
+        <div class="coach-pulse">
+          <span class="label">Recup</span>
+          <strong>${coach.recoveryCall.value}</strong>
+          <span>${coach.recoveryCall.meta}</span>
+        </div>
+        <div class="coach-pulse">
+          <span class="label">Bloc</span>
+          <strong>${coach.cycleLabel}</strong>
+          <span>${coach.focusMeta}</span>
+        </div>
+      </div>
+
+      <div class="coach-tags">
+        <span class="coach-tag">Fatigue ${coach.readiness}</span>
+        <span class="coach-tag">Lecture ${coach.signal}</span>
+        <span class="coach-tag">Bloc ${coach.day}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const weeklySessions = getWeeklySessionCount();
+  const recentSets = getRecentSets();
+  const resume = getSmartResumeData();
+  const heroDay = resume?.day || state.day;
+  const heroSummary = getDaySummary(heroDay);
+  const heroTheme = getDayTheme(heroDay);
+  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionAttrs = resume?.mode === "active"
+    ? `data-action="resume-workout"`
+    : `data-day="${heroDay}"`;
+  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
+  const heroCopy = resume?.mode === "active"
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
+    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-accent-day="${heroDay}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${heroDay}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <div class="dashboard-hero__subtag">${heroTheme.subtitle}</div>
+            <div class="dashboard-hero__cue">${heroTheme.cue}</div>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
+              <span class="dashboard-hero__stat-label">Semaine</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Total</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">Series 7j</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" ${heroActionAttrs}>
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+      ${renderWeeklyPlanner()}
+      ${renderCycleSection()}
+      ${renderCoachSection()}
+
+      <article class="surface surface-pad chart-shell" data-accent-day="${heroDay}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+            <div class="dashboard-hero__cue">${heroTheme.cue}</div>
+          </div>
+          <div class="chart-shell__metric">${chart.entries.length} pts - ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} - ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
+function renderWeightView(settings, active, last, isFocusMode = false) {
+  const theme = getDayTheme(state.day);
+
+  return `
+    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}" data-accent-day="${state.day}">
+      ${
+        settings.deload
+          ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
+          : ""
+      }
+      <div class="weight-card__head">
+        <div class="label">Poids cible</div>
+        <span class="weight-card__theme">${theme.badge}</span>
+      </div>
+      <div class="weight-card__value">
+        ${
+          isNumericLoad(settings.load)
+            ? `${settings.load}<span class="weight-card__unit">kg</span>`
+            : `<span class="weight-card__free">${settings.loadLabel || "Charge libre"}</span>`
+        }
+      </div>
+      <div class="goal-line">
+        <span class="goal-line__chip">Objectif ${active.targetLabel} reps</span>
+        <span class="goal-line__chip">Repos ${active.rest}s</span>
+      </div>
+      ${
+        isNumericLoad(settings.load) && !isFocusMode
+          ? `
+              <div class="load-actions">
+                <button class="icon-button" data-action="decrease-load" aria-label="Baisser la charge">-</button>
+                <button class="button button--ghost load-reset" data-action="reset-load">Reset cible</button>
+                <button class="icon-button" data-action="increase-load" aria-label="Augmenter la charge">+</button>
+              </div>
+            `
+          : ""
+      }
+      ${
+        last && !isFocusMode
+          ? `<div class="last-performance">Precedent : <strong>${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}</strong></div>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function getWorkoutFinishTone(summary) {
+  if (!summary) return "hold";
+  if (summary.counts.progress >= summary.counts.hold && summary.counts.progress >= summary.counts.reduce) {
+    return "progress";
+  }
+  return summary.counts.reduce > summary.counts.hold ? "reduce" : "hold";
+}
+
+function renderWorkoutCompletionScreen() {
+  const summary = getWorkoutCompletionSummary();
+  const lastEntry = getLastPendingEntry();
+  const theme = getDayTheme(state.day);
+
+  if (!summary) {
+    return `
+      <section class="stack-md">
+        <section class="surface surface-pad-lg center-block stack-md session-finish" data-accent-day="${state.day}">
+          <div class="trophy">${theme.mark}</div>
+          <div class="stack-sm">
+            <h2 class="section-title">Seance terminee</h2>
+          </div>
+          <button class="button button--primary" data-action="finalize-workout">
+            Terminer la seance
+          </button>
+        </section>
+      </section>
+    `;
+  }
+
+  const finishTone = getWorkoutFinishTone(summary);
+  const finishBadge =
+    finishTone === "progress"
+      ? "Progression nette"
+      : finishTone === "reduce"
+      ? "Ajustement propre"
+      : "Base solide";
+
+  return `
+    <section class="stack-md">
+      <section class="surface surface-pad-lg session-finish session-finish--${finishTone}" data-accent-day="${state.day}">
+        <div class="session-finish__hero">
+          <div class="trophy">${theme.mark}</div>
+          <div class="stack-sm">
+            <div class="session-finish__topline">
+              <div class="label">Fin de seance</div>
+              <span class="session-finish__day">${state.day}</span>
+            </div>
+            <h2 class="section-title session-finish__title">Belle seance.</h2>
+            <div class="session-finish__subtag">${finishBadge} - ${theme.cue}</div>
+            <div class="muted">${summary.coachLine}</div>
+          </div>
+        </div>
+
+        <div class="grid-2 session-finish__stats">
+          <article class="dashboard-mini-card">
+            <div class="label">Series</div>
+            <div class="dashboard-mini-card__value">${summary.setCount}</div>
+            <div class="dashboard-mini-card__meta">${summary.exerciseCount} exos</div>
+          </article>
+          <article class="dashboard-mini-card">
+            <div class="label">Duree</div>
+            <div class="dashboard-mini-card__value">${summary.durationLabel}</div>
+            <div class="dashboard-mini-card__meta">${summary.volumeLabel} de volume</div>
+          </article>
+        </div>
+
+        <div class="session-finish__verdicts">
+          <span class="verdict-chip verdict-chip--progress">Monter ${summary.counts.progress}</span>
+          <span class="verdict-chip verdict-chip--hold">Garder ${summary.counts.hold}</span>
+          <span class="verdict-chip verdict-chip--reduce">Baisser ${summary.counts.reduce}</span>
+        </div>
+
+        ${
+          lastEntry
+            ? `
+                <div class="last-set-card last-set-card--summary">
+                  <div class="last-set-card__copy">
+                    <span class="label">Derniere serie</span>
+                    <strong>${lastEntry.exercise}</strong>
+                    <span>${lastEntry.reps} reps - ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+                  </div>
+                  <div class="last-set-card__actions">
+                    <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
+                    <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
+                  </div>
+                </div>
+              `
+            : ""
+        }
+
+        <div class="stack-sm session-finish__actions">
+          <button class="button button--primary" data-action="finalize-workout">
+            Enregistrer la seance
+          </button>
+          <button class="button button--ghost" data-action="restart-workout">
+            Annuler et recommencer
+          </button>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderWorkout() {
+  const active = getActiveExercise();
+  const settings = getCurrentSettings();
+  const last = getLastPerformance();
+  const advice = getCurrentAdvice();
+  const isFocusMode = state.focusWorkoutMode;
+  const theme = getDayTheme(state.day);
+
+  if (state.workoutFinished) {
+    return renderWorkoutCompletionScreen();
+  }
+
+  if (!active) {
+    return `
+      <section class="surface surface-pad">
+        <div class="muted">Aucun exercice disponible pour cette journee.</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="surface surface-pad-lg stack-lg workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
+      <div class="row row-start workout-shell__header">
+        <div class="workout-shell__hero-copy">
+          <div class="workout-shell__eyebrow-row">
+            <span class="pill">${active.series}</span>
+            <span class="workout-shell__day-badge">${theme.badge}</span>
+          </div>
+          <h2 class="hero-title">${active.exercise}</h2>
+          <div class="workout-shell__subtitle">${theme.subtitle}</div>
+          ${
+            isFocusMode
+              ? ""
+              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span>${state.currentIndex + 1}/${getExercises().length}</span></div>`
+          }
+        </div>
+        <div class="workout-shell__tools">
+          <button
+            class="icon-button ${state.focusWorkoutMode ? "is-active" : ""}"
+            data-action="toggle-focus-workout"
+            aria-label="${state.focusWorkoutMode ? "Quitter le mode focus" : "Activer le mode focus"}"
+          >
+            ${state.focusWorkoutMode ? "FOC" : "ZEN"}
+          </button>
+          <button
+            class="icon-button ${state.showPlates ? "is-active" : ""}"
+            data-action="toggle-plates"
+            aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
+          >
+            ${state.showPlates ? "KG" : "DB"}
+          </button>
+        </div>
+      </div>
+
+      ${
+        isFocusMode
+          ? ""
+          : `
+              <div class="progress-wrap">
+                <div class="row">
+                  <div class="label">Progression seance</div>
+                  <div class="label">${getProgressPercent()}%</div>
+                </div>
+                <div class="progress">
+                  <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
+                </div>
+              </div>
+            `
+      }
+
+      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
+      ${renderLastPerformancePreviewCard()}
+
+      <div class="stack-md workout-entry-panel">
+        <div class="field-wrap workout-entry-field">
+          <label class="label" for="reps-input">Reps</label>
+          <input
+            id="reps-input"
+            class="input input--reps"
+            type="number"
+            min="1"
+            inputmode="numeric"
+            placeholder="${active.targetLabel}"
+            value="${state.repsInput}"
+          />
+        </div>
+
+        ${renderRepQuickPicks()}
+
+        <button
+          id="validate-set-button"
+          class="${getValidationButtonClass(advice)}"
+          data-action="validate-set"
+          aria-label="${getValidationButtonLabel(advice)}"
+          ${hasValidRepsInput() ? "" : "disabled"}
+        >
+          ${renderValidationButtonContent(advice)}
+        </button>
+
+        ${renderLastSetActions()}
+      </div>
+    </section>
+  `;
+}
+
+function renderHistory() {
+  if (!state.history.length) {
+    return `
+      <section class="stack-md">
+        ${renderRecordsSection()}
+        <section class="surface surface-pad">
+          <div class="muted">Aucune serie enregistree.</div>
+        </section>
+      </section>
+    `;
+  }
+
+  const sortedHistory = getSortedHistory().slice(0, 24);
+
+  return `
+    <section class="history-list">
+      ${renderRecordsSection()}
+      <h2 class="section-title">Historique</h2>
+      ${sortedHistory
+        .map(
+          (item, index) => `
+            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
+              <div class="row row-start">
+                <div class="history-card__identity">
+                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
+                  <div class="history-card__title">${item.exercise}</div>
+                </div>
+                <div class="history-card__head-tools">
+                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
+                    Modifier
+                  </button>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <div class="metric metric--history">
+                  <div class="label">Charge</div>
+                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
+                </div>
+                <div class="metric metric--history">
+                  <div class="label">Reps</div>
+                  <div class="metric__value">${item.reps}</div>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </section>
+  `;
 }
 
 restoreState();

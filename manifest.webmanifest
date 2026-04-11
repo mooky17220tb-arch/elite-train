@@ -2,7 +2,7 @@
   "name": "Elite Train",
   "short_name": "EliteTrain",
   "description": "Suivi musculation mobile avec progression, historique et timer de repos.",
-  "start_url": "./index.html?v=35",
+  "start_url": "./index.html?v=36",
   "display": "standalone",
   "background_color": "#070908",
   "theme_color": "#08110d",
