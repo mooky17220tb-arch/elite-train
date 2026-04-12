@@ -3752,3 +3752,233 @@ select:focus-visible {
     transition: none !important;
   }
 }
+
+html,
+body {
+  font-family:
+    "Avenir Next",
+    "SF Pro Display",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.08), transparent 18%),
+    radial-gradient(circle at 84% 18%, rgba(22, 196, 127, 0.08), transparent 16%),
+    radial-gradient(circle at 28% 82%, rgba(255, 255, 255, 0.04), transparent 20%),
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 8px
+    );
+}
+
+#app,
+.app-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.brand,
+.hero-title,
+.dashboard-hero__title,
+.section-title,
+.day-button__title,
+.history-card__title,
+.session-finish__title,
+.dashboard-mini-card__value,
+.weight-card__value {
+  font-family:
+    "Avenir Next Condensed",
+    "Arial Narrow",
+    "Trebuchet MS",
+    sans-serif;
+}
+
+.brand {
+  letter-spacing: -0.08em;
+}
+
+.screen-kicker {
+  color: rgba(226, 233, 229, 0.64);
+}
+
+.dashboard-hero__label,
+.label {
+  letter-spacing: 0.16em;
+}
+
+.chart-empty,
+.empty-state {
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-empty {
+  min-height: 188px;
+  gap: 10px;
+  padding: 22px 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.1), transparent 34%),
+    rgba(255, 255, 255, 0.018);
+}
+
+.chart-empty strong,
+.empty-state__title {
+  font-size: 18px;
+  line-height: 1.08;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  color: white;
+}
+
+.chart-empty span,
+.empty-state__text {
+  max-width: 280px;
+  color: rgba(226, 233, 229, 0.72);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chart-empty__icon,
+.empty-state__icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(12, 18, 15, 0.98), rgba(7, 10, 9, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 30px rgba(0, 0, 0, 0.18);
+  color: var(--accent-solid);
+  font-family:
+    "Avenir Next Condensed",
+    "Arial Narrow",
+    "Trebuchet MS",
+    sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  background:
+    radial-gradient(circle at top, rgba(var(--accent-rgb), 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+}
+
+.empty-state__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line);
+  background: rgba(var(--accent-rgb), 0.14);
+  color: rgb(var(--accent-rgb));
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.nav-button {
+  gap: 6px;
+  padding: 8px 6px 10px;
+}
+
+.nav-button__icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.nav-button__icon svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-button__icon svg rect {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.92;
+}
+
+.nav-button__label {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav-button.is-active .nav-button__icon {
+  background: rgba(4, 16, 9, 0.12);
+}
+
+.dashboard-hero__content,
+.smart-resume,
+.planner-shell,
+.coach-shell,
+.records-shell,
+.chart-shell {
+  backdrop-filter: blur(20px) saturate(125%);
+}
+
+.update-banner,
+.smart-resume,
+.records-shell,
+.planner-shell,
+.coach-shell,
+.chart-shell,
+.session-finish,
+.history-card,
+.weight-card {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+}
+
+@media (max-width: 430px) {
+  .nav-button__label {
+    font-size: 10px;
+  }
+
+  .nav-button__icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .chart-empty,
+  .empty-state {
+    min-height: 172px;
+  }
+}

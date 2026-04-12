@@ -5584,6 +5584,264 @@ function renderHistory() {
   `;
 }
 
+function getScreenMeta(screen = state.screen) {
+  return {
+    dashboard: {
+      title: "Dashboard",
+      kicker: "Overview",
+      navLabel: "Accueil",
+    },
+    workout: {
+      title: "Seance",
+      kicker: "Training",
+      navLabel: "Seance",
+    },
+    history: {
+      title: "Suivi",
+      kicker: "Progress",
+      navLabel: "Suivi",
+    },
+    settings: {
+      title: "Reglages",
+      kicker: "Control",
+      navLabel: "Config",
+    },
+  }[screen] || {
+    title: "Dashboard",
+    kicker: "Overview",
+    navLabel: "Accueil",
+  };
+}
+
+function renderNavIcon(screen) {
+  if (screen === "dashboard") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="2"></rect>
+        <rect x="14" y="4" width="6" height="10" rx="2"></rect>
+        <rect x="4" y="14" width="6" height="6" rx="2"></rect>
+        <rect x="14" y="16" width="6" height="4" rx="2"></rect>
+      </svg>
+    `;
+  }
+
+  if (screen === "workout") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 10h3v4H3z"></path>
+        <path d="M18 10h3v4h-3z"></path>
+        <path d="M6 9h2v6H6z"></path>
+        <path d="M16 9h2v6h-2z"></path>
+        <path d="M8 11h8v2H8z"></path>
+      </svg>
+    `;
+  }
+
+  if (screen === "history") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 18h14"></path>
+        <path d="M7 15l3-3 3 2 4-5"></path>
+        <circle cx="7" cy="15" r="1.4"></circle>
+        <circle cx="10" cy="12" r="1.4"></circle>
+        <circle cx="13" cy="14" r="1.4"></circle>
+        <circle cx="17" cy="9" r="1.4"></circle>
+      </svg>
+    `;
+  }
+
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 7h14"></path>
+      <path d="M7 12h10"></path>
+      <path d="M9 17h6"></path>
+      <circle cx="7" cy="7" r="2"></circle>
+      <circle cx="15" cy="12" r="2"></circle>
+      <circle cx="11" cy="17" r="2"></circle>
+    </svg>
+  `;
+}
+
+function getNavItems() {
+  return ["dashboard", "workout", "history", "settings"].map((screen) => ({
+    screen,
+    ...getScreenMeta(screen),
+  }));
+}
+
+function dismissBootSplash() {
+  const splash = document.getElementById("boot-splash");
+  if (!splash || splash.dataset.dismissed === "1") return;
+
+  splash.dataset.dismissed = "1";
+  requestAnimationFrame(() => splash.classList.add("is-hidden"));
+  window.setTimeout(() => {
+    if (splash.parentNode) splash.parentNode.removeChild(splash);
+  }, 320);
+}
+
+function renderEmptyState(title, text, eyebrow = "A venir", accentDay = state.day) {
+  return `
+    <article class="surface surface-pad empty-state" data-accent-day="${accentDay}">
+      <div class="empty-state__icon">ET</div>
+      <div class="empty-state__eyebrow">${eyebrow}</div>
+      <h3 class="empty-state__title">${title}</h3>
+      <p class="empty-state__text">${text}</p>
+    </article>
+  `;
+}
+
+function renderChart() {
+  const chart = getChartData();
+
+  if (!chart.entries.length) {
+    return `
+      <div class="chart-empty">
+        <div class="chart-empty__icon">ET</div>
+        <strong>Pas encore de data</strong>
+        <span>Lance deux passages sur le meme exercice pour lire une vraie courbe.</span>
+      </div>
+    `;
+  }
+
+  const max = Math.max(...chart.entries.map((entry) => entry.chartValue), 1);
+
+  return `
+    <div class="chart-bars">
+      ${chart.entries
+        .map((entry, index) => {
+          const height = Math.max(24, Math.round((entry.chartValue / max) * 118));
+          return `
+            <div class="chart-column ${index === chart.entries.length - 1 ? "is-latest" : ""}">
+              <div class="chart-value">${entry.chartValue}${chart.metric === "load" ? "kg" : ""}</div>
+              <div class="chart-track">
+                <div
+                  class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
+                  style="height:${height}px"
+                ></div>
+              </div>
+              <div class="chart-date">${entry.shortDate}</div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderHistory() {
+  if (!state.history.length) {
+    return `
+      <section class="stack-md">
+        ${renderRecordsSection()}
+        ${renderEmptyState("Aucun log pour l'instant", "Ta premiere seance fera apparaitre ici ton suivi detaille, tes charges et tes meilleurs passages.", "Suivi", state.day)}
+      </section>
+    `;
+  }
+
+  const sortedHistory = getSortedHistory().slice(0, 24);
+
+  return `
+    <section class="history-list">
+      ${renderRecordsSection()}
+      <h2 class="section-title">Historique</h2>
+      ${sortedHistory
+        .map(
+          (item, index) => `
+            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
+              <div class="row row-start">
+                <div class="history-card__identity">
+                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
+                  <div class="history-card__title">${item.exercise}</div>
+                </div>
+                <div class="history-card__head-tools">
+                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
+                    Modifier
+                  </button>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <div class="metric metric--history">
+                  <div class="label">Charge</div>
+                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
+                </div>
+                <div class="metric metric--history">
+                  <div class="label">Reps</div>
+                  <div class="metric__value">${item.reps}</div>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function renderApp() {
+  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
+  const screenMeta = getScreenMeta();
+  const navItems = getNavItems();
+
+  root.innerHTML = `
+    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""}">
+      <header class="app-header">
+        <div class="app-width app-header__inner">
+          <div>
+            <h1 class="brand">ELITE<span class="brand__accent">TRAIN</span></h1>
+            <div class="screen-kicker">${screenMeta.kicker} - ${state.day}</div>
+          </div>
+
+          <button
+            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""}"
+            data-action="toggle-timer"
+            aria-label="Pause ou reprise du timer"
+          >
+            <span>${state.timer.active ? "Pause" : screenMeta.title}</span>
+            <span class="mono">${formatTimer(state.timer.seconds)}</span>
+          </button>
+        </div>
+      </header>
+
+      ${renderPwaUpdateBanner()}
+
+      <main class="app-width page">
+        ${renderBody()}
+      </main>
+
+      ${
+        hideBottomNav
+          ? ""
+          : `
+              <nav class="bottom-nav">
+                <div class="bottom-nav__inner">
+                  ${navItems
+                    .map(
+                      (item) => `
+                        <button class="nav-button ${state.screen === item.screen ? "is-active" : ""}" data-screen="${item.screen}" aria-label="${item.navLabel}">
+                          <span class="nav-button__icon">${renderNavIcon(item.screen)}</span>
+                          <span class="nav-button__label">${item.navLabel}</span>
+                        </button>
+                      `
+                    )
+                    .join("")}
+                </div>
+              </nav>
+            `
+      }
+
+      ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
+      ${renderRestAlertOverlay()}
+      ${renderHistoryEditorOverlay()}
+    </div>
+  `;
+
+  bindEvents();
+  dismissBootSplash();
+}
+
 restoreState();
 renderApp();
 registerServiceWorker();
