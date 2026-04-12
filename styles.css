@@ -3478,7 +3478,7 @@ select:focus-visible {
 
 .workout-shell__hero-copy {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -3516,27 +3516,38 @@ select:focus-visible {
   justify-content: space-between;
   gap: 12px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .workout-entry-panel {
+  position: relative;
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
 }
 
+.workout-entry-panel--sticky {
+  position: sticky;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 6;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px) saturate(125%);
+}
+
 .workout-entry-field .label {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .input--reps {
-  height: 72px;
+  height: 68px;
   border-radius: 22px;
   background:
     radial-gradient(circle at top, rgba(var(--accent-rgb), 0.08), transparent 42%),
     rgba(255, 255, 255, 0.045);
-  font-size: 40px;
+  font-size: 36px;
   font-weight: 950;
   letter-spacing: -0.04em;
 }
@@ -3555,6 +3566,20 @@ select:focus-visible {
 
 .goal-line__chip {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.workout-preview {
+  padding: 12px 14px;
+  gap: 5px;
+  border-radius: 20px;
+}
+
+.workout-preview__title {
+  font-size: 15px;
+}
+
+.workout-preview__meta {
+  font-size: 12px;
 }
 
 .record-card {
@@ -3698,6 +3723,35 @@ select:focus-visible {
 }
 
 @media (max-width: 430px) {
+  .workout-shell {
+    gap: 14px;
+  }
+
+  .hero-title {
+    margin: 6px 0 0;
+    font-size: 34px;
+  }
+
+  .weight-card,
+  .plate-card {
+    padding: 18px 18px;
+  }
+
+  .weight-card__value {
+    margin: 8px 0 6px;
+    font-size: 58px;
+  }
+
+  .goal-line {
+    gap: 8px;
+  }
+
+  .goal-line__chip {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
   .day-button__stats {
     gap: 6px;
   }
@@ -3708,12 +3762,16 @@ select:focus-visible {
   }
 
   .workout-entry-panel {
-    padding: 14px;
+    padding: 13px;
   }
 
   .input--reps {
-    height: 68px;
-    font-size: 36px;
+    height: 62px;
+    font-size: 32px;
+  }
+
+  .workout-entry-panel--sticky {
+    bottom: calc(10px + env(safe-area-inset-bottom));
   }
 }
 
@@ -3727,6 +3785,26 @@ select:focus-visible {
   .record-card__stat {
     min-width: 0;
     flex: 1 1 calc(50% - 5px);
+  }
+
+  .hero-title {
+    font-size: 31px;
+  }
+
+  .weight-card__value {
+    font-size: 52px;
+  }
+
+  .rep-quick-picks {
+    gap: 6px;
+  }
+
+  .rep-quick-pick {
+    min-height: 50px;
+  }
+
+  .rep-quick-pick strong {
+    font-size: 15px;
   }
 }
 

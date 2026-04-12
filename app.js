@@ -5498,9 +5498,8 @@ function renderWorkout() {
       }
 
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
-      ${renderLastPerformancePreviewCard()}
 
-      <div class="stack-md workout-entry-panel">
+      <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
         <div class="field-wrap workout-entry-field">
           <label class="label" for="reps-input">Reps</label>
           <input
@@ -5528,6 +5527,8 @@ function renderWorkout() {
 
         ${renderLastSetActions()}
       </div>
+
+      ${renderLastPerformancePreviewCard()}
     </section>
   `;
 }
