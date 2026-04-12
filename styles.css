@@ -3197,9 +3197,41 @@ select:focus-visible {
 }
 
 .button--primary,
-.timer-button.is-active,
 .nav-button.is-active {
   background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(231, 247, 240, 0.92) 100%);
+}
+
+.timer-button {
+  border-color: rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top, rgba(22, 196, 127, 0.08), transparent 52%),
+    linear-gradient(180deg, rgba(12, 16, 15, 0.94), rgba(7, 10, 9, 0.94));
+  color: #eef5f1;
+}
+
+.timer-button .mono {
+  color: inherit;
+  font-weight: 950;
+}
+
+.timer-button.is-active {
+  border-color: rgba(22, 196, 127, 0.28);
+  background:
+    radial-gradient(circle at top, rgba(22, 196, 127, 0.14), transparent 54%),
+    linear-gradient(180deg, rgba(10, 17, 14, 0.96), rgba(6, 10, 8, 0.96));
+  color: #9af0c7;
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.26),
+    0 0 0 1px rgba(22, 196, 127, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.timer-button.is-warning {
+  border-color: rgba(245, 166, 35, 0.3);
+  background:
+    radial-gradient(circle at top, rgba(245, 166, 35, 0.14), transparent 54%),
+    linear-gradient(180deg, rgba(20, 15, 8, 0.96), rgba(10, 8, 5, 0.96));
+  color: #ffd580;
 }
 
 .button--ghost {
@@ -3519,6 +3551,22 @@ select:focus-visible {
   font-size: 12px;
 }
 
+.workout-shell__meta-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(245, 247, 246, 0.92);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .workout-entry-panel {
   position: relative;
   padding: 16px;
@@ -3572,6 +3620,33 @@ select:focus-visible {
   padding: 12px 14px;
   gap: 5px;
   border-radius: 20px;
+}
+
+.workout-preview--compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workout-preview__compact-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.workout-preview--compact .workout-preview__eyebrow {
+  font-size: 9px;
+}
+
+.workout-preview--compact .workout-preview__title {
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+.workout-preview--compact .workout-preview__meta {
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .workout-preview__title {
@@ -3773,6 +3848,12 @@ select:focus-visible {
   .workout-entry-panel--sticky {
     bottom: calc(10px + env(safe-area-inset-bottom));
   }
+
+  .workout-shell__meta-chip {
+    min-height: 22px;
+    padding: 4px 9px;
+    font-size: 10px;
+  }
 }
 
 @media (max-width: 380px) {
@@ -3805,6 +3886,18 @@ select:focus-visible {
 
   .rep-quick-pick strong {
     font-size: 15px;
+  }
+
+  .workout-preview--compact {
+    gap: 10px;
+  }
+
+  .workout-preview--compact .workout-preview__title {
+    font-size: 13px;
+  }
+
+  .workout-preview--compact .workout-preview__meta {
+    font-size: 10px;
   }
 }
 

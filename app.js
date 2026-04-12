@@ -1058,16 +1058,16 @@ function renderLastPerformancePreviewCard() {
   const preview = getLastPerformancePreviewCard();
 
   return `
-    <div class="workout-preview workout-preview--${preview.tone}">
-      <div class="workout-preview__top">
+    <div class="workout-preview workout-preview--compact workout-preview--${preview.tone}">
+      <div class="workout-preview__compact-copy">
         <span class="workout-preview__eyebrow">${preview.eyebrow}</span>
-        <span class="workout-preview__badge workout-preview__badge--${preview.tone}">
-          <span class="workout-preview__badge-icon">${preview.verdict.icon}</span>
-          <span class="workout-preview__badge-text">${preview.verdict.label}</span>
-        </span>
+        <strong class="workout-preview__title">${preview.title}</strong>
+        <span class="workout-preview__meta">${preview.meta}</span>
       </div>
-      <strong class="workout-preview__title">${preview.title}</strong>
-      <span class="workout-preview__meta">${preview.meta}</span>
+      <span class="workout-preview__badge workout-preview__badge--${preview.tone}">
+        <span class="workout-preview__badge-icon">${preview.verdict.icon}</span>
+        <span class="workout-preview__badge-text">${preview.verdict.label}</span>
+      </span>
     </div>
   `;
 }
@@ -3983,7 +3983,7 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-lg workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
+    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
       <div class="row row-start">
         <div>
           <span class="pill">${active.series}</span>
@@ -5448,7 +5448,7 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-lg workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
+    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
       <div class="row row-start workout-shell__header">
         <div class="workout-shell__hero-copy">
           <div class="workout-shell__eyebrow-row">
@@ -5460,7 +5460,7 @@ function renderWorkout() {
           ${
             isFocusMode
               ? ""
-              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span>${state.currentIndex + 1}/${getExercises().length}</span></div>`
+              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span class="workout-shell__meta-chip">Exo ${state.currentIndex + 1}/${getExercises().length} · ${getProgressPercent()}%</span></div>`
           }
         </div>
         <div class="workout-shell__tools">
@@ -5480,22 +5480,6 @@ function renderWorkout() {
           </button>
         </div>
       </div>
-
-      ${
-        isFocusMode
-          ? ""
-          : `
-              <div class="progress-wrap">
-                <div class="row">
-                  <div class="label">Progression seance</div>
-                  <div class="label">${getProgressPercent()}%</div>
-                </div>
-                <div class="progress">
-                  <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
-                </div>
-              </div>
-            `
-      }
 
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
 
