@@ -3201,6 +3201,65 @@ select:focus-visible {
   background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(231, 247, 240, 0.92) 100%);
 }
 
+.validation-button {
+  background-image: none;
+  background-color: rgba(11, 14, 13, 0.96);
+  color: #eff5f1;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.validation-button .validation-button__cta {
+  color: inherit;
+}
+
+.validation-button--idle {
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.07), transparent 52%),
+    linear-gradient(180deg, rgba(17, 21, 19, 0.98), rgba(10, 13, 12, 0.98));
+  color: #f4f7f5;
+}
+
+.validation-button--progress {
+  background:
+    radial-gradient(circle at top, rgba(22, 196, 127, 0.16), transparent 54%),
+    linear-gradient(180deg, rgba(12, 31, 22, 0.98), rgba(8, 18, 13, 0.98));
+  color: #f2fbf6;
+}
+
+.validation-button--hold {
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.09), transparent 54%),
+    linear-gradient(180deg, rgba(26, 30, 28, 0.98), rgba(15, 18, 17, 0.98));
+  color: #f5f7f6;
+}
+
+.validation-button--reduce {
+  background:
+    radial-gradient(circle at top, rgba(245, 166, 35, 0.18), transparent 54%),
+    linear-gradient(180deg, rgba(40, 25, 10, 0.98), rgba(22, 14, 6, 0.98));
+  color: #fff3dc;
+}
+
+.validation-button::after,
+.validation-button__badge,
+.validation-button__row {
+  transition: none;
+}
+
+.validation-button--hold .validation-button__badge {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f2f5f3;
+}
+
+.validation-button--hold .validation-button__badge-icon {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .timer-button {
   border-color: rgba(255, 255, 255, 0.08);
   background:

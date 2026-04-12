@@ -4879,7 +4879,7 @@ function tickTimer() {
 
     state.timer.seconds = Math.ceil(remainingMs / 1000);
     saveState();
-    renderApp();
+    syncTimerButtonUI();
     return;
   }
 
@@ -4893,7 +4893,7 @@ function tickTimer() {
   }
 
   saveState();
-  renderApp();
+  syncTimerButtonUI();
 }
 
 function registerServiceWorker() {
@@ -5825,6 +5825,27 @@ function renderApp() {
 
   bindEvents();
   dismissBootSplash();
+}
+
+function syncTimerButtonUI() {
+  const timerButton = document.querySelector(".timer-button");
+  if (!timerButton) return;
+
+  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+  const screenMeta = getScreenMeta();
+
+  timerButton.className = `timer-button ${state.timer.active ? "is-active" : ""} ${
+    isTimerEndingSoon ? "is-warning" : ""
+  }`.trim();
+  timerButton.setAttribute("aria-label", "Pause ou reprise du timer");
+
+  const parts = timerButton.querySelectorAll("span");
+  if (parts[0]) {
+    parts[0].textContent = state.timer.active ? "Pause" : screenMeta.title;
+  }
+  if (parts[1]) {
+    parts[1].textContent = formatTimer(state.timer.seconds);
+  }
 }
 
 restoreState();
