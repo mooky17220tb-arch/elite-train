@@ -95,6 +95,7 @@ const state = {
   currentIndex: 0,
   program: createProgramCopy(),
   programEditorDay: "Push",
+  programPlannerDays: 4,
   cycle: createDefaultCycle(),
   exerciseData: {},
   history: [],
@@ -210,7 +211,7 @@ function getRecommendedRest(entry = {}) {
 function applyRecommendedRestProfile(program = {}) {
   const nextProgram = {};
 
-  Object.keys(PROGRAM).forEach((day) => {
+  getProgramDayKeys(program).forEach((day) => {
     nextProgram[day] = (program[day] || []).map((entry) => ({
       ...entry,
       rest: getRecommendedRest(entry),
@@ -221,6 +222,7 @@ function applyRecommendedRestProfile(program = {}) {
 }
 
 function getActivationPreset(day) {
+  const themeKey = resolveDayThemeKey(day);
   const presets = {
     Push: {
       exercise: "Ecarte poulie",
@@ -264,7 +266,7 @@ function getActivationPreset(day) {
     },
   };
 
-  return presets[day] || presets.Push;
+  return presets[themeKey] || presets.Push;
 }
 
 function isActivationEntry(entry) {
@@ -289,7 +291,7 @@ function ensureActivationSeriesForDay(day, entries = []) {
 function ensureActivationSeriesForProgram(program = {}) {
   const nextProgram = {};
 
-  Object.keys(PROGRAM).forEach((day) => {
+  getProgramDayKeys(program).forEach((day) => {
     nextProgram[day] = ensureActivationSeriesForDay(day, Array.isArray(program?.[day]) ? program[day] : []);
   });
 
@@ -317,6 +319,56 @@ function sanitizeCycle(cycle = {}) {
 
 function getProgramDays() {
   return Object.keys(state.program || PROGRAM);
+}
+
+function getProgramDayKeys(program = {}) {
+  const keys = Object.keys(program || {});
+  return keys.length ? keys : Object.keys(PROGRAM);
+}
+
+function resolveDayThemeKey(day) {
+  const value = String(day || "").toLowerCase();
+
+  if (
+    value.includes("push") ||
+    value.includes("chest") ||
+    value.includes("pec")
+  ) {
+    return "Push";
+  }
+
+  if (
+    value.includes("pull") ||
+    value.includes("back") ||
+    value.includes("dos")
+  ) {
+    return "Pull";
+  }
+
+  if (
+    value.includes("leg") ||
+    value.includes("lower") ||
+    value.includes("jambe") ||
+    value.includes("quad") ||
+    value.includes("glute")
+  ) {
+    return "Legs";
+  }
+
+  if (
+    value.includes("upper") ||
+    value.includes("full") ||
+    value.includes("arm") ||
+    value.includes("bras") ||
+    value.includes("shoulder") ||
+    value.includes("epaule") ||
+    value.includes("delts") ||
+    value.includes("arnold")
+  ) {
+    return "Upper";
+  }
+
+  return "Upper";
 }
 
 function sanitizePositiveInteger(value, fallback, minimum = 1) {
@@ -606,8 +658,8 @@ function normalizeProgramEntry(entry, fallback = {}) {
 function sanitizeProgram(program) {
   const nextProgram = {};
 
-  Object.keys(PROGRAM).forEach((day) => {
-    const fallbackEntries = PROGRAM[day] || [];
+  getProgramDayKeys(program).forEach((day) => {
+    const fallbackEntries = Array.isArray(PROGRAM[day]) ? PROGRAM[day] : Array.isArray(program?.[day]) ? program[day] : [];
     const sourceEntries = ensureActivationSeriesForDay(
       day,
       Array.isArray(program?.[day]) ? program[day] : fallbackEntries
@@ -618,6 +670,477 @@ function sanitizeProgram(program) {
   });
 
   return nextProgram;
+}
+
+function createTemplateEntry(exercise, kind, series, minReps, maxReps, defaultLoad = null, loadLabel = "") {
+  return {
+    exercise,
+    kind,
+    series,
+    minReps,
+    maxReps,
+    defaultLoad,
+    loadLabel: loadLabel || (isNumericLoad(defaultLoad) ? `${defaultLoad} kg` : "Charge libre"),
+  };
+}
+
+function createStraightSets(exercise, kind, count, minReps, maxReps, defaultLoad = null, loadLabel = "", prefix = "Serie") {
+  return Array.from({ length: count }, (_, index) =>
+    createTemplateEntry(exercise, kind, `${prefix} ${index + 1}`, minReps, maxReps, defaultLoad, loadLabel)
+  );
+}
+
+function createTopBackoffSets(
+  exercise,
+  kind,
+  topMin,
+  topMax,
+  topLoad,
+  topLabel,
+  backoffCount,
+  backoffMin,
+  backoffMax,
+  backoffLoad,
+  backoffLabel
+) {
+  return [
+    createTemplateEntry(exercise, kind, "Top Set", topMin, topMax, topLoad, topLabel),
+    ...Array.from({ length: backoffCount }, (_, index) =>
+      createTemplateEntry(
+        exercise,
+        kind,
+        `Back-off ${index + 1}`,
+        backoffMin,
+        backoffMax,
+        backoffLoad,
+        backoffLabel
+      )
+    ),
+  ];
+}
+
+function finalizeTemplateProgram(program) {
+  return applyRecommendedRestProfile(sanitizeProgram(program));
+}
+
+function buildFullBodyA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildFullBodyB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildFullBodyC() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 2, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 6, "6-7 kg"),
+    ...createStraightSets("Curl bras", "isolation", 2, 12, 12, null, "modere"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildFullBodyD() {
+  return [
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 12, 56, "56 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildUpperA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 6, "6-7 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildUpperB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildLowerA() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 4, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 2, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLowerB() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildPushA() {
+  return [
+    ...createTopBackoffSets("Developpe couche", "barbell", 6, 8, 65, "65 kg", 3, 8, 10, 58, "58 kg"),
+    ...createTopBackoffSets("Incline halteres", "dumbbell", 6, 10, 30, "30 kg", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildPushB() {
+  return [
+    ...createTopBackoffSets("Incline halteres", "dumbbell", 6, 10, 30, "30 kg", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Developpe couche", "barbell", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 12, null, "modere"),
+  ];
+}
+
+function buildPullA() {
+  return [
+    ...createTopBackoffSets("Tirage vertical", "machine", 6, 10, 62, "62 kg", 3, 10, 12, 56, "56 kg"),
+    ...createTopBackoffSets("Rowing haltere", "dumbbell", 8, 8, 36, "36 kg", 3, 10, 12, 32, "32 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 12, 12, 45, "45 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+  ];
+}
+
+function buildPullB() {
+  return [
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 12, 56, "56 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl bras", "isolation", 3, 12, 12, null, "modere"),
+  ];
+}
+
+function buildLegsA() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 4, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 3, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLegsB() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildArmsDay() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildChestDay() {
+  return [
+    ...createTopBackoffSets("Developpe couche", "barbell", 6, 8, 65, "65 kg", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 3, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildBackDay() {
+  return [
+    ...createTopBackoffSets("Tirage vertical", "machine", 6, 10, 62, "62 kg", 3, 10, 12, 56, "56 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 12, 12, 45, "45 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 15, 15, 20, "20 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+  ];
+}
+
+function buildShouldersDay() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildChestBackA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 2, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+  ];
+}
+
+function buildChestBackB() {
+  return [
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Developpe couche", "barbell", 2, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 2, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 15, 15, 20, "20 kg"),
+  ];
+}
+
+function buildShouldersArmsA() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildShouldersArmsB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 3, 12, 12, null, "leger"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 12, null, "modere"),
+  ];
+}
+
+function getProgramPlannerOptions(days = 4) {
+  return {
+    3: [
+      {
+        id: "full-body-3",
+        title: "Full Body",
+        split: "Recommande",
+        why: "Le meilleur ratio frequence, recuperation et simplicite sur 3 jours.",
+        days: ["Full A", "Full B", "Full C"],
+      },
+      {
+        id: "upper-lower-full-3",
+        title: "Upper / Lower / Full",
+        split: "Alternative",
+        why: "Tres bon si tu veux un peu plus de focus haut / bas tout en gardant une seance complete.",
+        days: ["Upper", "Lower", "Full"],
+      },
+      {
+        id: "ppl-3",
+        title: "Push Pull Legs",
+        split: "Alternative",
+        why: "Moins optimal que le full body sur 3 jours, mais simple si tu aimes ce style.",
+        days: ["Push", "Pull", "Legs"],
+      },
+    ],
+    4: [
+      {
+        id: "upper-lower-4",
+        title: "Upper / Lower",
+        split: "Recommande",
+        why: "Le split le plus solide et le plus polyvalent sur 4 jours.",
+        days: ["Upper A", "Lower A", "Upper B", "Lower B"],
+      },
+      {
+        id: "full-body-4",
+        title: "Full Body 4x",
+        split: "Alternative",
+        why: "Super si tu veux toucher tout le corps souvent avec des seances plus courtes.",
+        days: ["Full A", "Full B", "Full C", "Full D"],
+      },
+      {
+        id: "ppl-upper-4",
+        title: "PPL + Upper",
+        split: "Alternative",
+        why: "Bon compromis si tu aimes deja Push Pull Legs mais veux un 4e bloc complet.",
+        days: ["Push", "Pull", "Legs", "Upper"],
+      },
+    ],
+    5: [
+      {
+        id: "ppl-upper-lower-5",
+        title: "PPL + Upper / Lower",
+        split: "Recommande",
+        why: "Excellent volume et bonne frequence pour l'hypertrophie sur 5 jours.",
+        days: ["Push", "Pull", "Legs", "Upper", "Lower"],
+      },
+      {
+        id: "ppl-upper-arms-5",
+        title: "PPL + Upper + Arms",
+        split: "Alternative",
+        why: "Tres bien si tu veux un rendu plus bodybuilding avec une vraie seance bras / delts.",
+        days: ["Push", "Pull", "Legs", "Upper", "Arms"],
+      },
+      {
+        id: "bro-split-5",
+        title: "Bro Split",
+        split: "Alternative",
+        why: "Le classique bodybuilding, plus fun si tu aimes un gros focus par groupe.",
+        days: ["Chest", "Back", "Legs", "Shoulders", "Arms"],
+      },
+    ],
+    6: [
+      {
+        id: "ppl-x2-6",
+        title: "Push Pull Legs x2",
+        split: "Recommande",
+        why: "Le meilleur choix si tu recuperes bien et veux beaucoup de volume sur 6 jours.",
+        days: ["Push A", "Pull A", "Legs A", "Push B", "Pull B", "Legs B"],
+      },
+      {
+        id: "arnold-6",
+        title: "Arnold Split",
+        split: "Alternative",
+        why: "Un rendu plus bodybuilding avec un gros focus pecs / dos puis epaules / bras.",
+        days: ["Chest Back A", "Shoulders Arms A", "Legs A", "Chest Back B", "Shoulders Arms B", "Legs B"],
+      },
+      {
+        id: "upper-lower-x3-6",
+        title: "Upper / Lower x3",
+        split: "Alternative",
+        why: "Tres propre pour monter le volume sans perdre la logique haut / bas.",
+        days: ["Upper A", "Lower A", "Upper B", "Lower B", "Upper C", "Lower C"],
+      },
+    ],
+  }[days] || [];
+}
+
+function createProgramTemplate(templateId) {
+  const templates = {
+    "full-body-3": {
+      "Full A": buildFullBodyA(),
+      "Full B": buildFullBodyB(),
+      "Full C": buildFullBodyC(),
+    },
+    "upper-lower-full-3": {
+      Upper: buildUpperA(),
+      Lower: buildLowerA(),
+      Full: buildFullBodyC(),
+    },
+    "ppl-3": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+    },
+    "upper-lower-4": {
+      "Upper A": buildUpperA(),
+      "Lower A": buildLowerA(),
+      "Upper B": buildUpperB(),
+      "Lower B": buildLowerB(),
+    },
+    "full-body-4": {
+      "Full A": buildFullBodyA(),
+      "Full B": buildFullBodyB(),
+      "Full C": buildFullBodyC(),
+      "Full D": buildFullBodyD(),
+    },
+    "ppl-upper-4": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+      Upper: buildUpperB(),
+    },
+    "ppl-upper-lower-5": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+      Upper: buildUpperB(),
+      Lower: buildLowerB(),
+    },
+    "ppl-upper-arms-5": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+      Upper: buildUpperA(),
+      Arms: buildArmsDay(),
+    },
+    "bro-split-5": {
+      Chest: buildChestDay(),
+      Back: buildBackDay(),
+      Legs: buildLegsA(),
+      Shoulders: buildShouldersDay(),
+      Arms: buildArmsDay(),
+    },
+    "ppl-x2-6": {
+      "Push A": buildPushA(),
+      "Pull A": buildPullA(),
+      "Legs A": buildLegsA(),
+      "Push B": buildPushB(),
+      "Pull B": buildPullB(),
+      "Legs B": buildLegsB(),
+    },
+    "arnold-6": {
+      "Chest Back A": buildChestBackA(),
+      "Shoulders Arms A": buildShouldersArmsA(),
+      "Legs A": buildLegsA(),
+      "Chest Back B": buildChestBackB(),
+      "Shoulders Arms B": buildShouldersArmsB(),
+      "Legs B": buildLegsB(),
+    },
+    "upper-lower-x3-6": {
+      "Upper A": buildUpperA(),
+      "Lower A": buildLowerA(),
+      "Upper B": buildUpperB(),
+      "Lower B": buildLowerB(),
+      "Upper C": buildUpperA(),
+      "Lower C": buildLowerB(),
+    },
+  };
+
+  return finalizeTemplateProgram(templates[templateId] || createProgramCopy());
+}
+
+function getProgramTemplateById(templateId) {
+  const allOptions = [3, 4, 5, 6].flatMap((days) => getProgramPlannerOptions(days));
+  return allOptions.find((template) => template.id === templateId) || null;
 }
 
 function formatTimer(seconds) {
@@ -1487,6 +2010,7 @@ function buildPersistedState() {
     screen: state.screen,
     program: state.program,
     programEditorDay: state.programEditorDay,
+    programPlannerDays: state.programPlannerDays,
     cycle: state.cycle,
     exerciseData: state.exerciseData,
     history: state.history,
@@ -1518,7 +2042,11 @@ function hydrateState(parsed = {}) {
   state.exerciseData = parsed.exerciseData || {};
   state.history = parsed.history || [];
   state.cycle = sanitizeCycle(parsed.cycle);
-  state.day = getProgramDays().includes(parsed.day) ? parsed.day : "Push";
+  state.programPlannerDays = [3, 4, 5, 6].includes(Number(parsed.programPlannerDays))
+    ? Number(parsed.programPlannerDays)
+    : Math.min(6, Math.max(3, getProgramDays().length || 4));
+  const fallbackDay = getProgramDays()[0] || "Push";
+  state.day = getProgramDays().includes(parsed.day) ? parsed.day : fallbackDay;
   state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
     ? parsed.programEditorDay
     : state.day;
@@ -1758,6 +2286,7 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_BACKUP_KEY);
   state.program = createProgramCopy();
   state.programEditorDay = "Push";
+  state.programPlannerDays = 4;
   state.cycle = createDefaultCycle();
   state.exerciseData = {};
   state.history = [];
@@ -1950,7 +2479,42 @@ function removeProgramEntry(day, index) {
 
 function resetProgram() {
   state.program = createProgramCopy();
+  state.day = getProgramDayKeys(state.program)[0] || "Push";
   state.programEditorDay = state.day;
+  state.programPlannerDays = 4;
+  resetWorkoutState();
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function setProgramPlannerDays(days) {
+  if (![3, 4, 5, 6].includes(Number(days))) return;
+  state.programPlannerDays = Number(days);
+  saveState();
+  renderApp();
+}
+
+function applyProgramTemplate(templateId) {
+  const template = getProgramTemplateById(templateId);
+  if (!template) return;
+
+  const hasWorkoutInProgress =
+    state.pendingSession.length > 0 || state.timer.active || state.workoutFinished;
+  const confirmLabel = hasWorkoutInProgress
+    ? "Appliquer ce programme et effacer la seance en cours ?"
+    : `Appliquer ${template.title} sur ${template.days.length} jours ?`;
+
+  if (!window.confirm(confirmLabel)) {
+    return;
+  }
+
+  state.program = createProgramTemplate(templateId);
+  state.programPlannerDays = template.days.length;
+  state.day = Object.keys(state.program)[0] || "Push";
+  state.programEditorDay = state.day;
+  state.pendingSession = [];
+  resetWorkoutState();
   ensureSelectedChartKeyIsValid();
   saveState();
   renderApp();
@@ -2905,36 +3469,95 @@ function getDayTheme(day) {
 }
 
 function getDayTheme(day) {
-  return {
+  const accentDay = resolveDayThemeKey(day);
+  const themes = {
     Push: {
       subtitle: "Pecs - epaules - triceps",
       cue: "Poussee lourde et propre",
       badge: "Explosif",
       mark: "PSH",
+      accentDay: "Push",
     },
     Pull: {
       subtitle: "Dos - biceps - arriere d'epaules",
       cue: "Tirages solides et amplitude",
       badge: "Amplitude",
       mark: "PUL",
+      accentDay: "Pull",
     },
     Legs: {
       subtitle: "Quadris - ischios - fessiers",
       cue: "Jambes, gainage et moteur",
       badge: "Moteur",
       mark: "LEG",
+      accentDay: "Legs",
     },
     Upper: {
       subtitle: "Haut du corps complet",
       cue: "Equilibre pecs, dos et bras",
       badge: "Equilibre",
       mark: "UPR",
+      accentDay: "Upper",
     },
-  }[day] || {
+  };
+
+  if (String(day || "").toLowerCase().includes("full")) {
+    return {
+      ...themes.Upper,
+      subtitle: "Corps complet",
+      cue: "Frequence, equilibre et progression",
+      badge: "Full",
+      mark: "FUL",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("lower")) {
+    return {
+      ...themes.Legs,
+      subtitle: "Bas du corps complet",
+      cue: "Quadris, ischios et fessiers",
+      badge: "Lower",
+      mark: "LWR",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("arms")) {
+    return {
+      ...themes.Upper,
+      subtitle: "Bras - delts - finition",
+      cue: "Volume propre et congestion",
+      badge: "Focus",
+      mark: "ARM",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("chest") || String(day || "").toLowerCase().includes("back")) {
+    return {
+      ...themes.Push,
+      subtitle: "Pecs - dos",
+      cue: "Gros basiques et densite",
+      badge: "Hybride",
+      mark: "C/B",
+      accentDay: "Push",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("shoulders")) {
+    return {
+      ...themes.Upper,
+      subtitle: "Epaules - bras",
+      cue: "Delts pleins et bras propres",
+      badge: "Arnold",
+      mark: "S/A",
+    };
+  }
+
+  return themes[accentDay] || {
     subtitle: "Bloc complet",
     cue: "Construis une seance propre",
     badge: "Elite",
     mark: "ET",
+    accentDay: "Upper",
   };
 }
 
@@ -3100,7 +3723,7 @@ function renderPremiumDayList() {
           const theme = getDayTheme(day);
 
           return `
-            <button class="day-button" data-day="${day}">
+            <button class="day-button" data-day="${day}" data-theme-day="${theme.accentDay}">
               <div>
                 <div class="day-button__eyebrow">${theme.subtitle}</div>
                 <div class="day-button__title">${day.toUpperCase()}</div>
@@ -3292,7 +3915,7 @@ function renderPremiumDashboard() {
 
   return `
     <section class="stack-md">
-      <article class="dashboard-hero" data-accent-day="${heroDay}">
+      <article class="dashboard-hero" data-accent-day="${heroTheme.accentDay}">
         <div class="dashboard-hero__content">
           <div class="dashboard-hero__top">
             <span class="dashboard-hero__badge">${heroBadge}</span>
@@ -3983,7 +4606,7 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
+    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${theme.accentDay}">
       <div class="row row-start">
         <div>
           <span class="pill">${active.series}</span>
@@ -4309,6 +4932,64 @@ function renderProgramEditor() {
   `;
 }
 
+function renderProgramPlanner() {
+  const selectedDays = [3, 4, 5, 6].includes(state.programPlannerDays) ? state.programPlannerDays : 4;
+  const templates = getProgramPlannerOptions(selectedDays);
+
+  return `
+    <article class="surface surface-pad stack-md program-planner">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix du split</div>
+          <h3 class="section-title dashboard-section-head__title">Assistant programme</h3>
+        </div>
+        <div class="label">${getProgramDays().length} blocs actifs</div>
+      </div>
+
+      <div class="program-hint">
+        Choisis ton nombre de jours, puis on te propose le split le plus logique avec deux alternatives deja pretes.
+      </div>
+
+      <div class="planner-days-tabs">
+        ${[3, 4, 5, 6]
+          .map(
+            (days) => `
+              <button class="program-day-tab ${selectedDays === days ? "is-active" : ""}" data-action="set-program-planner-days" data-program-days="${days}">
+                ${days} jours
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="template-list">
+        ${templates
+          .map((template) => `
+            <article class="surface surface--soft surface-pad template-card" data-accent-day="${getDayTheme(template.days[0]).accentDay}">
+              <div class="template-card__head">
+                <div class="stack-sm">
+                  <div class="template-card__eyebrow">${template.split}</div>
+                  <div class="template-card__title">${template.title}</div>
+                  <div class="template-card__meta">${template.why}</div>
+                </div>
+                <span class="pill ${template.split === "Recommande" ? "" : "pill--outline"}">${template.days.length}J</span>
+              </div>
+
+              <div class="template-card__days">
+                ${template.days.map((day) => `<span class="template-card__chip">${day}</span>`).join("")}
+              </div>
+
+              <button class="button ${template.split === "Recommande" ? "button--primary" : "button--ghost"}" data-action="apply-program-template" data-template-id="${template.id}">
+                Utiliser ${template.title}
+              </button>
+            </article>
+          `)
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
 function renderRestSettings() {
   return `
     <article class="surface surface-pad stack-md">
@@ -4451,6 +5132,7 @@ function renderSettings() {
       </article>
 
       ${renderCycleSettings()}
+      ${renderProgramPlanner()}
       ${renderRestSettings()}
       ${renderStorageConfidenceSection()}
 
@@ -4677,6 +5359,14 @@ function bindEvents() {
 
       if (action === "cycle-reset") {
         resetCycleBlock();
+      }
+
+      if (action === "set-program-planner-days") {
+        setProgramPlannerDays(button.dataset.programDays);
+      }
+
+      if (action === "apply-program-template") {
+        applyProgramTemplate(button.dataset.templateId);
       }
 
       if (action === "toggle-rest-sound") {
@@ -4968,7 +5658,7 @@ function renderResumeCard() {
   const theme = getDayTheme(resume.day);
 
   return `
-    <article class="surface surface-pad smart-resume" data-accent-day="${resume.day}">
+    <article class="surface surface-pad smart-resume" data-accent-day="${theme.accentDay}">
       <div class="row row-start">
         <div class="stack-sm smart-resume__copy">
           <div class="label">Reprise intelligente</div>
@@ -5012,7 +5702,7 @@ function renderWeeklyPlanner() {
   const theme = getDayTheme(accentDay);
 
   return `
-    <article class="surface surface-pad planner-shell" data-accent-day="${accentDay}">
+    <article class="surface surface-pad planner-shell" data-accent-day="${theme.accentDay}">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Planning</div>
@@ -5236,7 +5926,7 @@ function renderPremiumDashboard() {
       ${renderCycleSection()}
       ${renderCoachSection()}
 
-      <article class="surface surface-pad chart-shell" data-accent-day="${heroDay}">
+      <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}">
         <div class="dashboard-section-head">
           <div>
             <div class="label">Progression recente</div>
@@ -5283,7 +5973,7 @@ function renderWeightView(settings, active, last, isFocusMode = false) {
   const theme = getDayTheme(state.day);
 
   return `
-    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}" data-accent-day="${state.day}">
+    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}" data-accent-day="${theme.accentDay}">
       ${
         settings.deload
           ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
@@ -5340,7 +6030,7 @@ function renderWorkoutCompletionScreen() {
   if (!summary) {
     return `
       <section class="stack-md">
-        <section class="surface surface-pad-lg center-block stack-md session-finish" data-accent-day="${state.day}">
+        <section class="surface surface-pad-lg center-block stack-md session-finish" data-accent-day="${theme.accentDay}">
           <div class="trophy">${theme.mark}</div>
           <div class="stack-sm">
             <h2 class="section-title">Seance terminee</h2>

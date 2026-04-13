@@ -1360,6 +1360,74 @@ button {
   gap: 12px;
 }
 
+.planner-days-tabs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.template-list {
+  display: grid;
+  gap: 14px;
+}
+
+.template-card {
+  display: grid;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.template-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.template-card__eyebrow {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.template-card__title {
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.template-card__meta {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.template-card__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-card__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: #edf3ef;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
 .settings-toggle-list {
   display: grid;
   gap: 12px;
@@ -1529,35 +1597,43 @@ button {
     linear-gradient(180deg, rgba(2, 4, 3, 0.14) 0%, rgba(2, 4, 3, 0.68) 62%, rgba(2, 4, 3, 0.92) 100%);
 }
 
-.day-button[data-day="Push"] {
+.day-button[data-day="Push"],
+.day-button[data-theme-day="Push"] {
   border-color: rgba(255, 112, 101, 0.26);
 }
 
-.day-button[data-day="Push"]::before {
+.day-button[data-day="Push"]::before,
+.day-button[data-theme-day="Push"]::before {
   background-image: url("./assets/push-card.svg");
 }
 
-.day-button[data-day="Pull"] {
+.day-button[data-day="Pull"],
+.day-button[data-theme-day="Pull"] {
   border-color: rgba(65, 210, 214, 0.24);
 }
 
-.day-button[data-day="Pull"]::before {
+.day-button[data-day="Pull"]::before,
+.day-button[data-theme-day="Pull"]::before {
   background-image: url("./assets/pull-card.svg");
 }
 
-.day-button[data-day="Legs"] {
+.day-button[data-day="Legs"],
+.day-button[data-theme-day="Legs"] {
   border-color: rgba(255, 182, 88, 0.26);
 }
 
-.day-button[data-day="Legs"]::before {
+.day-button[data-day="Legs"]::before,
+.day-button[data-theme-day="Legs"]::before {
   background-image: url("./assets/legs-card.svg");
 }
 
-.day-button[data-day="Upper"] {
+.day-button[data-day="Upper"],
+.day-button[data-theme-day="Upper"] {
   border-color: rgba(112, 231, 176, 0.28);
 }
 
-.day-button[data-day="Upper"]::before {
+.day-button[data-day="Upper"]::before,
+.day-button[data-theme-day="Upper"]::before {
   background-image: url("./assets/upper-card.svg");
 }
 
@@ -1588,19 +1664,23 @@ button {
   text-transform: uppercase;
 }
 
-.day-button[data-day="Push"] > div:first-child::before {
+.day-button[data-day="Push"] > div:first-child::before,
+.day-button[data-theme-day="Push"] > div:first-child::before {
   content: "Focus haut du corps";
 }
 
-.day-button[data-day="Pull"] > div:first-child::before {
+.day-button[data-day="Pull"] > div:first-child::before,
+.day-button[data-theme-day="Pull"] > div:first-child::before {
   content: "Dos et tirage";
 }
 
-.day-button[data-day="Legs"] > div:first-child::before {
+.day-button[data-day="Legs"] > div:first-child::before,
+.day-button[data-theme-day="Legs"] > div:first-child::before {
   content: "Force et stabilite";
 }
 
-.day-button[data-day="Upper"] > div:first-child::before {
+.day-button[data-day="Upper"] > div:first-child::before,
+.day-button[data-theme-day="Upper"] > div:first-child::before {
   content: "Bloc complet";
 }
 
