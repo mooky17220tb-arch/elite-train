@@ -96,6 +96,7 @@ const state = {
   program: createProgramCopy(),
   programEditorDay: "Push",
   programPlannerDays: 4,
+  programTemplatePreviewId: "",
   cycle: createDefaultCycle(),
   exerciseData: {},
   history: [],
@@ -1143,6 +1144,37 @@ function getProgramTemplateById(templateId) {
   return allOptions.find((template) => template.id === templateId) || null;
 }
 
+function summarizeTemplateDayEntries(entries = []) {
+  const grouped = new Map();
+
+  entries.forEach((entry) => {
+    const existing = grouped.get(entry.exercise);
+    if (existing) {
+      existing.setCount += 1;
+      if (entry.targetLabel && !existing.targets.includes(entry.targetLabel)) {
+        existing.targets.push(entry.targetLabel);
+      }
+      return;
+    }
+
+    grouped.set(entry.exercise, {
+      exercise: entry.exercise,
+      setCount: 1,
+      targets: entry.targetLabel ? [entry.targetLabel] : [],
+    });
+  });
+
+  return [...grouped.values()].map((item) => {
+    const targetLabel = item.targets.length ? `${item.targets.join(" / ")} reps` : "reps libres";
+    const setLabel = `${item.setCount} ${item.setCount > 1 ? "series" : "serie"}`;
+
+    return {
+      exercise: item.exercise,
+      meta: `${setLabel} - ${targetLabel}`,
+    };
+  });
+}
+
 function formatTimer(seconds) {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
@@ -1932,6 +1964,92 @@ function renderHistoryEditorOverlay() {
   `;
 }
 
+function renderProgramTemplatePreviewOverlay() {
+  if (!state.programTemplatePreviewId) return "";
+
+  const template = getProgramTemplateById(state.programTemplatePreviewId);
+  if (!template) return "";
+
+  const previewProgram = createProgramTemplate(template.id);
+  const hasWorkoutInProgress =
+    state.pendingSession.length > 0 || state.timer.active || state.workoutFinished;
+  const accentDay = getDayTheme(template.days[0]).accentDay;
+
+  return `
+    <div class="sheet-overlay">
+      <article class="sheet-card template-preview-sheet" data-accent-day="${accentDay}">
+        <div class="sheet-card__head">
+          <div>
+            <div class="label">Apercu du programme</div>
+            <h3 class="section-title">${template.title}</h3>
+          </div>
+          <button class="icon-button" data-action="close-program-template-preview" aria-label="Fermer l'apercu">
+            X
+          </button>
+        </div>
+
+        <div class="sheet-card__body template-preview">
+          <div class="template-preview__intro">
+            <div class="template-preview__eyebrow">${template.split} - ${template.days.length} jours</div>
+            <div class="template-preview__why">${template.why}</div>
+          </div>
+
+          ${
+            hasWorkoutInProgress
+              ? `
+                <div class="template-preview__warning">
+                  Une seance est en cours. Si tu valides ce programme, elle sera remplacee.
+                </div>
+              `
+              : ""
+          }
+
+          <div class="template-preview__days">
+            ${Object.entries(previewProgram)
+              .map(([day, entries]) => {
+                const exerciseSummary = summarizeTemplateDayEntries(entries);
+
+                return `
+                  <section class="template-preview__day" data-accent-day="${getDayTheme(day).accentDay}">
+                    <div class="template-preview__day-head">
+                      <div class="template-preview__day-title">${day}</div>
+                      <div class="template-preview__day-meta">${exerciseSummary.length} exos - ${entries.length} series</div>
+                    </div>
+
+                    <ul class="template-preview__exercise-list">
+                      ${exerciseSummary
+                        .map(
+                          (item) => `
+                            <li class="template-preview__exercise">
+                              <span class="template-preview__exercise-name">${item.exercise}</span>
+                              <span class="template-preview__exercise-meta">${item.meta}</span>
+                            </li>
+                          `
+                        )
+                        .join("")}
+                    </ul>
+                  </section>
+                `;
+              })
+              .join("")}
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--ghost" data-action="close-program-template-preview">Retour</button>
+          <button
+            class="button ${hasWorkoutInProgress ? "button--danger" : "button--primary"}"
+            data-action="apply-program-template"
+            data-template-id="${template.id}"
+          >
+            ${hasWorkoutInProgress ? "Valider et remplacer" : "Valider ce programme"}
+          </button>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
 function renderPwaUpdateBanner() {
   if (!pwaUpdateReady || pwaUpdateDismissed) return "";
 
@@ -2491,7 +2609,19 @@ function resetProgram() {
 function setProgramPlannerDays(days) {
   if (![3, 4, 5, 6].includes(Number(days))) return;
   state.programPlannerDays = Number(days);
+  state.programTemplatePreviewId = "";
   saveState();
+  renderApp();
+}
+
+function openProgramTemplatePreview(templateId) {
+  if (!getProgramTemplateById(templateId)) return;
+  state.programTemplatePreviewId = templateId;
+  renderApp();
+}
+
+function closeProgramTemplatePreview() {
+  state.programTemplatePreviewId = "";
   renderApp();
 }
 
@@ -2501,16 +2631,16 @@ function applyProgramTemplate(templateId) {
 
   const hasWorkoutInProgress =
     state.pendingSession.length > 0 || state.timer.active || state.workoutFinished;
-  const confirmLabel = hasWorkoutInProgress
-    ? "Appliquer ce programme et effacer la seance en cours ?"
-    : `Appliquer ${template.title} sur ${template.days.length} jours ?`;
-
-  if (!window.confirm(confirmLabel)) {
+  if (
+    hasWorkoutInProgress &&
+    !window.confirm("Appliquer ce programme et effacer la seance en cours ?")
+  ) {
     return;
   }
 
   state.program = createProgramTemplate(templateId);
   state.programPlannerDays = template.days.length;
+  state.programTemplatePreviewId = "";
   state.day = Object.keys(state.program)[0] || "Push";
   state.programEditorDay = state.day;
   state.pendingSession = [];
@@ -4979,8 +5109,8 @@ function renderProgramPlanner() {
                 ${template.days.map((day) => `<span class="template-card__chip">${day}</span>`).join("")}
               </div>
 
-              <button class="button ${template.split === "Recommande" ? "button--primary" : "button--ghost"}" data-action="apply-program-template" data-template-id="${template.id}">
-                Utiliser ${template.title}
+              <button class="button ${template.split === "Recommande" ? "button--primary" : "button--ghost"}" data-action="open-program-template-preview" data-template-id="${template.id}">
+                Voir les exos
               </button>
             </article>
           `)
@@ -5228,6 +5358,7 @@ function renderApp() {
 
       ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
       ${renderRestAlertOverlay()}
+      ${renderProgramTemplatePreviewOverlay()}
       ${renderHistoryEditorOverlay()}
     </div>
   `;
@@ -5367,6 +5498,14 @@ function bindEvents() {
 
       if (action === "apply-program-template") {
         applyProgramTemplate(button.dataset.templateId);
+      }
+
+      if (action === "open-program-template-preview") {
+        openProgramTemplatePreview(button.dataset.templateId);
+      }
+
+      if (action === "close-program-template-preview") {
+        closeProgramTemplatePreview();
       }
 
       if (action === "toggle-rest-sound") {
