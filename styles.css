@@ -1429,12 +1429,27 @@ button {
 }
 
 .template-preview-sheet {
-  max-height: calc(100vh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-bottom));
+  overflow: hidden;
 }
 
 .template-preview-sheet .sheet-card__body {
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding-right: 4px;
+  padding-bottom: 6px;
+}
+
+.template-preview-sheet .sheet-card__actions {
+  position: relative;
+  z-index: 1;
+  padding-top: 6px;
+  background: linear-gradient(180deg, rgba(10, 14, 12, 0), rgba(10, 14, 12, 0.98) 24%);
 }
 
 .template-preview {
@@ -2668,7 +2683,7 @@ button {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 16px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   background: rgba(3, 5, 4, 0.66);
   backdrop-filter: blur(14px);
 }
