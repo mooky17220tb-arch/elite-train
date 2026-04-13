@@ -270,6 +270,57 @@ function getActivationPreset(day) {
   return presets[themeKey] || presets.Push;
 }
 
+function getActivationPresetsForDay(day) {
+  const value = String(day || "").toLowerCase();
+
+  if (value.includes("arm") || value.includes("bras")) {
+    return [
+      {
+        exercise: "Curl poulie",
+        kind: "isolation",
+        targetLabel: "15",
+        minReps: 15,
+        maxReps: 15,
+        rest: 45,
+        defaultLoad: null,
+        loadLabel: "leger",
+      },
+      {
+        exercise: "Triceps poulie",
+        kind: "isolation",
+        targetLabel: "15",
+        minReps: 15,
+        maxReps: 15,
+        rest: 45,
+        defaultLoad: 20,
+        loadLabel: "20 kg",
+      },
+      {
+        exercise: "Curl poulie",
+        kind: "isolation",
+        targetLabel: "15",
+        minReps: 15,
+        maxReps: 15,
+        rest: 45,
+        defaultLoad: null,
+        loadLabel: "leger",
+      },
+      {
+        exercise: "Triceps bras",
+        kind: "isolation",
+        targetLabel: "15",
+        minReps: 15,
+        maxReps: 15,
+        rest: 45,
+        defaultLoad: null,
+        loadLabel: "modere",
+      },
+    ];
+  }
+
+  return Array.from({ length: 4 }, () => getActivationPreset(day));
+}
+
 function isActivationEntry(entry) {
   return String(entry?.series || "").toLowerCase().includes("activation");
 }
@@ -278,10 +329,11 @@ function ensureActivationSeriesForDay(day, entries = []) {
   const activationEntries = entries.filter((entry) => isActivationEntry(entry));
   const otherEntries = entries.filter((entry) => !isActivationEntry(entry));
   const nextActivationEntries = [...activationEntries];
+  const activationPresets = getActivationPresetsForDay(day);
 
   while (nextActivationEntries.length < 4) {
     nextActivationEntries.push({
-      ...getActivationPreset(day),
+      ...(activationPresets[nextActivationEntries.length] || getActivationPreset(day)),
       series: `Activation ${nextActivationEntries.length + 1}`,
     });
   }
@@ -878,13 +930,11 @@ function buildLegsB() {
 
 function buildArmsDay() {
   return [
-    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
-    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
-    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
     ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
-    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Curl poulie", "isolation", 3, 12, 12, null, "leger"),
+    ...createStraightSets("Curl bras", "isolation", 2, 12, 12, null, "modere"),
     ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
-    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 12, null, "modere"),
   ];
 }
 
@@ -957,6 +1007,262 @@ function buildShouldersArmsB() {
   ];
 }
 
+function buildFullBodyPrimeA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Souleve de terre roumain", "barbell", 3, 8, 10, 70, "70 kg"),
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 12, 90, "90 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 2, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildFullBodyPrimeB() {
+  return [
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 8, 12, 45, "45 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15, null, "leger"),
+    ...createStraightSets("Mollets", "isolation", 3, 12, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildFullBodyPrimeC() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 8, 12, 50, "50 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 3, 8, 12, 60, "60 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 20, 6, "6 kg"),
+    ...createStraightSets("Curl bras", "isolation", 2, 10, 12, null, "modere"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 10, 12, null, "modere"),
+  ];
+}
+
+function buildFullBodyPrimeD() {
+  return [
+    ...createStraightSets("Presse poitrine", "machine", 3, 8, 10, 55, "55 kg"),
+    ...createStraightSets("Tirage vertical prise neutre", "machine", 3, 8, 10, 56, "56 kg"),
+    ...createStraightSets("Souleve de terre roumain", "barbell", 3, 8, 10, 70, "70 kg"),
+    ...createStraightSets("Leg extension", "machine", 2, 12, 15, 40, "40 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 2, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildUpperPrimeA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 8, 12, 45, "45 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildUpperPrimeB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 8, 12, 50, "50 kg"),
+    ...createStraightSets("Presse poitrine", "machine", 3, 8, 10, 55, "55 kg"),
+    ...createStraightSets("Rowing chest support", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 20, 6, "6 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15, null, "leger"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 15, null, "modere"),
+  ];
+}
+
+function buildUpperPrimeC() {
+  return [
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Tirage vertical prise neutre", "machine", 3, 8, 10, 56, "56 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Curl marteau", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 12, 15, 25, "25 kg"),
+  ];
+}
+
+function buildLowerPrimeA() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 4, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Souleve de terre roumain", "barbell", 3, 8, 10, 70, "70 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 12, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLowerPrimeB() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 8, 12, 60, "60 kg"),
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 12, 90, "90 kg"),
+    ...createStraightSets("Leg extension", "machine", 2, 12, 15, 40, "40 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 12, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLowerPrimeC() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Souleve de terre roumain", "barbell", 3, 8, 10, 70, "70 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 15, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildPushPrimeA() {
+  return [
+    ...createTopBackoffSets("Developpe couche", "barbell", 6, 8, 65, "65 kg", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Presse poitrine", "machine", 2, 10, 12, 55, "55 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildPushPrimeB() {
+  return [
+    ...createTopBackoffSets("Incline halteres", "dumbbell", 6, 10, 30, "30 kg", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 15, null, "modere"),
+  ];
+}
+
+function buildPullPrimeA() {
+  return [
+    ...createTopBackoffSets("Tirage vertical", "machine", 6, 10, 62, "62 kg", 3, 10, 12, 56, "56 kg"),
+    ...createStraightSets("Rowing chest support", "machine", 3, 8, 12, 45, "45 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 12, 15, 20, "20 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+  ];
+}
+
+function buildPullPrimeB() {
+  return [
+    ...createStraightSets("Tirage horizontal", "machine", 3, 8, 12, 50, "50 kg"),
+    ...createStraightSets("Tirage vertical prise neutre", "machine", 3, 8, 10, 56, "56 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 20, 6, "6 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 3, 12, 15, null, "leger"),
+  ];
+}
+
+function buildLegsPrimeA() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 4, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Souleve de terre roumain", "barbell", 3, 8, 10, 70, "70 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 12, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLegsPrimeB() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 8, 12, 60, "60 kg"),
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 12, 90, "90 kg"),
+    ...createStraightSets("Leg extension", "machine", 2, 12, 15, 40, "40 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 12, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildArmsPrimeDay() {
+  return [
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 3, 12, 15, null, "leger"),
+    ...createStraightSets("Curl marteau", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+    ...createStraightSets("Extension triceps haltere", "dumbbell", 2, 10, 12, 16, "16 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 15, null, "modere"),
+  ];
+}
+
+function buildChestPrimeDay() {
+  return [
+    ...createTopBackoffSets("Developpe couche", "barbell", 6, 8, 65, "65 kg", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Presse poitrine", "machine", 3, 8, 10, 55, "55 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildBackPrimeDay() {
+  return [
+    ...createTopBackoffSets("Tirage vertical", "machine", 6, 10, 62, "62 kg", 3, 10, 12, 56, "56 kg"),
+    ...createStraightSets("Rowing chest support", "machine", 3, 8, 12, 45, "45 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 12, 15, 20, "20 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+  ];
+}
+
+function buildShouldersPrimeDay() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 4, 15, 20, 6, "6 kg"),
+    ...createStraightSets("Face pull", "isolation", 3, 12, 15, null, "modere"),
+  ];
+}
+
+function buildChestBackPrimeA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 12, 15, 20, "20 kg"),
+  ];
+}
+
+function buildChestBackPrimeB() {
+  return [
+    ...createStraightSets("Presse poitrine", "machine", 3, 8, 10, 55, "55 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 8, 12, 50, "50 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 10, 28, "28 kg"),
+    ...createStraightSets("Rowing chest support", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Tirage vertical prise neutre", "machine", 2, 8, 10, 56, "56 kg"),
+  ];
+}
+
+function buildShouldersArmsPrimeA() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 20, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildShouldersArmsPrimeB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Face pull", "isolation", 3, 12, 15, null, "modere"),
+    ...createStraightSets("Curl poulie", "isolation", 3, 12, 15, null, "leger"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 15, null, "modere"),
+  ];
+}
+
 function getProgramPlannerOptions(days = 4) {
   return {
     3: [
@@ -1017,14 +1323,14 @@ function getProgramPlannerOptions(days = 4) {
         id: "ppl-upper-arms-5",
         title: "PPL + Upper + Arms",
         split: "Alternative",
-        why: "Tres bien si tu veux un rendu plus bodybuilding avec une vraie seance bras / delts.",
+        why: "Tres bien si tu veux un rendu plus bodybuilding avec une vraie seance bras en fin de semaine.",
         days: ["Push", "Pull", "Legs", "Upper", "Arms"],
       },
       {
         id: "bro-split-5",
         title: "Bro Split",
         split: "Alternative",
-        why: "Le classique bodybuilding, plus fun si tu aimes un gros focus par groupe.",
+        why: "Le classique bodybuilding, plus fun si tu aimes un gros focus par groupe, mais moins fort sur la frequence.",
         days: ["Chest", "Back", "Legs", "Shoulders", "Arms"],
       },
     ],
@@ -1040,7 +1346,7 @@ function getProgramPlannerOptions(days = 4) {
         id: "arnold-6",
         title: "Arnold Split",
         split: "Alternative",
-        why: "Un rendu plus bodybuilding avec un gros focus pecs / dos puis epaules / bras.",
+        why: "Tres bon si tu aimes le style bodybuilding, avec plus de focus local qu'un PPL x2.",
         days: ["Chest Back A", "Shoulders Arms A", "Legs A", "Chest Back B", "Shoulders Arms B", "Legs B"],
       },
       {
@@ -1057,14 +1363,14 @@ function getProgramPlannerOptions(days = 4) {
 function createProgramTemplate(templateId) {
   const templates = {
     "full-body-3": {
-      "Full A": buildFullBodyA(),
-      "Full B": buildFullBodyB(),
-      "Full C": buildFullBodyC(),
+      "Full A": buildFullBodyPrimeA(),
+      "Full B": buildFullBodyPrimeB(),
+      "Full C": buildFullBodyPrimeC(),
     },
     "upper-lower-full-3": {
-      Upper: buildUpperA(),
-      Lower: buildLowerA(),
-      Full: buildFullBodyC(),
+      Upper: buildUpperPrimeA(),
+      Lower: buildLowerPrimeA(),
+      Full: buildFullBodyPrimeC(),
     },
     "ppl-3": {
       Push: buildPushA(),
@@ -1072,16 +1378,16 @@ function createProgramTemplate(templateId) {
       Legs: buildLegsA(),
     },
     "upper-lower-4": {
-      "Upper A": buildUpperA(),
-      "Lower A": buildLowerA(),
-      "Upper B": buildUpperB(),
-      "Lower B": buildLowerB(),
+      "Upper A": buildUpperPrimeA(),
+      "Lower A": buildLowerPrimeA(),
+      "Upper B": buildUpperPrimeB(),
+      "Lower B": buildLowerPrimeB(),
     },
     "full-body-4": {
-      "Full A": buildFullBodyA(),
-      "Full B": buildFullBodyB(),
-      "Full C": buildFullBodyC(),
-      "Full D": buildFullBodyD(),
+      "Full A": buildFullBodyPrimeA(),
+      "Full B": buildFullBodyPrimeB(),
+      "Full C": buildFullBodyPrimeC(),
+      "Full D": buildFullBodyPrimeD(),
     },
     "ppl-upper-4": {
       Push: buildPushA(),
@@ -1090,49 +1396,49 @@ function createProgramTemplate(templateId) {
       Upper: buildUpperB(),
     },
     "ppl-upper-lower-5": {
-      Push: buildPushA(),
-      Pull: buildPullA(),
-      Legs: buildLegsA(),
-      Upper: buildUpperB(),
-      Lower: buildLowerB(),
+      Push: buildPushPrimeA(),
+      Pull: buildPullPrimeA(),
+      Legs: buildLegsPrimeA(),
+      Upper: buildUpperPrimeB(),
+      Lower: buildLowerPrimeB(),
     },
     "ppl-upper-arms-5": {
-      Push: buildPushA(),
-      Pull: buildPullA(),
-      Legs: buildLegsA(),
-      Upper: buildUpperA(),
-      Arms: buildArmsDay(),
+      Push: buildPushPrimeA(),
+      Pull: buildPullPrimeA(),
+      Legs: buildLegsPrimeA(),
+      Upper: buildUpperPrimeA(),
+      Arms: buildArmsPrimeDay(),
     },
     "bro-split-5": {
-      Chest: buildChestDay(),
-      Back: buildBackDay(),
-      Legs: buildLegsA(),
-      Shoulders: buildShouldersDay(),
-      Arms: buildArmsDay(),
+      Chest: buildChestPrimeDay(),
+      Back: buildBackPrimeDay(),
+      Legs: buildLegsPrimeA(),
+      Shoulders: buildShouldersPrimeDay(),
+      Arms: buildArmsPrimeDay(),
     },
     "ppl-x2-6": {
-      "Push A": buildPushA(),
-      "Pull A": buildPullA(),
-      "Legs A": buildLegsA(),
-      "Push B": buildPushB(),
-      "Pull B": buildPullB(),
-      "Legs B": buildLegsB(),
+      "Push A": buildPushPrimeA(),
+      "Pull A": buildPullPrimeA(),
+      "Legs A": buildLegsPrimeA(),
+      "Push B": buildPushPrimeB(),
+      "Pull B": buildPullPrimeB(),
+      "Legs B": buildLegsPrimeB(),
     },
     "arnold-6": {
-      "Chest Back A": buildChestBackA(),
-      "Shoulders Arms A": buildShouldersArmsA(),
-      "Legs A": buildLegsA(),
-      "Chest Back B": buildChestBackB(),
-      "Shoulders Arms B": buildShouldersArmsB(),
-      "Legs B": buildLegsB(),
+      "Chest Back A": buildChestBackPrimeA(),
+      "Shoulders Arms A": buildShouldersArmsPrimeA(),
+      "Legs A": buildLegsPrimeA(),
+      "Chest Back B": buildChestBackPrimeB(),
+      "Shoulders Arms B": buildShouldersArmsPrimeB(),
+      "Legs B": buildLegsPrimeB(),
     },
     "upper-lower-x3-6": {
-      "Upper A": buildUpperA(),
-      "Lower A": buildLowerA(),
-      "Upper B": buildUpperB(),
-      "Lower B": buildLowerB(),
-      "Upper C": buildUpperA(),
-      "Lower C": buildLowerB(),
+      "Upper A": buildUpperPrimeA(),
+      "Lower A": buildLowerPrimeA(),
+      "Upper B": buildUpperPrimeB(),
+      "Lower B": buildLowerPrimeB(),
+      "Upper C": buildUpperPrimeC(),
+      "Lower C": buildLowerPrimeC(),
     },
   };
 
