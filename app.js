@@ -6648,6 +6648,7 @@ function renderApp() {
 
       ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
       ${renderRestAlertOverlay()}
+      ${renderProgramTemplatePreviewOverlay()}
       ${renderHistoryEditorOverlay()}
     </div>
   `;
