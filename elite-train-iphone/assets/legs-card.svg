@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="148" y1="74" x2="1460" y2="868" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E1A0F"/>
+      <stop offset=".56" stop-color="#100C08"/>
+      <stop offset="1" stop-color="#040605"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1154 212) rotate(90) scale(322 340)">
+      <stop stop-color="#F8A93E" stop-opacity=".58"/>
+      <stop offset="1" stop-color="#F8A93E" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(442 254) rotate(90) scale(272 272)">
+      <stop stop-color="#18C77F" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#18C77F" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="muscle" x1="720" y1="346" x2="924" y2="828" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFC469"/>
+      <stop offset="1" stop-color="#F18620"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" rx="48" fill="url(#bg)"/>
+  <rect x="64" y="64" width="1472" height="772" rx="36" stroke="rgba(255,255,255,.08)"/>
+  <circle cx="1152" cy="206" r="320" fill="url(#glowA)"/>
+  <circle cx="442" cy="254" r="274" fill="url(#glowB)"/>
+  <g opacity=".16" stroke="#FFE1A6" stroke-width="2">
+    <path d="M84 690C306 670 484 610 700 468"/>
+    <path d="M106 768C350 748 530 676 764 508"/>
+    <path d="M1208 110C1314 170 1410 264 1498 410"/>
+  </g>
+  <g opacity=".24">
+    <path d="M1150 514H1368V736H1150V514Z" stroke="#FFBE5A" stroke-width="18"/>
+    <path d="M1210 574H1308V676H1210V574Z" stroke="#FFBE5A" stroke-opacity=".35" stroke-width="10"/>
+  </g>
+  <g transform="translate(0 4)">
+    <circle cx="800" cy="156" r="60" fill="#111917"/>
+    <rect x="760" y="206" width="80" height="56" rx="28" fill="#111917"/>
+    <path d="M704 254C728 234 760 224 800 224C840 224 872 234 896 254L932 392L904 498L864 544H736L696 498L668 392L704 254Z" fill="#111917"/>
+    <path d="M706 542H782L760 688L708 844H632L676 676L706 542Z" fill="#111917"/>
+    <path d="M818 542H894L924 676L968 844H892L840 688L818 542Z" fill="#111917"/>
+    <path d="M654 286L588 318C540 342 506 386 494 440L466 566C458 606 470 648 500 676L560 732L614 650L596 604L620 456L654 286Z" fill="#111917"/>
+    <path d="M946 286L1012 318C1060 342 1094 386 1106 440L1134 566C1142 606 1130 648 1100 676L1040 732L986 650L1004 604L980 456L946 286Z" fill="#111917"/>
+    <path d="M720 542H788L770 676L726 844H670L700 684L720 542Z" fill="url(#muscle)"/>
+    <path d="M812 542H880L900 684L930 844H874L830 676L812 542Z" fill="url(#muscle)"/>
+    <path d="M674 492H754L786 548L738 642H670L642 556L674 492Z" fill="url(#muscle)"/>
+    <path d="M846 492H926L958 556L930 642H862L814 548L846 492Z" fill="url(#muscle)"/>
+    <path d="M700 256C726 238 760 230 800 230C840 230 874 238 900 256L874 418H726L700 256Z" fill="#FFD48B" fill-opacity=".88"/>
+    <path d="M736 844H680L668 882H726L736 844Z" fill="#FFD48B"/>
+    <path d="M920 844H864L874 882H932L920 844Z" fill="#FFD48B"/>
+  </g>
+</svg>

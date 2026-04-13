@@ -11,17 +11,123 @@
       name="description"
       content="Application mobile de suivi musculation avec progression, historique, timer de repos et mode iPhone."
     />
-    <meta name="theme-color" content="#08110d" />
+    <meta name="theme-color" content="#070b09" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Elite Train" />
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
-    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      html,
+      body,
+      #app {
+        margin: 0;
+        min-height: 100%;
+        background: #070908;
+        color: #f5f7f6;
+      }
+
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        background:
+          radial-gradient(circle at top, rgba(22, 196, 127, 0.16), transparent 32%),
+          linear-gradient(180deg, #08110d 0%, #070908 50%, #050605 100%);
+        transition: opacity 280ms ease, visibility 280ms ease;
+      }
+
+      #boot-splash.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .boot-splash__card {
+        width: min(100%, 420px);
+        padding: 28px 24px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 32px;
+        background: rgba(9, 12, 11, 0.72);
+        box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(18px);
+        text-align: center;
+      }
+
+      .boot-splash__mark {
+        width: 112px;
+        height: 112px;
+        margin: 0 auto 18px;
+        border-radius: 30px;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.2), transparent 36%),
+          linear-gradient(135deg, #0e1914 0%, #07100c 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.08),
+          0 18px 40px rgba(0, 0, 0, 0.24);
+        color: #f4f8f6;
+        font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", sans-serif;
+        font-size: 42px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+      }
+
+      .boot-splash__title {
+        margin: 0;
+        font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", sans-serif;
+        font-size: 34px;
+        line-height: 0.94;
+        font-weight: 900;
+        letter-spacing: -0.06em;
+      }
+
+      .boot-splash__title span {
+        color: #16c47f;
+      }
+
+      .boot-splash__text {
+        margin: 10px 0 0;
+        color: rgba(245, 247, 246, 0.72);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+    </style>
+    <script>
+      window.__ELITE_TRAIN_VERSION__ = "v42";
+      (async () => {
+        try {
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys
+                .filter(
+                  (key) =>
+                    key.startsWith("elite-train-iphone-cache-v") &&
+                    key !== "elite-train-iphone-cache-v42"
+                )
+                .map((key) => caches.delete(key))
+            );
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <link rel="manifest" href="./manifest.webmanifest?v=42" />
+    <link rel="icon" href="./icon.svg?v=42" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg?v=42" />
+    <link rel="stylesheet" href="./styles.css?v=42" />
   </head>
   <body>
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-splash__card">
+        <div class="boot-splash__mark">ET</div>
+        <h1 class="boot-splash__title">ELITE<span>TRAIN</span></h1>
+        <p class="boot-splash__text">Premium training companion</p>
+      </div>
+    </div>
     <div id="app"></div>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=38"></script>
   </body>
 </html>

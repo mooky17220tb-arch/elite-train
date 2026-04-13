@@ -1,11 +1,16 @@
-const CACHE_NAME = "elite-train-iphone-cache-v1";
+const CACHE_NAME = "elite-train-iphone-cache-v42";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icon.svg",
+  "./index.html?v=42",
+  "./styles.css?v=42",
+  "./app.js?v=42",
+  "./manifest.webmanifest?v=42",
+  "./icon.svg?v=42",
+  "./assets/push-card.svg",
+  "./assets/pull-card.svg",
+  "./assets/legs-card.svg",
+  "./assets/upper-card.svg",
 ];
 
 self.addEventListener("install", (event) => {
@@ -22,15 +27,48 @@ self.addEventListener("activate", (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+
+  const accept = event.request.headers.get("accept") || "";
+  const isDocumentRequest =
+    event.request.mode === "navigate" || accept.includes("text/html");
+
+  if (isDocumentRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => response)
+        .catch(
+          () =>
+            caches.match(event.request).then((cached) => {
+              if (cached) return cached;
+              return (
+                caches.match("./index.html?v=42") ||
+                caches.match("./index.html") ||
+                caches.match("./")
+              );
+            })
+        )
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).catch(() => caches.match("./index.html"));
+      return fetch(event.request).catch(
+        () => caches.match("./index.html?v=42") || caches.match("./index.html")
+      );
     })
   );
 });

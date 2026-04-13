@@ -1,4 +1,7 @@
 const STORAGE_KEY = "elite-train-iphone-v1";
+const STORAGE_BACKUP_KEY = `${STORAGE_KEY}-backup`;
+const STORAGE_SCHEMA_VERSION = 2;
+const CURRENT_REST_PROFILE_VERSION = 2;
 
 const PROGRAM = {
   Push: [
@@ -90,19 +93,1055 @@ const state = {
   screen: "dashboard",
   day: "Push",
   currentIndex: 0,
+  program: createProgramCopy(),
+  programEditorDay: "Push",
+  programPlannerDays: 4,
+  cycle: createDefaultCycle(),
   exerciseData: {},
   history: [],
   timer: { seconds: 0, active: false },
+  restAlertVisible: false,
+  restSoundEnabled: true,
+  restVibrationEnabled: true,
   rpe: 8,
   repsInput: "",
   showPlates: false,
+  focusWorkoutMode: false,
   workoutFinished: false,
+  pendingAdvance: null,
+  timerEndsAt: 0,
+  workoutStartedAt: "",
   selectedChartKey: "",
   pendingSession: [],
   installHintDismissed: false,
+  onboardingCompleted: false,
+  onboardingStep: 0,
+  historyEditor: null,
+  storageMeta: {
+    lastSavedAt: "",
+    backupAvailable: false,
+    recoveredFromBackup: false,
+    saveError: "",
+  },
 };
 
 const root = document.getElementById("app");
+let restAudioContext = null;
+let restAudioElement = null;
+let restAudioUrl = "";
+let restAudioUnlocked = false;
+let scheduledRestToneNodes = [];
+let scheduledRestSoundTimeoutId = null;
+let hasScheduledRestSound = false;
+let pwaRegistration = null;
+let pwaUpdateReady = false;
+let pwaUpdateDismissed = false;
+let pwaReloadOnControllerChange = false;
+
+function createProgramCopy() {
+  return applyRecommendedRestProfile(
+    ensureActivationSeriesForProgram(JSON.parse(JSON.stringify(PROGRAM)))
+  );
+}
+
+function createDefaultCycle() {
+  return {
+    goal: "hypertrophy",
+    length: 6,
+    week: 1,
+    startedAt: new Date().toISOString(),
+  };
+}
+
+function matchesExerciseKeyword(exercise, keywords = []) {
+  const value = String(exercise || "").toLowerCase();
+  return keywords.some((keyword) => value.includes(keyword));
+}
+
+function getRecommendedRest(entry = {}) {
+  const exercise = String(entry.exercise || "").toLowerCase();
+  const series = String(entry.series || "").toLowerCase();
+  const kind = entry.kind || "isolation";
+  const maxReps = sanitizePositiveInteger(entry.maxReps, 12, 1);
+  const isActivation = series.includes("activation");
+  const isTopSet = series.includes("top set");
+  const isBackoff = series.includes("back-off") || series.includes("backoff");
+  const isLowerBody = matchesExerciseKeyword(exercise, [
+    "squat",
+    "fentes",
+    "hip thrust",
+    "leg",
+    "mollets",
+  ]);
+  const isShoulderIsolation = matchesExerciseKeyword(exercise, [
+    "laterales",
+    "oiseau",
+  ]);
+
+  if (isActivation) return 45;
+
+  if (kind === "barbell") {
+    if (isTopSet) return 180;
+    if (isLowerBody) return 150;
+    return maxReps <= 8 || isBackoff ? 150 : 120;
+  }
+
+  if (kind === "machine") {
+    if (isTopSet) return 120;
+    if (isLowerBody) return 75;
+    return maxReps <= 10 ? 105 : 90;
+  }
+
+  if (kind === "dumbbell") {
+    if (isLowerBody) return 120;
+    if (isTopSet) return 120;
+    return maxReps <= 10 ? 105 : 90;
+  }
+
+  if (kind === "isolation") {
+    if (isShoulderIsolation || exercise.includes("mollets") || maxReps >= 15) {
+      return 45;
+    }
+    return 60;
+  }
+
+  return 75;
+}
+
+function applyRecommendedRestProfile(program = {}) {
+  const nextProgram = {};
+
+  getProgramDayKeys(program).forEach((day) => {
+    nextProgram[day] = (program[day] || []).map((entry) => ({
+      ...entry,
+      rest: getRecommendedRest(entry),
+    }));
+  });
+
+  return nextProgram;
+}
+
+function getActivationPreset(day) {
+  const themeKey = resolveDayThemeKey(day);
+  const presets = {
+    Push: {
+      exercise: "Ecarte poulie",
+      kind: "isolation",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 45,
+      defaultLoad: 12,
+      loadLabel: "12-15 kg",
+    },
+    Pull: {
+      exercise: "Pullover poulie",
+      kind: "isolation",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 45,
+      defaultLoad: 20,
+      loadLabel: "20 kg",
+    },
+    Legs: {
+      exercise: "Leg curl",
+      kind: "machine",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 45,
+      defaultLoad: 25,
+      loadLabel: "25 kg",
+    },
+    Upper: {
+      exercise: "Ecarte poulie",
+      kind: "isolation",
+      targetLabel: "15",
+      minReps: 15,
+      maxReps: 15,
+      rest: 45,
+      defaultLoad: 12,
+      loadLabel: "12-15 kg",
+    },
+  };
+
+  return presets[themeKey] || presets.Push;
+}
+
+function isActivationEntry(entry) {
+  return String(entry?.series || "").toLowerCase().includes("activation");
+}
+
+function ensureActivationSeriesForDay(day, entries = []) {
+  const activationEntries = entries.filter((entry) => isActivationEntry(entry));
+  const otherEntries = entries.filter((entry) => !isActivationEntry(entry));
+  const nextActivationEntries = [...activationEntries];
+
+  while (nextActivationEntries.length < 4) {
+    nextActivationEntries.push({
+      ...getActivationPreset(day),
+      series: `Activation ${nextActivationEntries.length + 1}`,
+    });
+  }
+
+  return [...nextActivationEntries, ...otherEntries];
+}
+
+function ensureActivationSeriesForProgram(program = {}) {
+  const nextProgram = {};
+
+  getProgramDayKeys(program).forEach((day) => {
+    nextProgram[day] = ensureActivationSeriesForDay(day, Array.isArray(program?.[day]) ? program[day] : []);
+  });
+
+  return nextProgram;
+}
+
+function sanitizeCycle(cycle = {}) {
+  const allowedGoals = ["hypertrophy", "strength"];
+  const allowedLengths = [4, 6, 8];
+  const goal = allowedGoals.includes(cycle?.goal) ? cycle.goal : "hypertrophy";
+  const length = allowedLengths.includes(Number(cycle?.length)) ? Number(cycle.length) : 6;
+  const week = Math.min(length, sanitizePositiveInteger(cycle?.week, 1, 1));
+  const startedAt =
+    typeof cycle?.startedAt === "string" && cycle.startedAt
+      ? cycle.startedAt
+      : new Date().toISOString();
+
+  return {
+    goal,
+    length,
+    week,
+    startedAt,
+  };
+}
+
+function getProgramDays() {
+  return Object.keys(state.program || PROGRAM);
+}
+
+function getProgramDayKeys(program = {}) {
+  const keys = Object.keys(program || {});
+  return keys.length ? keys : Object.keys(PROGRAM);
+}
+
+function resolveDayThemeKey(day) {
+  const value = String(day || "").toLowerCase();
+
+  if (
+    value.includes("push") ||
+    value.includes("chest") ||
+    value.includes("pec")
+  ) {
+    return "Push";
+  }
+
+  if (
+    value.includes("pull") ||
+    value.includes("back") ||
+    value.includes("dos")
+  ) {
+    return "Pull";
+  }
+
+  if (
+    value.includes("leg") ||
+    value.includes("lower") ||
+    value.includes("jambe") ||
+    value.includes("quad") ||
+    value.includes("glute")
+  ) {
+    return "Legs";
+  }
+
+  if (
+    value.includes("upper") ||
+    value.includes("full") ||
+    value.includes("arm") ||
+    value.includes("bras") ||
+    value.includes("shoulder") ||
+    value.includes("epaule") ||
+    value.includes("delts") ||
+    value.includes("arnold")
+  ) {
+    return "Upper";
+  }
+
+  return "Upper";
+}
+
+function sanitizePositiveInteger(value, fallback, minimum = 1) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, parsed);
+}
+
+function sanitizePendingAdvance(value) {
+  if (!value || typeof value !== "object") return null;
+
+  return {
+    nextIndex: sanitizePositiveInteger(value.nextIndex, 0, 0),
+    shouldFinish: Boolean(value.shouldFinish),
+  };
+}
+
+function sanitizeTimestamp(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function sanitizeLoadNumber(value, fallback = null) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed * 100) / 100);
+}
+
+function sanitizePlainText(value, fallback) {
+  const text = String(value ?? "")
+    .replace(/[<>"]/g, "")
+    .trim();
+  return text || fallback;
+}
+
+function formatTargetLabelFromRange(minReps, maxReps) {
+  return minReps === maxReps ? `${minReps}` : `${minReps}-${maxReps}`;
+}
+
+function getRestAlertCopy() {
+  const upcoming = state.workoutFinished ? null : getActiveExercise();
+  return {
+    title: "Repos termine",
+    text: state.workoutFinished ? "Tu peux terminer ta seance." : upcoming
+      ? `Tu peux repartir sur ${upcoming.exercise} · ${upcoming.series}.`
+      : "Tu peux reprendre ton entrainement.",
+  };
+}
+
+function createRestAudioUrl() {
+  const sampleRate = 22050;
+  const duration = 0.52;
+  const frameCount = Math.floor(sampleRate * duration);
+  const pcmData = new Int16Array(frameCount);
+
+  for (let i = 0; i < frameCount; i += 1) {
+    const time = i / sampleRate;
+    let sample = 0;
+
+    if (time < 0.14) {
+      sample += Math.sin(2 * Math.PI * 880 * time) * 0.52;
+    } else if (time > 0.2 && time < 0.42) {
+      sample += Math.sin(2 * Math.PI * 1174 * time) * 0.6;
+    }
+
+    const fadeIn = Math.min(1, time / 0.012);
+    const fadeOut = Math.min(1, (duration - time) / 0.035);
+    const shaped = sample * fadeIn * fadeOut;
+    pcmData[i] = Math.max(-1, Math.min(1, shaped)) * 32767;
+  }
+
+  const wavBuffer = new ArrayBuffer(44 + pcmData.length * 2);
+  const view = new DataView(wavBuffer);
+  const writeAscii = (offset, text) => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+
+  writeAscii(0, "RIFF");
+  view.setUint32(4, 36 + pcmData.length * 2, true);
+  writeAscii(8, "WAVE");
+  writeAscii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, "data");
+  view.setUint32(40, pcmData.length * 2, true);
+
+  pcmData.forEach((value, index) => {
+    view.setInt16(44 + index * 2, value, true);
+  });
+
+  return URL.createObjectURL(new Blob([wavBuffer], { type: "audio/wav" }));
+}
+
+function ensureRestAudioElement() {
+  if (restAudioElement) return restAudioElement;
+
+  if (!restAudioUrl) {
+    restAudioUrl = createRestAudioUrl();
+  }
+
+  restAudioElement = new Audio(restAudioUrl);
+  restAudioElement.preload = "auto";
+  restAudioElement.playsInline = true;
+  restAudioElement.setAttribute("playsinline", "true");
+  restAudioElement.setAttribute("webkit-playsinline", "true");
+
+  return restAudioElement;
+}
+
+function clearScheduledRestSound() {
+  if (scheduledRestSoundTimeoutId) {
+    window.clearTimeout(scheduledRestSoundTimeoutId);
+    scheduledRestSoundTimeoutId = null;
+  }
+
+  hasScheduledRestSound = false;
+
+  scheduledRestToneNodes.forEach(({ oscillator, gainNode }) => {
+    try {
+      oscillator.onended = null;
+      oscillator.stop();
+    } catch (error) {}
+
+    try {
+      oscillator.disconnect();
+    } catch (error) {}
+
+    try {
+      gainNode.disconnect();
+    } catch (error) {}
+  });
+
+  scheduledRestToneNodes = [];
+}
+
+function scheduleRestSound(secondsFromNow) {
+  clearScheduledRestSound();
+
+  if (!state.restSoundEnabled || secondsFromNow <= 0) {
+    return false;
+  }
+
+  primeAudioEngine();
+  hasScheduledRestSound = false;
+
+  const prewarmDelay = Math.max(0, Math.round((secondsFromNow - 1) * 1000));
+  scheduledRestSoundTimeoutId = window.setTimeout(() => {
+    primeAudioEngine();
+    scheduledRestSoundTimeoutId = null;
+  }, prewarmDelay);
+
+  return true;
+}
+
+function primeAudioEngine() {
+  if (!state.restSoundEnabled) return;
+
+  const audioElement = ensureRestAudioElement();
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (AudioContextClass) {
+    if (!restAudioContext) {
+      restAudioContext = new AudioContextClass();
+    }
+
+    if (restAudioContext.state === "suspended") {
+      restAudioContext.resume().catch(() => {});
+    }
+  }
+
+  if (audioElement && !restAudioUnlocked) {
+    audioElement.volume = 0.001;
+    audioElement.currentTime = 0;
+    audioElement
+      .play()
+      .then(() => {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        audioElement.volume = 1;
+        restAudioUnlocked = true;
+      })
+      .catch(() => {});
+  }
+}
+
+function playRestSound() {
+  if (!state.restSoundEnabled) return;
+
+  primeAudioEngine();
+  const audioElement = ensureRestAudioElement();
+
+  const playSynth = () => {
+    if (!restAudioContext || restAudioContext.state !== "running") return false;
+
+    const now = restAudioContext.currentTime;
+    const notes = [
+      { start: 0, freq: 880, duration: 0.12 },
+      { start: 0.17, freq: 1174, duration: 0.18 },
+    ];
+
+    notes.forEach((note) => {
+      const oscillator = restAudioContext.createOscillator();
+      const gainNode = restAudioContext.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(note.freq, now + note.start);
+      gainNode.gain.setValueAtTime(0.0001, now + note.start);
+      gainNode.gain.exponentialRampToValueAtTime(0.18, now + note.start + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(restAudioContext.destination);
+      oscillator.start(now + note.start);
+      oscillator.stop(now + note.start + note.duration + 0.04);
+    });
+
+    return true;
+  };
+
+  if (audioElement) {
+    audioElement.pause();
+    audioElement.currentTime = 0;
+    audioElement.volume = 1;
+    audioElement.play().catch(() => {
+      if (restAudioContext?.state === "suspended") {
+        restAudioContext.resume().then(() => {
+          playSynth();
+        }).catch(() => {});
+        return;
+      }
+      playSynth();
+    });
+    return;
+  }
+
+  if (restAudioContext?.state === "suspended") {
+    restAudioContext.resume().then(() => {
+      playSynth();
+    }).catch(() => {});
+    return;
+  }
+
+  playSynth();
+}
+
+function vibrateRestAlert() {
+  if (!state.restVibrationEnabled) return;
+  if (!("vibrate" in navigator)) return;
+  navigator.vibrate([180, 70, 180]);
+}
+
+function normalizeProgramEntry(entry, fallback = {}) {
+  const minReps = sanitizePositiveInteger(entry?.minReps, fallback.minReps ?? 10, 1);
+  const maxReps = Math.max(
+    minReps,
+    sanitizePositiveInteger(entry?.maxReps, fallback.maxReps ?? Math.max(minReps, 12), minReps)
+  );
+  const defaultLoad = sanitizeLoadNumber(entry?.defaultLoad, fallback.defaultLoad ?? null);
+  const loadLabel = sanitizePlainText(
+    entry?.loadLabel,
+    fallback.loadLabel || (isNumericLoad(defaultLoad) ? `${defaultLoad} kg` : "Charge libre")
+  );
+
+  return {
+    exercise: sanitizePlainText(entry?.exercise, fallback.exercise || "Nouvel exercice"),
+    kind: ["barbell", "machine", "dumbbell", "isolation"].includes(entry?.kind)
+      ? entry.kind
+      : fallback.kind || "isolation",
+    series: sanitizePlainText(entry?.series, fallback.series || "Serie 1"),
+    targetLabel: formatTargetLabelFromRange(minReps, maxReps),
+    minReps,
+    maxReps,
+    rest: sanitizePositiveInteger(entry?.rest, fallback.rest ?? 60, 0),
+    defaultLoad,
+    loadLabel,
+  };
+}
+
+function sanitizeProgram(program) {
+  const nextProgram = {};
+
+  getProgramDayKeys(program).forEach((day) => {
+    const fallbackEntries = Array.isArray(PROGRAM[day]) ? PROGRAM[day] : Array.isArray(program?.[day]) ? program[day] : [];
+    const sourceEntries = ensureActivationSeriesForDay(
+      day,
+      Array.isArray(program?.[day]) ? program[day] : fallbackEntries
+    );
+    nextProgram[day] = sourceEntries.map((entry, index) =>
+      normalizeProgramEntry(entry, fallbackEntries[index] || fallbackEntries[fallbackEntries.length - 1] || {})
+    );
+  });
+
+  return nextProgram;
+}
+
+function createTemplateEntry(exercise, kind, series, minReps, maxReps, defaultLoad = null, loadLabel = "") {
+  return {
+    exercise,
+    kind,
+    series,
+    minReps,
+    maxReps,
+    defaultLoad,
+    loadLabel: loadLabel || (isNumericLoad(defaultLoad) ? `${defaultLoad} kg` : "Charge libre"),
+  };
+}
+
+function createStraightSets(exercise, kind, count, minReps, maxReps, defaultLoad = null, loadLabel = "", prefix = "Serie") {
+  return Array.from({ length: count }, (_, index) =>
+    createTemplateEntry(exercise, kind, `${prefix} ${index + 1}`, minReps, maxReps, defaultLoad, loadLabel)
+  );
+}
+
+function createTopBackoffSets(
+  exercise,
+  kind,
+  topMin,
+  topMax,
+  topLoad,
+  topLabel,
+  backoffCount,
+  backoffMin,
+  backoffMax,
+  backoffLoad,
+  backoffLabel
+) {
+  return [
+    createTemplateEntry(exercise, kind, "Top Set", topMin, topMax, topLoad, topLabel),
+    ...Array.from({ length: backoffCount }, (_, index) =>
+      createTemplateEntry(
+        exercise,
+        kind,
+        `Back-off ${index + 1}`,
+        backoffMin,
+        backoffMax,
+        backoffLoad,
+        backoffLabel
+      )
+    ),
+  ];
+}
+
+function finalizeTemplateProgram(program) {
+  return applyRecommendedRestProfile(sanitizeProgram(program));
+}
+
+function buildFullBodyA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 10, 12, 35, "35 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildFullBodyB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildFullBodyC() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 2, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 6, "6-7 kg"),
+    ...createStraightSets("Curl bras", "isolation", 2, 12, 12, null, "modere"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildFullBodyD() {
+  return [
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 12, 56, "56 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildUpperA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 6, "6-7 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildUpperB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildLowerA() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 4, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 2, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLowerB() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildPushA() {
+  return [
+    ...createTopBackoffSets("Developpe couche", "barbell", 6, 8, 65, "65 kg", 3, 8, 10, 58, "58 kg"),
+    ...createTopBackoffSets("Incline halteres", "dumbbell", 6, 10, 30, "30 kg", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildPushB() {
+  return [
+    ...createTopBackoffSets("Incline halteres", "dumbbell", 6, 10, 30, "30 kg", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Developpe couche", "barbell", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 12, null, "modere"),
+  ];
+}
+
+function buildPullA() {
+  return [
+    ...createTopBackoffSets("Tirage vertical", "machine", 6, 10, 62, "62 kg", 3, 10, 12, 56, "56 kg"),
+    ...createTopBackoffSets("Rowing haltere", "dumbbell", 8, 8, 36, "36 kg", 3, 10, 12, 32, "32 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 12, 12, 45, "45 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+  ];
+}
+
+function buildPullB() {
+  return [
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 12, 56, "56 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl bras", "isolation", 3, 12, 12, null, "modere"),
+  ];
+}
+
+function buildLegsA() {
+  return [
+    ...createStraightSets("Squat halteres", "dumbbell", 4, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 3, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildLegsB() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12, 60, "60 kg"),
+    ...createStraightSets("Squat halteres", "dumbbell", 3, 8, 12, 30, "30 kg"),
+    ...createStraightSets("Fentes", "dumbbell", 2, 10, 10, 20, "20 kg"),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 12, 35, "35 kg"),
+    ...createStraightSets("Mollets", "isolation", 4, 15, 20, null, "Pdc ou charge"),
+  ];
+}
+
+function buildArmsDay() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 12, null, "leger"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildChestDay() {
+  return [
+    ...createTopBackoffSets("Developpe couche", "barbell", 6, 8, 65, "65 kg", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 3, 12, 15, 15, "15 kg"),
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildBackDay() {
+  return [
+    ...createTopBackoffSets("Tirage vertical", "machine", 6, 10, 62, "62 kg", 3, 10, 12, 56, "56 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 3, 12, 12, 45, "45 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 15, 15, 20, "20 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12, 12, "12 kg"),
+  ];
+}
+
+function buildShouldersDay() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Triceps bras", "isolation", 2, 12, 12, null, "modere"),
+  ];
+}
+
+function buildChestBackA() {
+  return [
+    ...createStraightSets("Developpe couche", "barbell", 3, 6, 8, 60, "60 kg"),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Incline halteres", "dumbbell", 2, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Rowing poulie", "machine", 2, 10, 12, 45, "45 kg"),
+    ...createStraightSets("Ecarte poulie", "isolation", 2, 12, 15, 15, "15 kg"),
+  ];
+}
+
+function buildChestBackB() {
+  return [
+    ...createStraightSets("Incline halteres", "dumbbell", 3, 8, 12, 26, "26 kg"),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12, 50, "50 kg"),
+    ...createStraightSets("Developpe couche", "barbell", 2, 8, 10, 58, "58 kg"),
+    ...createStraightSets("Rowing haltere", "dumbbell", 2, 8, 12, 32, "32 kg"),
+    ...createStraightSets("Pullover poulie", "isolation", 2, 15, 15, 20, "20 kg"),
+  ];
+}
+
+function buildShouldersArmsA() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl incline", "dumbbell", 3, 10, 12, 12, "12 kg"),
+    ...createStraightSets("Triceps poulie", "isolation", 3, 10, 12, 25, "25 kg"),
+  ];
+}
+
+function buildShouldersArmsB() {
+  return [
+    ...createStraightSets("Developpe epaules", "dumbbell", 2, 8, 10, 20, "20 kg"),
+    ...createStraightSets("Elevations laterales", "isolation", 4, 15, 20, 7, "7 kg"),
+    ...createStraightSets("Oiseau", "isolation", 3, 15, 15, 6, "6 kg"),
+    ...createStraightSets("Curl poulie", "isolation", 3, 12, 12, null, "leger"),
+    ...createStraightSets("Triceps bras", "isolation", 3, 12, 12, null, "modere"),
+  ];
+}
+
+function getProgramPlannerOptions(days = 4) {
+  return {
+    3: [
+      {
+        id: "full-body-3",
+        title: "Full Body",
+        split: "Recommande",
+        why: "Le meilleur ratio frequence, recuperation et simplicite sur 3 jours.",
+        days: ["Full A", "Full B", "Full C"],
+      },
+      {
+        id: "upper-lower-full-3",
+        title: "Upper / Lower / Full",
+        split: "Alternative",
+        why: "Tres bon si tu veux un peu plus de focus haut / bas tout en gardant une seance complete.",
+        days: ["Upper", "Lower", "Full"],
+      },
+      {
+        id: "ppl-3",
+        title: "Push Pull Legs",
+        split: "Alternative",
+        why: "Moins optimal que le full body sur 3 jours, mais simple si tu aimes ce style.",
+        days: ["Push", "Pull", "Legs"],
+      },
+    ],
+    4: [
+      {
+        id: "upper-lower-4",
+        title: "Upper / Lower",
+        split: "Recommande",
+        why: "Le split le plus solide et le plus polyvalent sur 4 jours.",
+        days: ["Upper A", "Lower A", "Upper B", "Lower B"],
+      },
+      {
+        id: "full-body-4",
+        title: "Full Body 4x",
+        split: "Alternative",
+        why: "Super si tu veux toucher tout le corps souvent avec des seances plus courtes.",
+        days: ["Full A", "Full B", "Full C", "Full D"],
+      },
+      {
+        id: "ppl-upper-4",
+        title: "PPL + Upper",
+        split: "Alternative",
+        why: "Bon compromis si tu aimes deja Push Pull Legs mais veux un 4e bloc complet.",
+        days: ["Push", "Pull", "Legs", "Upper"],
+      },
+    ],
+    5: [
+      {
+        id: "ppl-upper-lower-5",
+        title: "PPL + Upper / Lower",
+        split: "Recommande",
+        why: "Excellent volume et bonne frequence pour l'hypertrophie sur 5 jours.",
+        days: ["Push", "Pull", "Legs", "Upper", "Lower"],
+      },
+      {
+        id: "ppl-upper-arms-5",
+        title: "PPL + Upper + Arms",
+        split: "Alternative",
+        why: "Tres bien si tu veux un rendu plus bodybuilding avec une vraie seance bras / delts.",
+        days: ["Push", "Pull", "Legs", "Upper", "Arms"],
+      },
+      {
+        id: "bro-split-5",
+        title: "Bro Split",
+        split: "Alternative",
+        why: "Le classique bodybuilding, plus fun si tu aimes un gros focus par groupe.",
+        days: ["Chest", "Back", "Legs", "Shoulders", "Arms"],
+      },
+    ],
+    6: [
+      {
+        id: "ppl-x2-6",
+        title: "Push Pull Legs x2",
+        split: "Recommande",
+        why: "Le meilleur choix si tu recuperes bien et veux beaucoup de volume sur 6 jours.",
+        days: ["Push A", "Pull A", "Legs A", "Push B", "Pull B", "Legs B"],
+      },
+      {
+        id: "arnold-6",
+        title: "Arnold Split",
+        split: "Alternative",
+        why: "Un rendu plus bodybuilding avec un gros focus pecs / dos puis epaules / bras.",
+        days: ["Chest Back A", "Shoulders Arms A", "Legs A", "Chest Back B", "Shoulders Arms B", "Legs B"],
+      },
+      {
+        id: "upper-lower-x3-6",
+        title: "Upper / Lower x3",
+        split: "Alternative",
+        why: "Tres propre pour monter le volume sans perdre la logique haut / bas.",
+        days: ["Upper A", "Lower A", "Upper B", "Lower B", "Upper C", "Lower C"],
+      },
+    ],
+  }[days] || [];
+}
+
+function createProgramTemplate(templateId) {
+  const templates = {
+    "full-body-3": {
+      "Full A": buildFullBodyA(),
+      "Full B": buildFullBodyB(),
+      "Full C": buildFullBodyC(),
+    },
+    "upper-lower-full-3": {
+      Upper: buildUpperA(),
+      Lower: buildLowerA(),
+      Full: buildFullBodyC(),
+    },
+    "ppl-3": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+    },
+    "upper-lower-4": {
+      "Upper A": buildUpperA(),
+      "Lower A": buildLowerA(),
+      "Upper B": buildUpperB(),
+      "Lower B": buildLowerB(),
+    },
+    "full-body-4": {
+      "Full A": buildFullBodyA(),
+      "Full B": buildFullBodyB(),
+      "Full C": buildFullBodyC(),
+      "Full D": buildFullBodyD(),
+    },
+    "ppl-upper-4": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+      Upper: buildUpperB(),
+    },
+    "ppl-upper-lower-5": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+      Upper: buildUpperB(),
+      Lower: buildLowerB(),
+    },
+    "ppl-upper-arms-5": {
+      Push: buildPushA(),
+      Pull: buildPullA(),
+      Legs: buildLegsA(),
+      Upper: buildUpperA(),
+      Arms: buildArmsDay(),
+    },
+    "bro-split-5": {
+      Chest: buildChestDay(),
+      Back: buildBackDay(),
+      Legs: buildLegsA(),
+      Shoulders: buildShouldersDay(),
+      Arms: buildArmsDay(),
+    },
+    "ppl-x2-6": {
+      "Push A": buildPushA(),
+      "Pull A": buildPullA(),
+      "Legs A": buildLegsA(),
+      "Push B": buildPushB(),
+      "Pull B": buildPullB(),
+      "Legs B": buildLegsB(),
+    },
+    "arnold-6": {
+      "Chest Back A": buildChestBackA(),
+      "Shoulders Arms A": buildShouldersArmsA(),
+      "Legs A": buildLegsA(),
+      "Chest Back B": buildChestBackB(),
+      "Shoulders Arms B": buildShouldersArmsB(),
+      "Legs B": buildLegsB(),
+    },
+    "upper-lower-x3-6": {
+      "Upper A": buildUpperA(),
+      "Lower A": buildLowerA(),
+      "Upper B": buildUpperB(),
+      "Lower B": buildLowerB(),
+      "Upper C": buildUpperA(),
+      "Lower C": buildLowerB(),
+    },
+  };
+
+  return finalizeTemplateProgram(templates[templateId] || createProgramCopy());
+}
+
+function getProgramTemplateById(templateId) {
+  const allOptions = [3, 4, 5, 6].flatMap((days) => getProgramPlannerOptions(days));
+  return allOptions.find((template) => template.id === templateId) || null;
+}
 
 function formatTimer(seconds) {
   const minutes = Math.floor(seconds / 60);
@@ -114,6 +1153,20 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "2-digit",
+  });
+}
+
+function formatDateTimeShort(iso) {
+  if (!iso) return "Aucune";
+
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "Aucune";
+
+  return value.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -176,9 +1229,79 @@ function getAdvice(reps, minReps, maxReps, rpe) {
   return {
     type,
     action,
-    label: `Semaine suivante : ${action}`,
+    label: `Prochaine seance : ${action}`,
     fatigue: rpe >= 9.5 && reps <= minReps ? "Fatigue elevee detectee" : "",
   };
+}
+
+function getAdvicePresentation(advice, entry) {
+  if (!advice || !entry) return null;
+
+  if (advice.type === "progress") {
+    return {
+      tone: "progress",
+      headline: "Objectif valide. Tu peux monter.",
+      text: `${entry.reps} reps sur ${entry.exercise}. Continue comme ca et augmente a la prochaine seance.`,
+    };
+  }
+
+  if (advice.type === "reduce") {
+    return {
+      tone: "reduce",
+      headline: "On ajuste pour repartir fort.",
+      text: `${entry.reps} reps sur ${entry.exercise}. La prochaine fois, baisse un peu pour repartir plus propre.`,
+    };
+  }
+
+  return {
+    tone: "hold",
+    headline: "Solide. Garde cette charge.",
+    text: `${entry.reps} reps sur ${entry.exercise}. Verrouille encore cette charge avant de monter.`,
+  };
+}
+
+function getPendingAdviceSummary() {
+  if (!state.pendingSession.length) return null;
+
+  const counts = { progress: 0, hold: 0, reduce: 0 };
+
+  state.pendingSession.forEach((entry) => {
+    const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
+    counts[advice.type] += 1;
+  });
+
+  const latestEntry = state.pendingSession[state.pendingSession.length - 1];
+  const latestAdvice = getAdvice(
+    latestEntry.reps,
+    latestEntry.minReps,
+    latestEntry.maxReps,
+    latestEntry.rpe
+  );
+
+  return {
+    counts,
+    latestEntry,
+    latestAdvice,
+    latestPresentation: getAdvicePresentation(latestAdvice, latestEntry),
+  };
+}
+
+function renderCompactNextCue(advice) {
+  if (!advice) return "";
+
+  const value =
+    advice.type === "progress"
+      ? "Monter"
+      : advice.type === "reduce"
+      ? "Baisser"
+      : "Garder";
+
+  return `
+    <div class="next-cue next-cue--${advice.type}">
+      <span class="next-cue__label">Prochaine</span>
+      <span class="next-cue__value">${value}</span>
+    </div>
+  `;
 }
 
 function calculatePlates(targetWeight, barWeight = 20) {
@@ -202,8 +1325,105 @@ function buildExerciseKey(day, exercise, series) {
   return `${day}__${exercise}__${series}`;
 }
 
+function getNextLoadSettingsFromEntry(entry) {
+  const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
+  let nextLoad = entry.load;
+  let deload = false;
+  const increment = getIncrement(entry.kind);
+  const minimumLoad = getMinimumLoad(entry.kind);
+
+  if (advice.action === "Augmenter" && isNumericLoad(entry.load)) {
+    nextLoad = roundToIncrement(entry.load + increment, increment);
+  }
+
+  if (advice.action === "Baisser 5%" && isNumericLoad(entry.load)) {
+    nextLoad = Math.max(
+      minimumLoad,
+      roundToIncrement(entry.load * 0.95, increment, "down")
+    );
+    deload = true;
+  }
+
+  if (advice.fatigue) {
+    deload = true;
+  }
+
+  return {
+    load: nextLoad,
+    loadLabel: entry.loadLabel,
+    deload,
+  };
+}
+
+function recomputeExerciseDataForKey(key) {
+  if (!key) return;
+
+  const nextExerciseData = { ...state.exerciseData };
+  const latestEntry = state.history
+    .filter((item) => item.key === key)
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+  if (!latestEntry) {
+    delete nextExerciseData[key];
+    state.exerciseData = nextExerciseData;
+    return;
+  }
+
+  nextExerciseData[key] = getNextLoadSettingsFromEntry(latestEntry);
+  state.exerciseData = nextExerciseData;
+}
+
+function migrateExerciseIdentity(day, previousEntry, nextEntry) {
+  if (!previousEntry || !nextEntry) return;
+
+  const oldKey = buildExerciseKey(day, previousEntry.exercise, previousEntry.series);
+  const newKey = buildExerciseKey(day, nextEntry.exercise, nextEntry.series);
+
+  if (oldKey === newKey) return;
+
+  const nextExerciseData = { ...state.exerciseData };
+  if (Object.prototype.hasOwnProperty.call(nextExerciseData, oldKey)) {
+    nextExerciseData[newKey] = nextExerciseData[oldKey];
+    delete nextExerciseData[oldKey];
+  }
+  state.exerciseData = nextExerciseData;
+
+  state.history = state.history.map((item) =>
+    item.key === oldKey
+      ? {
+          ...item,
+          key: newKey,
+          day,
+          exercise: nextEntry.exercise,
+          series: nextEntry.series,
+        }
+      : item
+  );
+
+  state.pendingSession = state.pendingSession.map((item) =>
+    item.key === oldKey
+      ? {
+          ...item,
+          key: newKey,
+          day,
+          exercise: nextEntry.exercise,
+          series: nextEntry.series,
+        }
+      : item
+  );
+
+  if (state.selectedChartKey === oldKey) {
+    state.selectedChartKey = newKey;
+  }
+}
+
+function getTimerEndTimestamp(seconds) {
+  return seconds > 0 ? Date.now() + seconds * 1000 : 0;
+}
+
 function getExercises() {
-  return PROGRAM[state.day] || [];
+  return state.program[state.day] || [];
 }
 
 function getActiveExercise() {
@@ -238,6 +1458,495 @@ function getCurrentAdvice() {
   const active = getActiveExercise();
   if (!active || Number.isNaN(reps) || reps <= 0) return null;
   return getAdvice(reps, active.minReps, active.maxReps, state.rpe);
+}
+
+function hasValidRepsInput() {
+  const reps = parseInt(state.repsInput, 10);
+  return Number.isInteger(reps) && reps > 0;
+}
+
+function setRepsInputValue(value) {
+  const nextValue = sanitizePositiveInteger(value, 0, 1);
+  if (!nextValue) return;
+
+  state.repsInput = String(nextValue);
+  saveState();
+
+  const input = document.getElementById("reps-input");
+  if (input) {
+    input.value = state.repsInput;
+  }
+
+  syncValidationButton();
+}
+
+function getRepQuickPicks() {
+  const active = getActiveExercise();
+  if (!active) return [];
+
+  const midpoint =
+    active.minReps === active.maxReps
+      ? active.maxReps
+      : Math.round((active.minReps + active.maxReps) / 2);
+  const last = getLastPerformance();
+  const picks = [];
+
+  if (last?.reps) {
+    picks.push({ value: last.reps, label: `${last.reps}`, meta: "Dernier" });
+  }
+
+  [
+    { value: active.minReps, meta: "Min" },
+    { value: midpoint, meta: "Cible" },
+    { value: active.maxReps, meta: "Max" },
+  ].forEach((pick) => {
+    if (!picks.some((item) => item.value === pick.value)) {
+      picks.push({ value: pick.value, label: `${pick.value}`, meta: pick.meta });
+    }
+  });
+
+  return picks.slice(0, 4);
+}
+
+function renderRepQuickPicks() {
+  const picks = getRepQuickPicks();
+  if (!picks.length) return "";
+
+  const buttons = picks
+    .map((pick) => {
+      const activeClass = String(pick.value) === state.repsInput ? " is-active" : "";
+      return `
+        <button
+          class="rep-quick-pick${activeClass}"
+          type="button"
+          data-action="pick-reps"
+          data-reps-value="${pick.value}"
+          aria-label="Utiliser ${pick.value} reps"
+        >
+          <strong>${pick.label}</strong>
+          <span>${pick.meta}</span>
+        </button>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="rep-quick-picks">
+      ${buttons}
+    </div>
+  `;
+}
+
+function getAdviceShortLabel(adviceType) {
+  if (adviceType === "progress") {
+    return { icon: "+", label: "Monte" };
+  }
+  if (adviceType === "reduce") {
+    return { icon: "-", label: "Baisse" };
+  }
+  if (adviceType === "empty") {
+    return { icon: ".", label: "Start" };
+  }
+  return { icon: "=", label: "Garde" };
+}
+
+function getLastPerformancePreviewCard() {
+  const active = getActiveExercise();
+  const last = getLastPerformance();
+
+  if (!active || !last) {
+    const verdict = getAdviceShortLabel("empty");
+    return {
+      tone: "empty",
+      eyebrow: "Derniere fois",
+      verdict,
+      title: "Pas encore de serie sur ce slot",
+      meta: `Objectif ${active?.targetLabel || "-"} reps`,
+    };
+  }
+
+  const advice = getAdvice(last.reps, last.minReps, last.maxReps, last.rpe ?? 8);
+  const verdict = getAdviceShortLabel(advice.type);
+
+  return {
+    tone: advice.type,
+    eyebrow: "Derniere fois",
+    verdict,
+    title: `${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}`,
+    meta: `${last.series} · ${formatDate(last.date)}`,
+  };
+}
+
+function renderLastPerformancePreviewCard() {
+  const preview = getLastPerformancePreviewCard();
+
+  return `
+    <div class="workout-preview workout-preview--compact workout-preview--${preview.tone}">
+      <div class="workout-preview__compact-copy">
+        <span class="workout-preview__eyebrow">${preview.eyebrow}</span>
+        <strong class="workout-preview__title">${preview.title}</strong>
+        <span class="workout-preview__meta">${preview.meta}</span>
+      </div>
+      <span class="workout-preview__badge workout-preview__badge--${preview.tone}">
+        <span class="workout-preview__badge-icon">${preview.verdict.icon}</span>
+        <span class="workout-preview__badge-text">${preview.verdict.label}</span>
+      </span>
+    </div>
+  `;
+}
+
+function getNextExercisePreview() {
+  const exercises = getExercises();
+  const next = exercises[state.currentIndex + 1];
+
+  if (!next) {
+    return {
+      title: "Derniere serie",
+      meta: "Fin de seance juste apres validation",
+      tone: "finish",
+    };
+  }
+
+  const key = buildExerciseKey(state.day, next.exercise, next.series);
+  const nextSettings = state.exerciseData[key] || {
+    load: next.defaultLoad,
+    loadLabel: next.loadLabel,
+  };
+
+  return {
+    title: `${next.exercise} · ${next.series}`,
+    meta: `${formatLoad(nextSettings.load, nextSettings.loadLabel)} · ${next.rest}s de repos`,
+    tone: "next",
+  };
+}
+
+function renderNextExercisePreview() {
+  const preview = getNextExercisePreview();
+
+  return `
+    <div class="workout-preview workout-preview--${preview.tone}">
+      <span class="workout-preview__eyebrow">${preview.tone === "finish" ? "Apres cette serie" : "Serie d'apres"}</span>
+      <strong class="workout-preview__title">${preview.title}</strong>
+      <span class="workout-preview__meta">${preview.meta}</span>
+    </div>
+  `;
+}
+
+function getValidationButtonState(advice = getCurrentAdvice()) {
+  if (!advice) {
+    return {
+      tone: "idle",
+      badge: null,
+      cta: "Valider",
+      aria: "Valider la serie",
+    };
+  }
+
+  const verdict = getAdviceShortLabel(advice.type);
+
+  return {
+    tone: advice.type,
+    badge: verdict,
+    cta: "Valider",
+    aria: `Valider - prochaine ${verdict.label.toLowerCase()}`,
+  };
+}
+
+function renderValidationButtonContent(advice = getCurrentAdvice()) {
+  const buttonState = getValidationButtonState(advice);
+
+  if (!buttonState.badge) {
+    return `<span class="validation-button__cta">${buttonState.cta}</span>`;
+  }
+
+  return `
+    <span class="validation-button__row">
+      <span class="validation-button__badge validation-button__badge--${buttonState.tone}">
+        <span class="validation-button__badge-icon">${buttonState.badge.icon}</span>
+        <span class="validation-button__badge-text">${buttonState.badge.label}</span>
+      </span>
+      <span class="validation-button__cta">${buttonState.cta}</span>
+    </span>
+  `;
+}
+
+function getValidationButtonClass(advice = getCurrentAdvice()) {
+  const buttonState = getValidationButtonState(advice);
+  return `button button--primary validation-button validation-button--${buttonState.tone}`;
+}
+
+function getValidationButtonLabel(advice = getCurrentAdvice()) {
+  return getValidationButtonState(advice).aria;
+}
+
+function syncValidationButton() {
+  const button = document.getElementById("validate-set-button");
+  if (!button) return;
+  const advice = getCurrentAdvice();
+  button.className = getValidationButtonClass(advice);
+  button.innerHTML = renderValidationButtonContent(advice);
+  button.setAttribute("aria-label", getValidationButtonLabel(advice));
+  button.disabled = !hasValidRepsInput();
+}
+
+function getExerciseIndexForEntry(entry, day = state.day) {
+  if (!entry) return -1;
+  return (state.program[day] || []).findIndex(
+    (item) => item.exercise === entry.exercise && item.series === entry.series
+  );
+}
+
+function reopenLastPendingSet(prefill = false) {
+  const lastEntry = state.pendingSession.pop();
+  if (!lastEntry) return;
+
+  clearScheduledRestSound();
+  state.day = lastEntry.day;
+  state.screen = "workout";
+  state.restAlertVisible = false;
+  state.timer = { seconds: 0, active: false };
+  state.timerEndsAt = 0;
+  state.workoutFinished = false;
+  state.pendingAdvance = null;
+  state.currentIndex = Math.max(0, getExerciseIndexForEntry(lastEntry, lastEntry.day));
+  state.repsInput = prefill ? String(lastEntry.reps) : "";
+  state.selectedChartKey = lastEntry.key || state.selectedChartKey;
+
+  if (!state.pendingSession.length) {
+    state.workoutStartedAt = new Date().toISOString();
+  }
+
+  saveState();
+  renderApp();
+}
+
+function getLastPendingEntry() {
+  return state.pendingSession[state.pendingSession.length - 1] || null;
+}
+
+function getWorkoutDurationLabel() {
+  const startValue = state.workoutStartedAt || state.pendingSession[0]?.date;
+  if (!startValue) return "0 min";
+
+  const startTime = new Date(startValue).getTime();
+  const endSource = state.pendingSession[state.pendingSession.length - 1]?.date || new Date().toISOString();
+  const endTime = new Date(endSource).getTime();
+
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    return "0 min";
+  }
+
+  const totalMinutes = Math.max(1, Math.round((endTime - startTime) / 60000));
+  return `${totalMinutes} min`;
+}
+
+function getWorkoutCompletionSummary() {
+  if (!state.pendingSession.length) return null;
+
+  const counts = { progress: 0, hold: 0, reduce: 0 };
+  const exercises = new Set();
+  let volume = 0;
+
+  state.pendingSession.forEach((entry) => {
+    const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
+    counts[advice.type] += 1;
+    exercises.add(entry.exercise);
+
+    if (isNumericLoad(entry.load)) {
+      volume += entry.load * entry.reps;
+    }
+  });
+
+  const dominantAction =
+    counts.progress >= counts.hold && counts.progress >= counts.reduce
+      ? "progress"
+      : counts.reduce > counts.hold
+      ? "reduce"
+      : "hold";
+
+  const coachLine =
+    dominantAction === "progress"
+      ? "Tu as valide la seance. Continue sur cette dynamique."
+      : dominantAction === "reduce"
+      ? "On ajuste legerement et on repart plus propre la prochaine fois."
+      : "Bonne seance. On verrouille encore avant de monter.";
+
+  return {
+    setCount: state.pendingSession.length,
+    exerciseCount: exercises.size,
+    counts,
+    volumeLabel: volume > 0 ? `${Math.round(volume)} kg` : "Charge libre",
+    durationLabel: getWorkoutDurationLabel(),
+    coachLine,
+  };
+}
+
+function renderLastSetActions() {
+  const lastEntry = getLastPendingEntry();
+  if (!lastEntry || state.workoutFinished) return "";
+
+  return `
+    <div class="last-set-card">
+      <div class="last-set-card__copy">
+        <span class="label">Derniere serie</span>
+        <strong>${lastEntry.exercise}</strong>
+        <span>${lastEntry.reps} reps · ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+      </div>
+      <div class="last-set-card__actions">
+        <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
+        <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
+      </div>
+    </div>
+  `;
+}
+
+function toggleFocusWorkoutMode() {
+  state.focusWorkoutMode = !state.focusWorkoutMode;
+  saveState();
+  renderApp();
+}
+
+function ensureSelectedChartKeyIsValid() {
+  if (state.selectedChartKey && state.history.some((item) => item.key === state.selectedChartKey)) {
+    return;
+  }
+
+  state.selectedChartKey = state.history[0]?.key || "";
+}
+
+function openHistoryEditor(index) {
+  const sortedHistory = getSortedHistory();
+  const entry = sortedHistory[index];
+  if (!entry) return;
+
+  const originalIndex = state.history.findIndex(
+    (item) => item.key === entry.key && item.date === entry.date && item.series === entry.series
+  );
+  if (originalIndex < 0) return;
+
+  state.historyEditor = {
+    index: originalIndex,
+    reps: String(entry.reps ?? ""),
+    load: isNumericLoad(entry.load) ? String(entry.load) : "",
+    loadLabel: sanitizePlainText(entry.loadLabel, entry.loadLabel || ""),
+  };
+  renderApp();
+}
+
+function closeHistoryEditor() {
+  state.historyEditor = null;
+  renderApp();
+}
+
+function saveHistoryEditor() {
+  if (!state.historyEditor) return;
+
+  const nextHistory = [...state.history];
+  const entry = nextHistory[state.historyEditor.index];
+  if (!entry) {
+    state.historyEditor = null;
+    renderApp();
+    return;
+  }
+
+  const reps = sanitizePositiveInteger(state.historyEditor.reps, entry.reps, 1);
+  const load = state.historyEditor.load === "" ? null : sanitizeLoadNumber(state.historyEditor.load, entry.load);
+  const loadLabel = sanitizePlainText(
+    state.historyEditor.loadLabel,
+    isNumericLoad(load) ? `${load} kg` : entry.loadLabel || "Charge libre"
+  );
+
+  nextHistory[state.historyEditor.index] = {
+    ...entry,
+    reps,
+    load,
+    loadLabel,
+  };
+
+  const affectedKey = entry.key;
+  state.history = nextHistory;
+  state.historyEditor = null;
+  recomputeExerciseDataForKey(affectedKey);
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function deleteHistoryEntry() {
+  if (!state.historyEditor) return;
+  if (!window.confirm("Supprimer cette serie de l'historique ?")) return;
+
+  const affectedKey = state.history[state.historyEditor.index]?.key;
+  state.history = state.history.filter((_, index) => index !== state.historyEditor.index);
+  state.historyEditor = null;
+  recomputeExerciseDataForKey(affectedKey);
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function renderHistoryEditorOverlay() {
+  if (!state.historyEditor) return "";
+
+  const currentEntry = state.history[state.historyEditor.index];
+  if (!currentEntry) return "";
+
+  return `
+    <div class="sheet-overlay">
+      <article class="sheet-card">
+        <div class="sheet-card__head">
+          <div>
+            <div class="label">Historique</div>
+            <h3 class="section-title">Modifier la serie</h3>
+          </div>
+          <button class="icon-button" data-action="close-history-editor" aria-label="Fermer l'edition">
+            X
+          </button>
+        </div>
+
+        <div class="sheet-card__body">
+          <div class="muted">${currentEntry.exercise} · ${currentEntry.series} · ${formatDate(currentEntry.date)}</div>
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="history-editor-reps">Reps</label>
+              <input id="history-editor-reps" class="input input--editor" type="number" min="1" value="${state.historyEditor.reps}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label" for="history-editor-load">Charge</label>
+              <input id="history-editor-load" class="input input--editor" type="number" min="0" step="0.5" value="${state.historyEditor.load}" />
+            </div>
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="history-editor-label">Libelle charge</label>
+            <input id="history-editor-label" class="input input--editor" type="text" value="${state.historyEditor.loadLabel}" />
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--danger" data-action="delete-history-entry">Supprimer</button>
+          <button class="button button--ghost" data-action="close-history-editor">Annuler</button>
+          <button class="button button--primary" data-action="save-history-entry">Enregistrer</button>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderPwaUpdateBanner() {
+  if (!pwaUpdateReady || pwaUpdateDismissed) return "";
+
+  return `
+    <div class="update-banner">
+      <div class="update-banner__copy">
+        <span class="label">Mise a jour</span>
+        <strong>Une nouvelle version est disponible.</strong>
+      </div>
+      <div class="update-banner__actions">
+        <button class="button button--ghost button--compact" data-action="dismiss-update-banner">Plus tard</button>
+        <button class="button button--primary button--compact" data-action="refresh-app">Recharger</button>
+      </div>
+    </div>
+  `;
 }
 
 function getProgressPercent() {
@@ -293,47 +2002,154 @@ function getChartData() {
   };
 }
 
-function saveState() {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      screen: state.screen,
-      exerciseData: state.exerciseData,
-      history: state.history,
-      day: state.day,
-      currentIndex: state.currentIndex,
-      timer: state.timer,
-      rpe: state.rpe,
-      repsInput: state.repsInput,
-      showPlates: state.showPlates,
-      workoutFinished: state.workoutFinished,
-      pendingSession: state.pendingSession,
-      selectedChartKey: state.selectedChartKey,
-      installHintDismissed: state.installHintDismissed,
-    })
+function buildPersistedState() {
+  return {
+    schemaVersion: STORAGE_SCHEMA_VERSION,
+    restProfileVersion: CURRENT_REST_PROFILE_VERSION,
+    savedAt: new Date().toISOString(),
+    screen: state.screen,
+    program: state.program,
+    programEditorDay: state.programEditorDay,
+    programPlannerDays: state.programPlannerDays,
+    cycle: state.cycle,
+    exerciseData: state.exerciseData,
+    history: state.history,
+    day: state.day,
+    currentIndex: state.currentIndex,
+    timer: state.timer,
+    restAlertVisible: state.restAlertVisible,
+    restSoundEnabled: state.restSoundEnabled,
+    restVibrationEnabled: state.restVibrationEnabled,
+    rpe: state.rpe,
+    repsInput: state.repsInput,
+    showPlates: state.showPlates,
+    focusWorkoutMode: state.focusWorkoutMode,
+    workoutFinished: state.workoutFinished,
+    pendingAdvance: state.pendingAdvance,
+    timerEndsAt: state.timerEndsAt,
+    workoutStartedAt: state.workoutStartedAt,
+    pendingSession: state.pendingSession,
+    selectedChartKey: state.selectedChartKey,
+    installHintDismissed: state.installHintDismissed,
+    onboardingCompleted: state.onboardingCompleted,
+    onboardingStep: state.onboardingStep,
+  };
+}
+
+function hydrateState(parsed = {}) {
+  state.program = sanitizeProgram(parsed.program);
+  state.screen = parsed.screen || "dashboard";
+  state.exerciseData = parsed.exerciseData || {};
+  state.history = parsed.history || [];
+  state.cycle = sanitizeCycle(parsed.cycle);
+  state.programPlannerDays = [3, 4, 5, 6].includes(Number(parsed.programPlannerDays))
+    ? Number(parsed.programPlannerDays)
+    : Math.min(6, Math.max(3, getProgramDays().length || 4));
+  const fallbackDay = getProgramDays()[0] || "Push";
+  state.day = getProgramDays().includes(parsed.day) ? parsed.day : fallbackDay;
+  state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
+    ? parsed.programEditorDay
+    : state.day;
+  state.currentIndex = Math.min(
+    parsed.currentIndex || 0,
+    Math.max(0, (state.program[state.day] || []).length - 1)
   );
+  state.timer = parsed.timer || { seconds: 0, active: false };
+  state.restAlertVisible = Boolean(parsed.restAlertVisible);
+  state.restSoundEnabled = parsed.restSoundEnabled ?? true;
+  state.restVibrationEnabled = parsed.restVibrationEnabled ?? true;
+  state.rpe = parsed.rpe ?? 8;
+  state.repsInput = parsed.repsInput || "";
+  state.showPlates = Boolean(parsed.showPlates);
+  state.focusWorkoutMode = Boolean(parsed.focusWorkoutMode);
+  state.workoutFinished = Boolean(parsed.workoutFinished);
+  state.pendingAdvance = sanitizePendingAdvance(parsed.pendingAdvance);
+  state.timerEndsAt = sanitizeTimestamp(parsed.timerEndsAt);
+  state.workoutStartedAt = typeof parsed.workoutStartedAt === "string" ? parsed.workoutStartedAt : "";
+  state.pendingSession = parsed.pendingSession || [];
+  state.selectedChartKey = parsed.selectedChartKey || "";
+  state.installHintDismissed = Boolean(parsed.installHintDismissed);
+  state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
+  state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
+  state.historyEditor = null;
+  state.storageMeta.recoveredFromBackup = false;
+  state.storageMeta.backupAvailable = Boolean(localStorage.getItem(STORAGE_BACKUP_KEY));
+  state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+  state.storageMeta.saveError = "";
+
+  const savedRestProfileVersion = sanitizePositiveInteger(
+    parsed.restProfileVersion,
+    1,
+    1
+  );
+  if (savedRestProfileVersion < CURRENT_REST_PROFILE_VERSION) {
+    state.program = applyRecommendedRestProfile(state.program);
+  }
+
+  if (state.timer.active && state.timerEndsAt > 0) {
+    const remainingMs = state.timerEndsAt - Date.now();
+    if (remainingMs <= 0) {
+      state.timer = { seconds: 0, active: false };
+      state.timerEndsAt = 0;
+      state.restAlertVisible = true;
+    } else {
+      state.timer.seconds = Math.ceil(remainingMs / 1000);
+    }
+  }
+}
+
+function saveState() {
+  try {
+    const payload = buildPersistedState();
+    const serialized = JSON.stringify(payload);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
+    state.storageMeta.lastSavedAt = payload.savedAt;
+    state.storageMeta.backupAvailable = true;
+    state.storageMeta.saveError = "";
+  } catch (error) {
+    console.error("Erreur sauvegarde localStorage", error);
+    state.storageMeta.saveError = "Sauvegarde locale incomplete";
+  }
 }
 
 function restoreState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    state.screen = parsed.screen || "dashboard";
-    state.exerciseData = parsed.exerciseData || {};
-    state.history = parsed.history || [];
-    state.day = parsed.day || "Push";
-    state.currentIndex = parsed.currentIndex || 0;
-    state.timer = parsed.timer || { seconds: 0, active: false };
-    state.rpe = parsed.rpe ?? 8;
-    state.repsInput = parsed.repsInput || "";
-    state.showPlates = Boolean(parsed.showPlates);
-    state.workoutFinished = Boolean(parsed.workoutFinished);
-    state.pendingSession = parsed.pendingSession || [];
-    state.selectedChartKey = parsed.selectedChartKey || "";
-    state.installHintDismissed = Boolean(parsed.installHintDismissed);
+    const backupRaw = localStorage.getItem(STORAGE_BACKUP_KEY);
+    let parsed = null;
+    let recoveredFromBackup = false;
+
+    state.storageMeta.backupAvailable = Boolean(backupRaw);
+
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        console.error("Erreur lecture stockage principal", error);
+      }
+    }
+
+    if (!parsed && backupRaw) {
+      try {
+        parsed = JSON.parse(backupRaw);
+        recoveredFromBackup = true;
+      } catch (error) {
+        console.error("Erreur lecture backup local", error);
+      }
+    }
+
+    if (!parsed) return;
+
+    hydrateState(parsed);
+    state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+    state.storageMeta.recoveredFromBackup = recoveredFromBackup;
+    state.storageMeta.backupAvailable = true;
+    state.storageMeta.saveError = "";
+    saveState();
   } catch (error) {
     console.error("Erreur localStorage", error);
+    state.storageMeta.saveError = "Lecture locale impossible";
   }
 }
 
@@ -369,13 +2185,19 @@ function resetWorkoutState() {
   state.rpe = 8;
   state.showPlates = false;
   state.timer = { seconds: 0, active: false };
+  state.timerEndsAt = 0;
   state.workoutFinished = false;
+  state.pendingAdvance = null;
+  state.workoutStartedAt = "";
+  clearScheduledRestSound();
 }
 
 function startWorkoutDay(day) {
+  if (!getProgramDays().includes(day)) return;
   state.day = day;
   state.pendingSession = [];
   resetWorkoutState();
+  state.workoutStartedAt = new Date().toISOString();
   state.screen = "workout";
   saveState();
   renderApp();
@@ -385,7 +2207,11 @@ function handleValidation() {
   const active = getActiveExercise();
   const reps = parseInt(state.repsInput, 10);
   if (!active || Number.isNaN(reps) || reps <= 0) return;
+  if (!state.workoutStartedAt) {
+    state.workoutStartedAt = new Date().toISOString();
+  }
 
+  state.restAlertVisible = false;
   state.pendingSession.push({
     key: getExerciseKey(),
     day: state.day,
@@ -403,15 +2229,25 @@ function handleValidation() {
     date: new Date().toISOString(),
   });
 
-  state.timer = { seconds: active.rest, active: true };
+  const isLastExercise = state.currentIndex >= getExercises().length - 1;
+  state.pendingAdvance = null;
+  state.timer = isLastExercise
+    ? { seconds: 0, active: false }
+    : { seconds: active.rest, active: active.rest > 0 };
+  state.timerEndsAt = isLastExercise || active.rest <= 0 ? 0 : getTimerEndTimestamp(active.rest);
   state.repsInput = "";
 
-  if (state.currentIndex < getExercises().length - 1) {
-    state.currentIndex += 1;
+  if (!isLastExercise && active.rest > 0) {
+    scheduleRestSound(active.rest);
   } else {
+    clearScheduledRestSound();
+  }
+
+  if (isLastExercise) {
     state.workoutFinished = true;
     state.currentIndex = 0;
-    state.timer = { seconds: 0, active: false };
+  } else {
+    state.currentIndex += 1;
   }
 
   saveState();
@@ -421,6 +2257,7 @@ function handleValidation() {
 function finalizeWorkout() {
   if (!state.pendingSession.length) {
     state.workoutFinished = false;
+    state.workoutStartedAt = "";
     state.screen = "dashboard";
     renderApp();
     return;
@@ -429,33 +2266,7 @@ function finalizeWorkout() {
   const nextExerciseData = { ...state.exerciseData };
 
   state.pendingSession.forEach((entry) => {
-    const advice = getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe);
-    let nextLoad = entry.load;
-    let deload = false;
-    const increment = getIncrement(entry.kind);
-    const minimumLoad = getMinimumLoad(entry.kind);
-
-    if (advice.action === "Augmenter" && isNumericLoad(entry.load)) {
-      nextLoad = roundToIncrement(entry.load + increment, increment);
-    }
-
-    if (advice.action === "Baisser 5%" && isNumericLoad(entry.load)) {
-      nextLoad = Math.max(
-        minimumLoad,
-        roundToIncrement(entry.load * 0.95, increment, "down")
-      );
-      deload = true;
-    }
-
-    if (advice.fatigue) {
-      deload = true;
-    }
-
-    nextExerciseData[entry.key] = {
-      load: nextLoad,
-      loadLabel: entry.loadLabel,
-      deload,
-    };
+    nextExerciseData[entry.key] = getNextLoadSettingsFromEntry(entry);
   });
 
   state.history = [...state.pendingSession.slice().reverse(), ...state.history];
@@ -463,6 +2274,8 @@ function finalizeWorkout() {
   state.selectedChartKey = state.pendingSession[state.pendingSession.length - 1]?.key || "";
   state.pendingSession = [];
   state.workoutFinished = false;
+  state.timerEndsAt = 0;
+  state.workoutStartedAt = "";
   state.screen = "dashboard";
   saveState();
   renderApp();
@@ -470,21 +2283,593 @@ function finalizeWorkout() {
 
 function clearAllData() {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_BACKUP_KEY);
+  state.program = createProgramCopy();
+  state.programEditorDay = "Push";
+  state.programPlannerDays = 4;
+  state.cycle = createDefaultCycle();
   state.exerciseData = {};
   state.history = [];
   state.pendingSession = [];
   state.selectedChartKey = "";
   state.installHintDismissed = false;
+  state.onboardingCompleted = false;
+  state.onboardingStep = 0;
+  state.restAlertVisible = false;
+  state.pendingAdvance = null;
+  state.timerEndsAt = 0;
+  state.restSoundEnabled = true;
+  state.restVibrationEnabled = true;
+  state.focusWorkoutMode = false;
+  state.historyEditor = null;
+  state.storageMeta = {
+    lastSavedAt: "",
+    backupAvailable: false,
+    recoveredFromBackup: false,
+    saveError: "",
+  };
   resetWorkoutState();
+  state.day = "Push";
   state.screen = "dashboard";
-  seedPreviewData();
   renderApp();
+}
+
+function exportBackup() {
+  const payload = {
+    version: STORAGE_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    source: "elite-train-iphone",
+    data: buildPersistedState(),
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  link.href = url;
+  link.download = `elite-train-backup-${stamp}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function importBackupFromFile(file) {
+  if (!file) return;
+
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    const nextState = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+
+    if (!nextState || typeof nextState !== "object") {
+      throw new Error("Backup invalide");
+    }
+
+    if (!window.confirm("Importer ce backup et remplacer les donnees actuelles ?")) {
+      return;
+    }
+
+    hydrateState(nextState);
+    saveState();
+    renderApp();
+    window.alert("Backup importe avec succes.");
+  } catch (error) {
+    window.alert("Impossible d'importer ce backup.");
+  }
 }
 
 function dismissInstallHint() {
   state.installHintDismissed = true;
   saveState();
   renderApp();
+}
+
+function setProgramEditorDay(day) {
+  if (!getProgramDays().includes(day)) return;
+  state.programEditorDay = day;
+  saveState();
+  renderApp();
+}
+
+function updateProgramEntry(day, index, field, value) {
+  const dayEntries = [...(state.program[day] || [])];
+  const currentEntry = dayEntries[index];
+  if (!currentEntry) return;
+
+  const nextEntry = { ...currentEntry };
+  const currentRecommendedRest = getRecommendedRest(currentEntry);
+
+  if (field === "exercise" || field === "series" || field === "loadLabel") {
+    nextEntry[field] = sanitizePlainText(value, currentEntry[field]);
+  }
+
+  if (field === "kind") {
+    nextEntry.kind = ["barbell", "machine", "dumbbell", "isolation"].includes(value)
+      ? value
+      : currentEntry.kind;
+  }
+
+  if (field === "minReps") {
+    nextEntry.minReps = sanitizePositiveInteger(value, currentEntry.minReps, 1);
+  }
+
+  if (field === "maxReps") {
+    nextEntry.maxReps = sanitizePositiveInteger(value, currentEntry.maxReps, 1);
+  }
+
+  if (field === "rest") {
+    nextEntry.rest = sanitizePositiveInteger(value, currentEntry.rest, 0);
+  }
+
+  if (field === "defaultLoad") {
+    nextEntry.defaultLoad = sanitizeLoadNumber(value, currentEntry.defaultLoad);
+    if (!nextEntry.loadLabel || nextEntry.loadLabel === currentEntry.loadLabel) {
+      nextEntry.loadLabel = isNumericLoad(nextEntry.defaultLoad)
+        ? `${nextEntry.defaultLoad} kg`
+        : "Charge libre";
+    }
+  }
+
+  const normalizedEntry = normalizeProgramEntry(nextEntry, currentEntry);
+  if (
+    field !== "rest" &&
+    ["exercise", "series", "kind", "minReps", "maxReps"].includes(field) &&
+    currentEntry.rest === currentRecommendedRest
+  ) {
+    normalizedEntry.rest = getRecommendedRest(normalizedEntry);
+  }
+  dayEntries[index] = normalizedEntry;
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+  migrateExerciseIdentity(day, currentEntry, normalizedEntry);
+
+  saveState();
+  renderApp();
+}
+
+function addProgramEntry(day) {
+  const dayEntries = [...(state.program[day] || [])];
+  const nextIndex = dayEntries.length + 1;
+  const nextEntry = normalizeProgramEntry({
+    exercise: `Nouvel exercice ${nextIndex}`,
+    kind: "isolation",
+    series: `Serie ${nextIndex}`,
+    minReps: 10,
+    maxReps: 12,
+    rest: 60,
+    defaultLoad: null,
+    loadLabel: "Charge libre",
+  });
+  nextEntry.rest = getRecommendedRest(nextEntry);
+
+  state.program = {
+    ...state.program,
+    [day]: [...dayEntries, nextEntry],
+  };
+  state.programEditorDay = day;
+  saveState();
+  renderApp();
+}
+
+function removeProgramEntry(day, index) {
+  const dayEntries = [...(state.program[day] || [])];
+  if (!dayEntries[index]) return;
+
+  dayEntries.splice(index, 1);
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+
+  if (state.day === day && state.currentIndex >= dayEntries.length) {
+    state.currentIndex = Math.max(0, dayEntries.length - 1);
+  }
+
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function resetProgram() {
+  state.program = createProgramCopy();
+  state.day = getProgramDayKeys(state.program)[0] || "Push";
+  state.programEditorDay = state.day;
+  state.programPlannerDays = 4;
+  resetWorkoutState();
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function setProgramPlannerDays(days) {
+  if (![3, 4, 5, 6].includes(Number(days))) return;
+  state.programPlannerDays = Number(days);
+  saveState();
+  renderApp();
+}
+
+function applyProgramTemplate(templateId) {
+  const template = getProgramTemplateById(templateId);
+  if (!template) return;
+
+  const hasWorkoutInProgress =
+    state.pendingSession.length > 0 || state.timer.active || state.workoutFinished;
+  const confirmLabel = hasWorkoutInProgress
+    ? "Appliquer ce programme et effacer la seance en cours ?"
+    : `Appliquer ${template.title} sur ${template.days.length} jours ?`;
+
+  if (!window.confirm(confirmLabel)) {
+    return;
+  }
+
+  state.program = createProgramTemplate(templateId);
+  state.programPlannerDays = template.days.length;
+  state.day = Object.keys(state.program)[0] || "Push";
+  state.programEditorDay = state.day;
+  state.pendingSession = [];
+  resetWorkoutState();
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function toggleRestPreference(key) {
+  state[key] = !state[key];
+  if (key === "restSoundEnabled" && state[key]) {
+    primeAudioEngine();
+  }
+  if (key === "restSoundEnabled" && !state[key]) {
+    clearScheduledRestSound();
+  }
+  saveState();
+  renderApp();
+}
+
+function dismissRestAlert() {
+  state.restAlertVisible = false;
+  state.pendingAdvance = null;
+  saveState();
+  renderApp();
+}
+
+function extendRest(seconds = 30) {
+  state.timer = {
+    seconds,
+    active: true,
+  };
+  state.timerEndsAt = getTimerEndTimestamp(seconds);
+  state.restAlertVisible = false;
+  scheduleRestSound(seconds);
+  saveState();
+  renderApp();
+}
+
+function triggerRestAlert(options = {}) {
+  clearScheduledRestSound();
+  state.restAlertVisible = true;
+  playRestSound();
+  vibrateRestAlert();
+  saveState();
+  renderApp();
+}
+
+function testRestAlert() {
+  triggerRestAlert();
+}
+
+function getOnboardingSlides() {
+  return [
+    {
+      label: "Bienvenue",
+      title: "ELITE TRAIN sur iPhone",
+      text: "Ton carnet d'entrainement, ton timer et ta progression reunis dans une interface simple et propre.",
+      points: ["Programme clair", "Rendu premium", "Navigation rapide"],
+    },
+    {
+      label: "Comment ca marche",
+      title: "Valide chaque serie en quelques secondes",
+      text: "Tu renseignes tes reps, puis l'app enregistre ta serie et te laisse avancer tres vite dans la seance.",
+      points: ["Charge cible", "Saisie rapide", "Historique visuel"],
+    },
+    {
+      label: "Installation",
+      title: "Ajoute-la a ton ecran d'accueil",
+      text: "Ouvre le site dans Safari, touche Partager puis Ajouter a l'ecran d'accueil pour un vrai rendu d'app.",
+      points: ["Mode plein ecran", "Acces rapide", "Cache hors ligne"],
+    },
+  ];
+}
+
+function completeOnboarding() {
+  state.onboardingCompleted = true;
+  state.onboardingStep = 0;
+  state.installHintDismissed = true;
+  state.screen = "dashboard";
+  saveState();
+  renderApp();
+}
+
+function renderOnboardingOverlay() {
+  const slides = getOnboardingSlides();
+  const slide = slides[state.onboardingStep] || slides[0];
+  const isLast = state.onboardingStep === slides.length - 1;
+
+  return `
+    <div class="onboarding-overlay">
+      <article class="onboarding-card" data-accent-day="${state.day}">
+        <div class="onboarding-card__media"></div>
+        <div class="onboarding-card__shade"></div>
+        <div class="onboarding-card__content">
+          <div class="onboarding-card__top">
+            <span class="onboarding-card__label">${slide.label}</span>
+            <button class="onboarding-card__skip" data-action="onboarding-skip">
+              Passer
+            </button>
+          </div>
+
+          <div class="onboarding-card__body">
+            <div class="onboarding-card__counter">
+              ${slides
+                .map(
+                  (_, index) => `
+                    <span class="onboarding-card__dot ${
+                      index === state.onboardingStep ? "is-active" : ""
+                    }"></span>
+                  `
+                )
+                .join("")}
+            </div>
+            <h2 class="onboarding-card__title">${slide.title}</h2>
+            <p class="onboarding-card__text">${slide.text}</p>
+            <div class="onboarding-card__points">
+              ${slide.points
+                .map(
+                  (point) => `
+                    <span class="onboarding-card__point">${point}</span>
+                  `
+                )
+                .join("")}
+            </div>
+          </div>
+
+          <div class="onboarding-card__actions">
+            ${
+              state.onboardingStep > 0
+                ? `
+                    <button class="button button--ghost" data-action="onboarding-prev">
+                      Retour
+                    </button>
+                  `
+                : `
+                    <button class="button button--ghost" data-action="onboarding-skip">
+                      Plus tard
+                    </button>
+                  `
+            }
+            <button class="button button--primary" data-action="${isLast ? "onboarding-finish" : "onboarding-next"}">
+              ${isLast ? "Entrer dans l'app" : "Continuer"}
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function hasWorkoutInProgress() {
+  return (
+    state.pendingSession.length > 0 ||
+    state.currentIndex > 0 ||
+    state.workoutFinished ||
+    state.timer.seconds > 0 ||
+    state.restAlertVisible
+  );
+}
+
+function updateCurrentLoad(direction) {
+  const active = getActiveExercise();
+  const key = getExerciseKey();
+  const current = getCurrentSettings();
+  if (!active || !key || !isNumericLoad(current.load)) return;
+
+  const step = getIncrement(active.kind);
+  const minimum = getMinimumLoad(active.kind);
+  const base =
+    direction === "up"
+      ? current.load + step
+      : Math.max(minimum, current.load - step);
+  const nextLoad = roundToIncrement(base, step, direction === "down" ? "down" : "up");
+
+  state.exerciseData[key] = {
+    ...current,
+    load: nextLoad,
+    loadLabel: `${nextLoad} kg`,
+  };
+
+  saveState();
+  renderApp();
+}
+
+function resetCurrentLoad() {
+  const active = getActiveExercise();
+  const key = getExerciseKey();
+  if (!active || !key) return;
+
+  state.exerciseData[key] = {
+    load: active.defaultLoad,
+    loadLabel: active.loadLabel,
+    deload: false,
+  };
+
+  saveState();
+  renderApp();
+}
+
+function discardWorkoutProgress() {
+  state.pendingSession = [];
+  resetWorkoutState();
+  state.screen = "dashboard";
+  saveState();
+  renderApp();
+}
+
+function renderPendingSessionSummary(compact = false) {
+  if (!state.pendingSession.length) return "";
+
+  const classes = compact
+    ? "surface surface--soft surface-pad stack-sm"
+    : "surface surface--soft surface-pad stack-md";
+
+  return `
+    <section class="${classes}">
+      <div class="row">
+        <div class="label">Seance en attente</div>
+        <div class="label">${state.pendingSession.length} serie(s)</div>
+      </div>
+      <div class="pending-list">
+        ${state.pendingSession
+          .map(
+            (item, index) => `
+              <article class="pending-item">
+                <div>
+                  <div class="pending-item__title">${index + 1}. ${item.exercise}</div>
+                  <div class="pending-item__meta">${item.series} · ${formatLoad(item.load, item.loadLabel)}</div>
+                </div>
+                <div class="pending-item__score">${item.reps} reps · RPE ${item.rpe}</div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderPendingSessionSummary(compact = false) {
+  const summary = getPendingAdviceSummary();
+  if (!summary) return "";
+
+  const classes = compact
+    ? "surface surface--soft surface-pad stack-sm verdict-summary verdict-summary--compact"
+    : "surface surface--soft surface-pad stack-md verdict-summary";
+
+  return `
+    <section class="${classes}">
+      <div class="row row-start">
+        <div class="stack-sm">
+          <div class="label">Bilan progression</div>
+          <div class="verdict-summary__headline verdict-summary__headline--${summary.latestPresentation.tone}">
+            ${summary.latestPresentation.headline}
+          </div>
+          <div class="verdict-summary__text">${summary.latestPresentation.text}</div>
+          ${
+            summary.latestAdvice.fatigue
+              ? `<div class="verdict-summary__fatigue">${summary.latestAdvice.fatigue}</div>`
+              : ""
+          }
+        </div>
+        <div class="verdict-summary__badge">${state.pendingSession.length} serie(s)</div>
+      </div>
+
+      <div class="verdict-summary__chips">
+        <span class="verdict-chip verdict-chip--progress">Monter : ${summary.counts.progress}</span>
+        <span class="verdict-chip verdict-chip--hold">Garder : ${summary.counts.hold}</span>
+        <span class="verdict-chip verdict-chip--reduce">Baisser : ${summary.counts.reduce}</span>
+      </div>
+
+      <div class="verdict-summary__latest">
+        Derniere serie : <strong>${summary.latestEntry.exercise}</strong> · ${summary.latestEntry.series} · ${summary.latestEntry.reps} reps
+      </div>
+    </section>
+  `;
+}
+
+function renderPendingSessionSummary(compact = false) {
+  const summary = getPendingAdviceSummary();
+  if (!summary) return "";
+
+  const classes = compact
+    ? "surface surface--soft surface-pad verdict-summary verdict-summary--compact"
+    : "surface surface--soft surface-pad verdict-summary";
+
+  const verdictLabel =
+    summary.latestPresentation.tone === "progress"
+      ? "Valide · Monte"
+      : summary.latestPresentation.tone === "reduce"
+      ? "Ajuste · Baisse"
+      : "Solide · Garde";
+
+  return `
+    <section class="${classes}">
+      <div class="verdict-summary__row verdict-summary__row--${summary.latestPresentation.tone}">
+        <span class="verdict-summary__label">Prochaine</span>
+        <span class="verdict-summary__headline verdict-summary__headline--${summary.latestPresentation.tone}">
+          ${verdictLabel}
+        </span>
+        <span class="verdict-summary__latest">
+          ${summary.latestEntry.reps} reps · ${summary.latestEntry.exercise}
+        </span>
+      </div>
+    </section>
+  `;
+}
+
+function renderResumeCard() {
+  if (!hasWorkoutInProgress()) return "";
+
+  const exercises = getExercises();
+  const progress = getProgressPercent();
+  const headline = state.workoutFinished
+    ? "Seance terminee a valider"
+    : "Seance en cours";
+  const detail = state.workoutFinished
+    ? `${state.pendingSession.length} serie(s) pretes a etre enregistrees`
+    : `${state.day} · ${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length}`;
+
+  return `
+    <article class="surface surface-pad stack-md">
+      <div class="row row-start">
+        <div class="stack-sm">
+          <div class="label">Reprise rapide</div>
+          <h2 class="section-title">${headline}</h2>
+          <div class="muted">${detail}</div>
+        </div>
+        <span class="pill">${state.day}</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">Progression</div>
+          <div class="label">${progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${progress}%"></div>
+        </div>
+      </div>
+
+      ${state.pendingSession.length ? renderPendingSessionSummary(true) : ""}
+
+      <div class="grid-2">
+        <button class="button button--primary" data-action="resume-workout">
+          Reprendre
+        </button>
+        <button class="button button--ghost" data-action="discard-workout">
+          Annuler
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPendingSessionSummary(compact = false) {
+  return "";
 }
 
 function getInstallHintHtml() {
@@ -520,15 +2905,17 @@ function renderChart() {
   return `
     <div class="chart-bars">
       ${chart.entries
-        .map((entry) => {
+        .map((entry, index) => {
           const height = Math.max(24, Math.round((entry.chartValue / max) * 118));
           return `
-            <div class="chart-column">
+            <div class="chart-column ${index === chart.entries.length - 1 ? "is-latest" : ""}">
               <div class="chart-value">${entry.chartValue}${chart.metric === "load" ? "kg" : ""}</div>
-              <div
-                class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
-                style="height:${height}px"
-              ></div>
+              <div class="chart-track">
+                <div
+                  class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
+                  style="height:${height}px"
+                ></div>
+              </div>
               <div class="chart-date">${entry.shortDate}</div>
             </div>
           `;
@@ -545,6 +2932,7 @@ function renderDashboard() {
   return `
     <section class="stack-md">
       ${getInstallHintHtml()}
+      ${renderResumeCard()}
 
       <article class="surface surface-pad chart-shell">
         <div class="row">
@@ -584,13 +2972,13 @@ function renderDashboard() {
       </section>
 
       <section class="day-list">
-        ${Object.keys(PROGRAM)
+        ${getProgramDays()
           .map(
             (day) => `
               <button class="day-button" data-day="${day}">
                 <div>
                   <div class="day-button__title">${day.toUpperCase()}</div>
-                  <div class="muted">${PROGRAM[day].length} exercices</div>
+                  <div class="muted">${state.program[day].length} exercices</div>
                 </div>
                 <div class="day-button__arrow">›</div>
               </button>
@@ -598,6 +2986,1457 @@ function renderDashboard() {
           )
           .join("")}
       </section>
+    </section>
+  `;
+}
+
+function getSessionCount() {
+  const sessions = new Set(
+    state.history.map((item) => `${item.day}-${getDayKey(item.date)}`)
+  );
+  return sessions.size;
+}
+
+function getRecentSets(days = 7) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  return state.history.filter((item) => {
+    const time = new Date(item.date).getTime();
+    return Number.isFinite(time) && now - time <= range;
+  }).length;
+}
+
+function formatWeekday(date) {
+  return new Date(date)
+    .toLocaleDateString("fr-FR", { weekday: "short" })
+    .replace(".", "")
+    .slice(0, 3);
+}
+
+function getDayKey(date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeeklyPlanner(days = 7) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const counts = new Map();
+
+  state.history.forEach((item) => {
+    counts.set(getDayKey(item.date), (counts.get(getDayKey(item.date)) || 0) + 1);
+  });
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (days - 1 - index));
+    const key = getDayKey(date);
+
+    return {
+      key,
+      label: formatWeekday(date),
+      dateLabel: new Date(date).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+      }),
+      count: counts.get(key) || 0,
+      isToday: index === days - 1,
+    };
+  });
+}
+
+function getGlobalRecords() {
+  const numericEntries = state.history.filter((item) => isNumericLoad(item.load));
+  const heaviest = numericEntries
+    .slice()
+    .sort((a, b) => (b.load || 0) - (a.load || 0) || b.reps - a.reps)[0] || null;
+  const bestReps = state.history
+    .slice()
+    .sort((a, b) => b.reps - a.reps || new Date(b.date).getTime() - new Date(a.date).getTime())[0] || null;
+
+  return { heaviest, bestReps };
+}
+
+function getExerciseRecords(limit = 8) {
+  const records = new Map();
+
+  state.history.forEach((item) => {
+    const current = records.get(item.exercise) || {
+      exercise: item.exercise,
+      bestLoad: null,
+      bestLoadLabel: item.loadLabel,
+      bestLoadReps: 0,
+      bestReps: 0,
+      lastDate: item.date,
+      count: 0,
+    };
+
+    current.count += 1;
+    if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
+      current.lastDate = item.date;
+    }
+
+    if (item.reps > current.bestReps) {
+      current.bestReps = item.reps;
+    }
+
+    if (
+      isNumericLoad(item.load) &&
+      (!isNumericLoad(current.bestLoad) ||
+        item.load > current.bestLoad ||
+        (item.load === current.bestLoad && item.reps > current.bestLoadReps))
+    ) {
+      current.bestLoad = item.load;
+      current.bestLoadLabel = item.loadLabel;
+      current.bestLoadReps = item.reps;
+    }
+
+    records.set(item.exercise, current);
+  });
+
+  return Array.from(records.values())
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        (isNumericLoad(b.bestLoad) ? b.bestLoad : -1) - (isNumericLoad(a.bestLoad) ? a.bestLoad : -1) ||
+        b.bestReps - a.bestReps
+    )
+    .slice(0, limit);
+}
+
+function renderWeeklyPlanner() {
+  const planner = getWeeklyPlanner();
+  const resume = getSmartResumeData();
+
+  return `
+    <article class="surface surface-pad planner-shell">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Planning</div>
+          <h3 class="section-title dashboard-section-head__title">Semaine en cours</h3>
+        </div>
+        <div class="label">${getWeeklySessionCount()} seance(s)</div>
+      </div>
+
+      <div class="planner-grid">
+        ${planner
+          .map(
+            (day) => `
+              <div class="planner-day ${day.count ? "is-done" : ""} ${day.isToday ? "is-today" : ""}">
+                <div class="planner-day__label">${day.label}</div>
+                <div class="planner-day__count">${day.count || "—"}</div>
+                <div class="planner-day__date">${day.dateLabel}</div>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="planner-note">
+        <span class="planner-note__pill">${hasWorkoutInProgress() ? "A finir" : "A lancer"}</span>
+        <span>${resume?.title || `Prochaine ${getNextTrainingDay()}`}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderRecordsSection() {
+  const records = getExerciseRecords();
+  const { heaviest, bestReps } = getGlobalRecords();
+
+  return `
+    <section class="stack-md">
+      <article class="surface surface-pad records-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Records</div>
+            <h3 class="section-title dashboard-section-head__title">PR et meilleures perfs</h3>
+          </div>
+          <div class="label">${records.length} exos</div>
+        </div>
+
+        <div class="records-summary">
+          <div class="metric">
+            <div class="label">Charge max</div>
+            <div class="metric__value">
+              ${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "—"}
+            </div>
+            <div class="records-summary__meta">
+              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} · ${heaviest.reps} reps` : "Pas encore de PR"}
+            </div>
+          </div>
+          <div class="metric">
+            <div class="label">Reps max</div>
+            <div class="metric__value">${bestReps ? bestReps.reps : "—"}</div>
+            <div class="records-summary__meta">
+              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
+            </div>
+          </div>
+        </div>
+
+        ${
+          records.length
+            ? `
+                <div class="records-list">
+                  ${records
+                    .map(
+                      (record) => `
+                        <article class="record-card">
+                          <div class="record-card__top">
+                            <div class="record-card__title">${record.exercise}</div>
+                            <div class="record-card__count">${record.count} serie(s)</div>
+                          </div>
+                          <div class="record-card__stats">
+                            <span>Charge: ${formatLoad(record.bestLoad, record.bestLoadLabel)}</span>
+                            <span>Reps: ${record.bestReps}</span>
+                          </div>
+                          <div class="record-card__meta">Derniere: ${formatDate(record.lastDate)}</div>
+                        </article>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+            : `<div class="chart-empty">Aucun record disponible pour le moment.</div>`
+        }
+      </article>
+    </section>
+  `;
+}
+
+function getCycleGoalLabel(goal) {
+  return goal === "strength" ? "Force" : "Hypertrophie";
+}
+
+function getCycleBlueprint(goal, length) {
+  const hypertrophyPlans = {
+    4: [
+      { phase: "Base", tone: "hold", focus: "Volume propre", target: "RIR 2", prescription: "Installe les charges de travail et remplis la fourchette sans aller a l'echec." },
+      { phase: "Accumulation", tone: "progress", focus: "Plus de reps", target: "RIR 1-2", prescription: "Cherche 1 rep de plus sur les tops sets ou un petit palier si tout est propre." },
+      { phase: "Intensification", tone: "progress", focus: "Petit palier", target: "Lourd propre", prescription: "Monte legerement sur les mouvements forts et garde le volume stable." },
+      { phase: "Deload", tone: "reduce", focus: "Recuperation", target: "-30% volume", prescription: "Retire 1 a 2 series par exercice ou baisse d'un palier pour relancer le bloc." },
+    ],
+    6: [
+      { phase: "Base", tone: "hold", focus: "Calage", target: "RIR 2", prescription: "Pose tes charges de reference et reste technique sur toutes les series." },
+      { phase: "Accumulation 1", tone: "progress", focus: "Reps", target: "Milieu de fourchette", prescription: "Ajoute des reps propres avant de monter la charge." },
+      { phase: "Accumulation 2", tone: "progress", focus: "Volume", target: "Haut de fourchette", prescription: "Essaie de valider le haut des reps sur les mouvements principaux." },
+      { phase: "Intensification", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Monte d'un cran sur les tops sets si les validations restent propres." },
+      { phase: "Consolidation", tone: "hold", focus: "Verrouillage", target: "Charge tenue", prescription: "Stabilise les nouveaux paliers avant de chercher a remonter." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Volume bas", prescription: "Baisse clairement le volume et garde du jus pour repartir sur un nouveau bloc." },
+    ],
+    8: [
+      { phase: "Base", tone: "hold", focus: "Reference", target: "RIR 2", prescription: "Installe un point de depart propre sur tous les mouvements." },
+      { phase: "Accumulation 1", tone: "progress", focus: "Reps", target: "Milieu de fourchette", prescription: "Monte les reps progressivement sans griller la technique." },
+      { phase: "Accumulation 2", tone: "progress", focus: "Volume", target: "Haut de fourchette", prescription: "Pousse le volume utile sur les exos prioritaires." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids sur les tops sets validés." },
+      { phase: "Build 2", tone: "progress", focus: "Charge + reps", target: "Solide", prescription: "Essaie de tenir la nouvelle charge avec des reps propres." },
+      { phase: "Intensification", tone: "hold", focus: "Stabilite", target: "Lourd propre", prescription: "Freine le volume et verrouille les mouvements forts." },
+      { phase: "Pic", tone: "progress", focus: "Validation", target: "Top performance", prescription: "Cherche une grosse seance sans disperser le volume." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Volume bas", prescription: "Deload complet avant de relancer un nouveau cycle." },
+    ],
+  };
+
+  const strengthPlans = {
+    4: [
+      { phase: "Technique", tone: "hold", focus: "Barre propre", target: "Qualite", prescription: "Travaille les mouvements forts avec un peu plus de marge et des repos complets." },
+      { phase: "Charge", tone: "progress", focus: "Petit palier", target: "RPE controle", prescription: "Ajoute un palier sur les tops sets si la technique tient." },
+      { phase: "Intensif", tone: "progress", focus: "Lourd", target: "Top set", prescription: "Priorite aux grosses charges, reduis les accessoires si besoin." },
+      { phase: "Deload", tone: "reduce", focus: "Recuperation", target: "Vitesse", prescription: "Baisse franchement la charge et garde seulement des series faciles." },
+    ],
+    6: [
+      { phase: "Base", tone: "hold", focus: "Calage", target: "Vitesse", prescription: "Fixe les charges de reference avec une execution nickel." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Monte legerement sur les tops sets validés." },
+      { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue a charger sans perdre la vitesse de barre." },
+      { phase: "Intensification", tone: "hold", focus: "Lourd propre", target: "Bas de fourchette", prescription: "Garde les accessoires simples et concentre-toi sur les mouvements forts." },
+      { phase: "Pic", tone: "progress", focus: "Validation", target: "Perf", prescription: "Cherche une grosse validation sur les principaux lifts." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Barre facile", prescription: "Semaine legere pour absorber le bloc et repartir propre." },
+    ],
+    8: [
+      { phase: "Technique", tone: "hold", focus: "Bar path", target: "Qualite", prescription: "Verrouille la technique et les repos sur les lifts principaux." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids progressivement sans te crisper." },
+      { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue la montée de charge sur les mouvements forts." },
+      { phase: "Build 3", tone: "progress", focus: "Charge tenue", target: "Reps bas propres", prescription: "Garde le bas de fourchette avec une execution propre." },
+      { phase: "Intensification", tone: "hold", focus: "Nerveux", target: "Repos longs", prescription: "Diminue un peu le volume accessoire pour garder du jus." },
+      { phase: "Intensification 2", tone: "hold", focus: "Lourd stable", target: "Top sets", prescription: "Ne cherche pas a tout monter: verrouille les charges lourdes." },
+      { phase: "Pic", tone: "progress", focus: "Validation", target: "Meilleure seance", prescription: "Cherche une vraie seance reference sur les lifts du bloc." },
+      { phase: "Deload", tone: "reduce", focus: "Recup", target: "Barre rapide", prescription: "Reviens leger et rapide avant de repartir sur un nouveau cycle." },
+    ],
+  };
+
+  const catalog = goal === "strength" ? strengthPlans : hypertrophyPlans;
+  return catalog[length] || hypertrophyPlans[6];
+}
+
+function getCycleSnapshot() {
+  const cycle = sanitizeCycle(state.cycle);
+  const plan = getCycleBlueprint(cycle.goal, cycle.length);
+  const current = plan[Math.max(0, Math.min(cycle.week - 1, plan.length - 1))];
+  const next = cycle.week < cycle.length ? plan[cycle.week] : null;
+
+  return {
+    ...cycle,
+    goalLabel: getCycleGoalLabel(cycle.goal),
+    progress: Math.round((cycle.week / cycle.length) * 100),
+    current,
+    next,
+    startedLabel: formatDate(cycle.startedAt),
+  };
+}
+
+function setCycleGoal(goal) {
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    goal,
+  });
+  saveState();
+  renderApp();
+}
+
+function setCycleLength(length) {
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    length: Number(length),
+  });
+  saveState();
+  renderApp();
+}
+
+function changeCycleWeek(delta) {
+  const nextWeek = Math.max(1, Math.min(state.cycle.length, state.cycle.week + delta));
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    week: nextWeek,
+  });
+  saveState();
+  renderApp();
+}
+
+function resetCycleBlock() {
+  state.cycle = sanitizeCycle({
+    ...state.cycle,
+    week: 1,
+    startedAt: new Date().toISOString(),
+  });
+  saveState();
+  renderApp();
+}
+
+function renderCycleSection() {
+  const cycle = getCycleSnapshot();
+
+  return `
+    <article class="surface surface-pad cycle-shell cycle-shell--${cycle.current.tone}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Bloc de progression</div>
+          <h3 class="section-title dashboard-section-head__title">Semaine ${cycle.week} / ${cycle.length} · ${cycle.current.phase}</h3>
+        </div>
+        <div class="cycle-badge">${cycle.goalLabel}</div>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">Avancement du bloc</div>
+          <div class="label">${cycle.progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${cycle.progress}%"></div>
+        </div>
+      </div>
+
+      <div class="cycle-grid">
+        <div class="cycle-card">
+          <div class="label">Focus</div>
+          <div class="cycle-card__value">${cycle.current.focus}</div>
+          <div class="cycle-card__meta">${cycle.current.target}</div>
+        </div>
+        <div class="cycle-card">
+          <div class="label">Ensuite</div>
+          <div class="cycle-card__value">${cycle.next ? cycle.next.phase : "Fin de bloc"}</div>
+          <div class="cycle-card__meta">${cycle.next ? cycle.next.focus : "Relancer un nouveau cycle"}</div>
+        </div>
+      </div>
+
+      <div class="cycle-note">${cycle.current.prescription}</div>
+    </article>
+  `;
+}
+
+function renderCycleSettings() {
+  const cycle = getCycleSnapshot();
+
+  return `
+    <article class="surface surface-pad stack-md cycle-settings">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Cycle de progression</div>
+          <h3 class="section-title dashboard-section-head__title">Bloc en cours</h3>
+        </div>
+        <div class="label">Depart ${cycle.startedLabel}</div>
+      </div>
+
+      <div class="cycle-settings__summary">
+        <span class="cycle-settings__chip">${cycle.goalLabel}</span>
+        <span class="cycle-settings__chip">Semaine ${cycle.week}/${cycle.length}</span>
+        <span class="cycle-settings__chip">${cycle.current.phase}</span>
+      </div>
+
+      <div class="grid-2">
+        <div class="field-wrap">
+          <label class="label" for="cycle-goal-select">Objectif</label>
+          <select id="cycle-goal-select" class="select">
+            <option value="hypertrophy" ${cycle.goal === "hypertrophy" ? "selected" : ""}>Hypertrophie</option>
+            <option value="strength" ${cycle.goal === "strength" ? "selected" : ""}>Force</option>
+          </select>
+        </div>
+
+        <div class="field-wrap">
+          <label class="label" for="cycle-length-select">Duree</label>
+          <select id="cycle-length-select" class="select">
+            <option value="4" ${cycle.length === 4 ? "selected" : ""}>4 semaines</option>
+            <option value="6" ${cycle.length === 6 ? "selected" : ""}>6 semaines</option>
+            <option value="8" ${cycle.length === 8 ? "selected" : ""}>8 semaines</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="cycle-note">${cycle.current.prescription}</div>
+
+      <div class="cycle-settings__actions">
+        <button class="button button--ghost" data-action="cycle-prev-week">Semaine -</button>
+        <button class="button button--primary" data-action="cycle-next-week">Semaine +</button>
+        <button class="button button--ghost" data-action="cycle-reset">Redemarrer bloc</button>
+      </div>
+    </article>
+  `;
+}
+
+function getWeeklySessionCount(days = 7) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  const sessions = new Set();
+
+  state.history.forEach((item) => {
+    const time = new Date(item.date).getTime();
+    if (Number.isFinite(time) && now - time <= range) {
+      sessions.add(`${item.day}-${getDayKey(item.date)}`);
+    }
+  });
+
+  return sessions.size;
+}
+
+function getSortedHistory() {
+  return state.history
+    .slice()
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+function getDaySummary(day) {
+  const entries = state.program[day] || [];
+  return {
+    exerciseCount: new Set(entries.map((item) => item.exercise)).size,
+    setCount: entries.length,
+  };
+}
+
+function getDayTheme(day) {
+  return {
+    Push: {
+      subtitle: "Pecs · epaules · triceps",
+      cue: "Poussee lourde et propre",
+    },
+    Pull: {
+      subtitle: "Dos · biceps · arriere d'epaules",
+      cue: "Tirages solides et amplitude",
+    },
+    Legs: {
+      subtitle: "Quadris · ischios · fessiers",
+      cue: "Jambes, gainage et moteur",
+    },
+    Upper: {
+      subtitle: "Haut du corps complet",
+      cue: "Equilibre pecs, dos et bras",
+    },
+  }[day] || {
+    subtitle: "Bloc complet",
+    cue: "Construis une seance propre",
+  };
+}
+
+function getDayTheme(day) {
+  const accentDay = resolveDayThemeKey(day);
+  const themes = {
+    Push: {
+      subtitle: "Pecs - epaules - triceps",
+      cue: "Poussee lourde et propre",
+      badge: "Explosif",
+      mark: "PSH",
+      accentDay: "Push",
+    },
+    Pull: {
+      subtitle: "Dos - biceps - arriere d'epaules",
+      cue: "Tirages solides et amplitude",
+      badge: "Amplitude",
+      mark: "PUL",
+      accentDay: "Pull",
+    },
+    Legs: {
+      subtitle: "Quadris - ischios - fessiers",
+      cue: "Jambes, gainage et moteur",
+      badge: "Moteur",
+      mark: "LEG",
+      accentDay: "Legs",
+    },
+    Upper: {
+      subtitle: "Haut du corps complet",
+      cue: "Equilibre pecs, dos et bras",
+      badge: "Equilibre",
+      mark: "UPR",
+      accentDay: "Upper",
+    },
+  };
+
+  if (String(day || "").toLowerCase().includes("full")) {
+    return {
+      ...themes.Upper,
+      subtitle: "Corps complet",
+      cue: "Frequence, equilibre et progression",
+      badge: "Full",
+      mark: "FUL",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("lower")) {
+    return {
+      ...themes.Legs,
+      subtitle: "Bas du corps complet",
+      cue: "Quadris, ischios et fessiers",
+      badge: "Lower",
+      mark: "LWR",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("arms")) {
+    return {
+      ...themes.Upper,
+      subtitle: "Bras - delts - finition",
+      cue: "Volume propre et congestion",
+      badge: "Focus",
+      mark: "ARM",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("chest") || String(day || "").toLowerCase().includes("back")) {
+    return {
+      ...themes.Push,
+      subtitle: "Pecs - dos",
+      cue: "Gros basiques et densite",
+      badge: "Hybride",
+      mark: "C/B",
+      accentDay: "Push",
+    };
+  }
+
+  if (String(day || "").toLowerCase().includes("shoulders")) {
+    return {
+      ...themes.Upper,
+      subtitle: "Epaules - bras",
+      cue: "Delts pleins et bras propres",
+      badge: "Arnold",
+      mark: "S/A",
+    };
+  }
+
+  return themes[accentDay] || {
+    subtitle: "Bloc complet",
+    cue: "Construis une seance propre",
+    badge: "Elite",
+    mark: "ET",
+    accentDay: "Upper",
+  };
+}
+
+function getDayAverageRest(day) {
+  const entries = state.program[day] || [];
+  if (!entries.length) return 0;
+
+  const total = entries.reduce(
+    (sum, entry) => sum + sanitizePositiveInteger(entry.rest, 0, 0),
+    0
+  );
+
+  return Math.round(total / entries.length);
+}
+
+function shortenLabel(text, maxLength = 18) {
+  const value = String(text || "");
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
+function formatCompactNumber(value) {
+  if (!Number.isFinite(value)) return "0";
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? `${rounded}` : `${rounded}`;
+}
+
+function getNextTrainingDay() {
+  const days = getProgramDays();
+  if (!days.length) return state.day;
+
+  const sortedHistory = getSortedHistory();
+  if (!sortedHistory.length) {
+    return days.includes(state.day) ? state.day : days[0];
+  }
+
+  const lastDay = sortedHistory[0]?.day;
+  const lastIndex = days.indexOf(lastDay);
+
+  if (lastIndex === -1) {
+    return days.includes(state.day) ? state.day : days[0];
+  }
+
+  return days[(lastIndex + 1) % days.length];
+}
+
+function getSmartResumeData() {
+  const days = getProgramDays();
+  if (!days.length) return null;
+
+  if (hasWorkoutInProgress()) {
+    const active = getActiveExercise();
+    const exercises = getExercises();
+
+    return {
+      mode: "active",
+      day: state.day,
+      title: state.workoutFinished ? "Seance a valider" : `Reprendre ${state.day}`,
+      subtitle: state.workoutFinished
+        ? `${state.pendingSession.length} series a enregistrer`
+        : `${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length} series`,
+      meta: active ? `${active.exercise} · ${active.series}` : "Session en cours",
+      progress: getProgressPercent(),
+      actionLabel: "Reprendre",
+      actionAttrs: `data-action="resume-workout"`,
+      secondaryLabel: "Annuler",
+      secondaryAttrs: `data-action="discard-workout"`,
+    };
+  }
+
+  const day = getNextTrainingDay();
+  const summary = getDaySummary(day);
+  const lastEntry = getSortedHistory().find((item) => item.day === day) || null;
+
+  return {
+    mode: "next",
+    day,
+    title: `Prochaine ${day}`,
+    subtitle: `${summary.exerciseCount} exos · ${summary.setCount} series`,
+    meta: lastEntry ? `Derniere ${formatDate(lastEntry.date)}` : "Jamais lancee",
+    progress: 0,
+    actionLabel: `Lancer ${day}`,
+    actionAttrs: `data-day="${day}"`,
+    secondaryLabel: "Historique",
+    secondaryAttrs: `data-screen="history"`,
+  };
+}
+
+function getTopExerciseInsight() {
+  if (!state.history.length) {
+    return {
+      value: "A venir",
+      detail: "Commence une seance pour voir ton exercice cle",
+    };
+  }
+
+  const counts = new Map();
+  state.history.forEach((item) => {
+    counts.set(item.exercise, (counts.get(item.exercise) || 0) + 1);
+  });
+
+  const [exercise, count] = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+
+  return {
+    value: shortenLabel(exercise, 18),
+    detail: `${count} series loggees`,
+  };
+}
+
+function getTrendInsight() {
+  const key = state.selectedChartKey || getHistoryKeys()[0]?.key || "";
+  if (!key) {
+    return {
+      tone: "hold",
+      value: "A venir",
+      detail: "Ajoute 2 perfs sur le meme exercice",
+    };
+  }
+
+  const entries = getSortedHistory().filter((item) => item.key === key);
+
+  if (entries.length < 2) {
+    return {
+      tone: "hold",
+      value: "Stable",
+      detail: "Encore 1 seance pour lire la tendance",
+    };
+  }
+
+  const [latest, previous] = entries;
+  const useLoad = isNumericLoad(latest.load) && isNumericLoad(previous.load);
+  const delta = useLoad ? latest.load - previous.load : latest.reps - previous.reps;
+
+  if (delta > 0) {
+    return {
+      tone: "progress",
+      value: useLoad ? `+${formatCompactNumber(delta)} kg` : `+${delta} reps`,
+      detail: `${shortenLabel(latest.exercise, 18)} en hausse`,
+    };
+  }
+
+  if (delta < 0) {
+    return {
+      tone: "reduce",
+      value: useLoad ? `${formatCompactNumber(delta)} kg` : `${delta} reps`,
+      detail: `vs ${formatDate(previous.date)}`,
+    };
+  }
+
+  return {
+    tone: "hold",
+    value: "Stable",
+    detail: `${shortenLabel(latest.exercise, 18)} tient le rythme`,
+  };
+}
+
+function renderPremiumDayList() {
+  return `
+    <section class="day-list">
+      ${getProgramDays()
+        .map((day) => {
+          const summary = getDaySummary(day);
+          const theme = getDayTheme(day);
+
+          return `
+            <button class="day-button" data-day="${day}" data-theme-day="${theme.accentDay}">
+              <div>
+                <div class="day-button__eyebrow">${theme.subtitle}</div>
+                <div class="day-button__title">${day.toUpperCase()}</div>
+                <div class="day-button__meta">${theme.cue} · ${summary.exerciseCount} exos · ${summary.setCount} series</div>
+              </div>
+              <div class="day-button__arrow">â€º</div>
+            </button>
+          `;
+        })
+        .join("")}
+    </section>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const recentSets = getRecentSets();
+  const uniqueExercises = new Set((state.program[state.day] || []).map((item) => item.exercise)).size;
+  const heroTheme = getDayTheme(state.day);
+  const heroActionLabel = hasWorkoutInProgress()
+    ? "Reprendre la seance"
+    : `Lancer ${state.day}`;
+  const heroBadge = hasWorkoutInProgress() ? "Session active" : "Programme pret";
+  const heroCopy = hasWorkoutInProgress()
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${state.day.toUpperCase()}.`
+    : `${state.day.toUpperCase()} regroupe ${uniqueExercises} exercices distincts et ${state.program[state.day].length} series programmees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-accent-day="${state.day}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${state.day}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${state.day.toUpperCase()}</h2>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${state.history.length}</span>
+              <span class="dashboard-hero__stat-label">Series</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Seances</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">7 jours</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" data-day="${state.day}">
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+
+      <section class="dashboard-mini-grid">
+        <article class="surface dashboard-mini-card">
+          <div class="label">Bloc actif</div>
+          <div class="dashboard-mini-card__value">${state.day}</div>
+          <div class="dashboard-mini-card__meta">${uniqueExercises} exercices distincts</div>
+        </article>
+        <article class="surface dashboard-mini-card">
+          <div class="label">Volume recent</div>
+          <div class="dashboard-mini-card__value">${recentSets}</div>
+          <div class="dashboard-mini-card__meta">series sur 7 jours</div>
+        </article>
+      </section>
+
+      <article class="surface surface-pad chart-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+          </div>
+          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} · ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
+function renderResumeCard() {
+  const resume = getSmartResumeData();
+  if (!resume) return "";
+
+  return `
+    <article class="surface surface-pad smart-resume">
+      <div class="row row-start">
+        <div class="stack-sm smart-resume__copy">
+          <div class="label">Reprise intelligente</div>
+          <h2 class="section-title smart-resume__title">${resume.title}</h2>
+          <div class="muted">${resume.subtitle}</div>
+          <div class="smart-resume__meta">
+            <span class="smart-resume__chip">${resume.day}</span>
+            <span class="smart-resume__chip">${resume.meta}</span>
+          </div>
+        </div>
+        <span class="pill">${resume.mode === "active" ? "Maintenant" : "Ensuite"}</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">${resume.mode === "active" ? "Progression" : "Preparation"}</div>
+          <div class="label">${resume.progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${resume.progress}%"></div>
+        </div>
+      </div>
+
+      <div class="smart-resume__actions">
+        <button class="button button--primary" ${resume.actionAttrs}>
+          ${resume.actionLabel}
+        </button>
+        <button class="button button--ghost" ${resume.secondaryAttrs}>
+          ${resume.secondaryLabel}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const weeklySessions = getWeeklySessionCount();
+  const recentSets = getRecentSets();
+  const resume = getSmartResumeData();
+  const heroDay = resume?.day || state.day;
+  const heroSummary = getDaySummary(heroDay);
+  const topExercise = getTopExerciseInsight();
+  const trend = getTrendInsight();
+  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionAttrs = resume?.mode === "active"
+    ? `data-action="resume-workout"`
+    : `data-day="${heroDay}"`;
+  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
+  const heroCopy = resume?.mode === "active"
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
+    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-accent-day="${heroTheme.accentDay}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${heroDay}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
+              <span class="dashboard-hero__stat-label">Semaine</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Total</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">Series 7j</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" ${heroActionAttrs}>
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+      ${renderWeeklyPlanner()}
+
+      <section class="dashboard-mini-grid dashboard-mini-grid--insights">
+        <article class="surface dashboard-mini-card">
+          <div class="label">Le plus regulier</div>
+          <div class="dashboard-mini-card__value dashboard-mini-card__value--text">${topExercise.value}</div>
+          <div class="dashboard-mini-card__meta">${topExercise.detail}</div>
+        </article>
+        <article class="surface dashboard-mini-card dashboard-mini-card--trend dashboard-mini-card--${trend.tone}">
+          <div class="label">Tendance</div>
+          <div class="dashboard-mini-card__value">${trend.value}</div>
+          <div class="dashboard-mini-card__meta">${trend.detail}</div>
+        </article>
+      </section>
+
+      <article class="surface surface-pad chart-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+          </div>
+          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} · ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
+function getRecentTrainingStreak(days = 7) {
+  const planner = getWeeklyPlanner(days).slice().reverse();
+  let streak = 0;
+  let started = false;
+
+  for (const day of planner) {
+    if (!started && day.count === 0) continue;
+    if (day.count > 0) {
+      started = true;
+      streak += 1;
+      continue;
+    }
+    if (started) break;
+  }
+
+  return streak;
+}
+
+function getLatestSessionEntriesByDay(day) {
+  const entries = getSortedHistory().filter((item) => item.day === day);
+  if (!entries.length) return [];
+
+  const latestKey = getDayKey(entries[0].date);
+  return entries.filter((item) => item.day === day && getDayKey(item.date) === latestKey);
+}
+
+function pickCoachFocusEntry(day) {
+  const entries = getLatestSessionEntriesByDay(day);
+  return (
+    entries.find((item) => String(item.series || "").toLowerCase().includes("top set")) ||
+    entries.find((item) => isNumericLoad(item.load)) ||
+    entries[0] ||
+    getSortedHistory().find((item) => item.day === day) ||
+    null
+  );
+}
+
+function getStagnationInsight(key) {
+  const entries = getSortedHistory().filter((item) => item.key === key).slice(0, 3);
+  if (entries.length < 3) {
+    return {
+      stalled: false,
+      label: "Peu de recul",
+      detail: "Encore 1 a 2 seances pour lire une vraie tendance",
+    };
+  }
+
+  const reps = entries.map((item) => item.reps);
+  const repSpread = Math.max(...reps) - Math.min(...reps);
+  const allNumeric = entries.every((item) => isNumericLoad(item.load));
+
+  if (allNumeric) {
+    const sameLoad = entries.every((item) => item.load === entries[0].load);
+    const bestReps = Math.max(...reps);
+
+    if (sameLoad && repSpread <= 1 && bestReps < entries[0].maxReps) {
+      return {
+        stalled: true,
+        label: "Stagnation",
+        detail: "Meme charge et presque le meme score sur 3 seances",
+      };
+    }
+  }
+
+  if (repSpread === 0) {
+    return {
+      stalled: true,
+      label: "Stagnation",
+      detail: "Le score reps ne bouge plus depuis 3 passages",
+    };
+  }
+
+  return {
+    stalled: false,
+    label: "Ca bouge",
+    detail: "Les derniers passages montrent encore du mouvement",
+  };
+}
+
+function getFatigueProfile() {
+  if (!state.history.length) {
+    return {
+      score: 0,
+      label: "Depart",
+      tone: "hold",
+      detail: "Commence a logger pour affiner les recommandations",
+      weeklySessions: 0,
+      recentSets: 0,
+      reduceSignals: 0,
+      streak: 0,
+    };
+  }
+
+  const recentEntries = getSortedHistory().slice(0, 12);
+  const weeklySessions = getWeeklySessionCount(7);
+  const recentSets = getRecentSets(7);
+  const reduceSignals = recentEntries.filter(
+    (entry) => getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe).type === "reduce"
+  ).length;
+  const streak = getRecentTrainingStreak(7);
+
+  let score = 0;
+  if (weeklySessions >= 4) score += 1;
+  if (recentSets >= 18) score += 1;
+  if (reduceSignals >= 2) score += 1;
+  if (streak >= 3) score += 1;
+
+  if (score >= 4) {
+    return {
+      score,
+      label: "Deload",
+      tone: "reduce",
+      detail: "Volume charge et plusieurs signaux bas cette semaine",
+      weeklySessions,
+      recentSets,
+      reduceSignals,
+      streak,
+    };
+  }
+
+  if (score >= 2) {
+    return {
+      score,
+      label: "A surveiller",
+      tone: "hold",
+      detail: "Garde un peu de marge sur les gros mouvements",
+      weeklySessions,
+      recentSets,
+      reduceSignals,
+      streak,
+    };
+  }
+
+  return {
+    score,
+    label: "Frais",
+    tone: "progress",
+    detail: "Bonne fenetre pour pousser si la technique reste propre",
+    weeklySessions,
+    recentSets,
+    reduceSignals,
+    streak,
+  };
+}
+
+function getCoachSnapshot() {
+  const resume = getSmartResumeData();
+  const day = resume?.day || getNextTrainingDay();
+  const cycle = getCycleSnapshot();
+  const focusEntry = pickCoachFocusEntry(day);
+  const fatigue = getFatigueProfile();
+  const stagnation = focusEntry ? getStagnationInsight(focusEntry.key) : null;
+  const focusAdvice = focusEntry
+    ? getAdvice(focusEntry.reps, focusEntry.minReps, focusEntry.maxReps, focusEntry.rpe ?? 8)
+    : null;
+  const averageRest = getDayAverageRest(day);
+  const volumeCall =
+    cycle.current.tone === "reduce" || fatigue.score >= 4
+      ? {
+          value: "Alleger",
+          meta: "Retire 1 a 2 series sur les mouvements qui piquent",
+        }
+      : fatigue.score >= 2
+      ? {
+          value: "Stable",
+          meta: `${fatigue.recentSets} series sur 7 jours, garde ce volume`,
+        }
+      : {
+          value: "Complet",
+          meta: `${fatigue.recentSets} series sur 7 jours, volume plein autorise`,
+        };
+  const intensityCall =
+    cycle.current.tone === "reduce" || fatigue.score >= 4
+      ? {
+          value: "Technique",
+          meta: "Reste a 1-2 reps de marge sur les gros exos",
+        }
+      : focusAdvice?.type === "progress" && fatigue.score <= 1
+      ? {
+          value: "Offensif",
+          meta: "Tu peux pousser les top sets si la forme reste propre",
+        }
+      : stagnation?.stalled
+      ? {
+          value: "Controle",
+          meta: "Garde la charge et vole une rep propre",
+        }
+      : {
+          value: "Stable",
+          meta: cycle.current.prescription,
+        };
+  const recoveryCall =
+    fatigue.score >= 2
+      ? {
+          value: `${averageRest}s`,
+          meta: "Prends tes repos pleins sur les mouvements cles",
+        }
+      : {
+          value: `${averageRest}s`,
+          meta: "Relance des que la qualite reste propre",
+        };
+
+  let tone = "hold";
+  let action = focusEntry ? "Garder" : "Lancer";
+  let signal = focusEntry ? "Routine" : "Reference";
+  let note = `Prochaine ${day}: construis une reference propre et reguliere.`;
+
+  if (cycle.current.tone === "reduce") {
+    tone = "reduce";
+    action = "Deload";
+    signal = cycle.current.phase;
+    note = `${cycle.current.phase} sur ton bloc ${cycle.goalLabel.toLowerCase()}. ${cycle.current.prescription}`;
+  } else if (fatigue.label === "Deload") {
+    tone = "reduce";
+    action = "Deload";
+    signal = "Fatigue";
+    note = `Le volume recent est charge. Sur ${day}, baisse d'un palier ou retire 1 a 2 series pour repartir propre.`;
+  } else if (focusEntry && focusAdvice?.type === "reduce") {
+    tone = "reduce";
+    action = "Baisser";
+    signal = "Sous cible";
+    note = `${shortenLabel(focusEntry.exercise, 24)} est passe sous la cible. Redescends d'un palier a la prochaine ${day}.`;
+  } else if (focusEntry && stagnation?.stalled) {
+    tone = "hold";
+    action = "Garder";
+    signal = "Stagnation";
+    note = `${shortenLabel(focusEntry.exercise, 24)} stagne depuis 3 passages. Garde la charge et vise 1 rep propre en plus.`;
+  } else if (focusEntry && focusAdvice?.type === "progress" && fatigue.score <= 1) {
+    tone = "progress";
+    action = "Monter";
+    signal = "Progression";
+    note = `${shortenLabel(focusEntry.exercise, 24)} valide le haut de fourchette. Monte d'un palier a la prochaine ${day} dans la phase ${cycle.current.phase.toLowerCase()}.`;
+  } else if (focusEntry) {
+    tone = "hold";
+    action = "Garder";
+    signal = cycle.current.phase;
+    note = `${shortenLabel(focusEntry.exercise, 24)} est globalement propre. ${cycle.current.prescription}`;
+  }
+
+  return {
+    day,
+    tone,
+    action,
+    readiness: fatigue.label,
+    readinessTone: fatigue.tone,
+    readinessDetail: fatigue.detail,
+    focus: focusEntry ? shortenLabel(focusEntry.exercise, 20) : day,
+    focusMeta: focusEntry
+      ? `${focusEntry.series} - ${focusEntry.reps} reps au dernier passage`
+      : "Pas encore assez de data sur ce bloc",
+    signal,
+    note,
+    cycleLabel: `S${cycle.week}/${cycle.length} · ${cycle.current.phase}`,
+    scoreText: `${fatigue.score}/4`,
+    streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
+    intensityCall,
+    volumeCall,
+    recoveryCall,
+  };
+}
+
+function renderCoachSection() {
+  const coach = getCoachSnapshot();
+
+  return `
+    <article class="surface surface-pad coach-shell coach-shell--${coach.tone}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Coach intelligent</div>
+          <h3 class="section-title dashboard-section-head__title">Prochaine ${coach.day}: ${coach.action}</h3>
+        </div>
+        <div class="coach-score coach-score--${coach.readinessTone}">
+          <span>${coach.readiness}</span>
+          <strong>${coach.scoreText}</strong>
+        </div>
+      </div>
+
+      <div class="coach-grid coach-grid--triple">
+        <div class="coach-card">
+          <div class="label">Charge</div>
+          <div class="coach-card__value">${coach.action}</div>
+          <div class="coach-card__meta">${coach.focus} · ${coach.signal}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Intensite</div>
+          <div class="coach-card__value">${coach.intensityCall.value}</div>
+          <div class="coach-card__meta">${coach.cycleLabel} · ${coach.streakText}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Volume</div>
+          <div class="coach-card__value">${coach.volumeCall.value}</div>
+          <div class="coach-card__meta">${coach.volumeCall.meta}</div>
+        </div>
+      </div>
+
+      <div class="coach-note">${coach.note}</div>
+
+      <div class="coach-pulse-grid">
+        <div class="coach-pulse">
+          <span class="label">Recup</span>
+          <strong>${coach.recoveryCall.value}</strong>
+          <span>${coach.recoveryCall.meta}</span>
+        </div>
+        <div class="coach-pulse">
+          <span class="label">Bloc</span>
+          <strong>${coach.cycleLabel}</strong>
+          <span>${coach.focusMeta}</span>
+        </div>
+      </div>
+
+      <div class="coach-tags">
+        <span class="coach-tag">Fatigue ${coach.readiness}</span>
+        <span class="coach-tag">Lecture ${coach.signal}</span>
+        <span class="coach-tag">Bloc ${coach.day}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const weeklySessions = getWeeklySessionCount();
+  const recentSets = getRecentSets();
+  const resume = getSmartResumeData();
+  const heroDay = resume?.day || state.day;
+  const heroSummary = getDaySummary(heroDay);
+  const heroTheme = getDayTheme(heroDay);
+  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionAttrs = resume?.mode === "active"
+    ? `data-action="resume-workout"`
+    : `data-day="${heroDay}"`;
+  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
+  const heroCopy = resume?.mode === "active"
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
+    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-accent-day="${heroDay}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${heroDay}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <div class="dashboard-hero__subtag">${heroTheme.subtitle}</div>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
+              <span class="dashboard-hero__stat-label">Semaine</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Total</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">Series 7j</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" ${heroActionAttrs}>
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+      ${renderWeeklyPlanner()}
+      ${renderCycleSection()}
+      ${renderCoachSection()}
+
+      <article class="surface surface-pad chart-shell">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+          </div>
+          <div class="label">${chart.entries.length} points - ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} - ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
     </section>
   `;
 }
@@ -625,9 +4464,9 @@ function renderPlateView(settings) {
   `;
 }
 
-function renderWeightView(settings, active, last) {
+function renderWeightView(settings, active, last, isFocusMode = false) {
   return `
-    <div class="weight-card">
+    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}">
       ${
         settings.deload
           ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
@@ -642,10 +4481,22 @@ function renderWeightView(settings, active, last) {
         }
       </div>
       <div class="goal-line">
-        <span>Objectif : ${active.targetLabel} reps · Repos : ${active.rest}s</span>
+        <span class="goal-line__chip">Objectif ${active.targetLabel} reps</span>
+        <span class="goal-line__chip">Repos ${active.rest}s</span>
       </div>
       ${
-        last
+        isNumericLoad(settings.load) && !isFocusMode
+          ? `
+              <div class="load-actions">
+                <button class="icon-button" data-action="decrease-load" aria-label="Baisser la charge">-</button>
+                <button class="button button--ghost load-reset" data-action="reset-load">Reset cible</button>
+                <button class="icon-button" data-action="increase-load" aria-label="Augmenter la charge">+</button>
+              </div>
+            `
+          : ""
+      }
+      ${
+        last && !isFocusMode
           ? `<div class="last-performance">Precedent : <strong>${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}</strong></div>`
           : ""
       }
@@ -653,23 +4504,75 @@ function renderWeightView(settings, active, last) {
   `;
 }
 
-function renderWorkout() {
-  const active = getActiveExercise();
-  const settings = getCurrentSettings();
-  const last = getLastPerformance();
-  const advice = getCurrentAdvice();
+function renderWorkoutCompletionScreen() {
+  const summary = getWorkoutCompletionSummary();
+  const lastEntry = getLastPendingEntry();
 
-  if (state.workoutFinished) {
+  if (!summary) {
     return `
-      <section class="surface surface-pad-lg center-block stack-md">
-        <div class="trophy">T</div>
-        <div class="stack-sm">
-          <h2 class="section-title">Seance terminee</h2>
-          <div class="muted">
-            Valide la fin de seance pour enregistrer les performances et calculer
-            automatiquement les prochains poids.
+      <section class="stack-md">
+        <section class="surface surface-pad-lg center-block stack-md">
+          <div class="trophy">T</div>
+          <div class="stack-sm">
+            <h2 class="section-title">Seance terminee</h2>
+          </div>
+          <button class="button button--primary" data-action="finalize-workout">
+            Terminer la seance
+          </button>
+        </section>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="stack-md">
+      <section class="surface surface-pad-lg session-finish">
+        <div class="session-finish__hero">
+          <div class="trophy">T</div>
+          <div class="stack-sm">
+            <div class="label">Fin de seance</div>
+            <h2 class="section-title session-finish__title">Belle seance.</h2>
+            <div class="muted">${summary.coachLine}</div>
           </div>
         </div>
+
+        <div class="grid-2 session-finish__stats">
+          <article class="dashboard-mini-card">
+            <div class="label">Series</div>
+            <div class="dashboard-mini-card__value">${summary.setCount}</div>
+            <div class="dashboard-mini-card__meta">${summary.exerciseCount} exos</div>
+          </article>
+          <article class="dashboard-mini-card">
+            <div class="label">Duree</div>
+            <div class="dashboard-mini-card__value">${summary.durationLabel}</div>
+            <div class="dashboard-mini-card__meta">${summary.volumeLabel} de volume</div>
+          </article>
+        </div>
+
+        <div class="session-finish__verdicts">
+          <span class="verdict-chip verdict-chip--progress">Monter ${summary.counts.progress}</span>
+          <span class="verdict-chip verdict-chip--hold">Garder ${summary.counts.hold}</span>
+          <span class="verdict-chip verdict-chip--reduce">Baisser ${summary.counts.reduce}</span>
+        </div>
+
+        ${
+          lastEntry
+            ? `
+                <div class="last-set-card last-set-card--summary">
+                  <div class="last-set-card__copy">
+                    <span class="label">Derniere serie</span>
+                    <strong>${lastEntry.exercise}</strong>
+                    <span>${lastEntry.reps} reps · ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+                  </div>
+                  <div class="last-set-card__actions">
+                    <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
+                    <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
+                  </div>
+                </div>
+              `
+            : ""
+        }
+
         <div class="stack-sm">
           <button class="button button--primary" data-action="finalize-workout">
             Enregistrer la seance
@@ -679,7 +4582,19 @@ function renderWorkout() {
           </button>
         </div>
       </section>
-    `;
+    </section>
+  `;
+}
+
+function renderWorkout() {
+  const active = getActiveExercise();
+  const settings = getCurrentSettings();
+  const last = getLastPerformance();
+  const advice = getCurrentAdvice();
+  const isFocusMode = state.focusWorkoutMode;
+
+  if (state.workoutFinished) {
+    return renderWorkoutCompletionScreen();
   }
 
   if (!active) {
@@ -691,42 +4606,53 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-lg">
+    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${theme.accentDay}">
       <div class="row row-start">
         <div>
           <span class="pill">${active.series}</span>
           <h2 class="hero-title">${active.exercise}</h2>
-          <div class="hero-subtitle">Exercice ${state.currentIndex + 1} sur ${getExercises().length}</div>
-          ${
-            state.pendingSession.length
-              ? `<div class="notice">${state.pendingSession.length} serie(s) en attente d'enregistrement final</div>`
-              : ""
-          }
+          ${isFocusMode ? "" : `<div class="hero-subtitle">Exercice ${state.currentIndex + 1} sur ${getExercises().length}</div>`}
         </div>
-        <button
-          class="icon-button ${state.showPlates ? "is-active" : ""}"
-          data-action="toggle-plates"
-          aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
-        >
-          ${state.showPlates ? "KG" : "DB"}
-        </button>
-      </div>
-
-      <div class="progress-wrap">
-        <div class="row">
-          <div class="label">Progression seance</div>
-          <div class="label">${getProgressPercent()}%</div>
-        </div>
-        <div class="progress">
-          <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
+        <div class="workout-shell__tools">
+          <button
+            class="icon-button ${state.focusWorkoutMode ? "is-active" : ""}"
+            data-action="toggle-focus-workout"
+            aria-label="${state.focusWorkoutMode ? "Quitter le mode focus" : "Activer le mode focus"}"
+          >
+            ${state.focusWorkoutMode ? "FOC" : "ZEN"}
+          </button>
+          <button
+            class="icon-button ${state.showPlates ? "is-active" : ""}"
+            data-action="toggle-plates"
+            aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
+          >
+            ${state.showPlates ? "KG" : "DB"}
+          </button>
         </div>
       </div>
 
-      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last)}
+      ${
+        isFocusMode
+          ? ""
+          : `
+              <div class="progress-wrap">
+                <div class="row">
+                  <div class="label">Progression seance</div>
+                  <div class="label">${getProgressPercent()}%</div>
+                </div>
+                <div class="progress">
+                  <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
+                </div>
+              </div>
+            `
+      }
+
+      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
+      ${renderLastPerformancePreviewCard()}
 
       <div class="stack-md">
         <div class="field-wrap">
-          <label class="label" for="reps-input">Repetitions validees</label>
+          <label class="label" for="reps-input">Reps</label>
           <input
             id="reps-input"
             class="input"
@@ -738,46 +4664,19 @@ function renderWorkout() {
           />
         </div>
 
-        <div class="stack-sm">
-          <div class="row">
-            <div class="label">RPE</div>
-            <div class="section-title" style="color:var(--green)">${state.rpe}</div>
-          </div>
-          <input
-            id="rpe-input"
-            class="slider"
-            type="range"
-            min="5"
-            max="10"
-            step="0.5"
-            value="${state.rpe}"
-          />
-          <div class="row">
-            <div class="label">Facile</div>
-            <div class="label">Echec</div>
-          </div>
-        </div>
+        ${renderRepQuickPicks()}
 
-        ${
-          advice
-            ? `
-                <div class="advice ${
-                  advice.type === "progress"
-                    ? "advice--progress"
-                    : advice.type === "reduce"
-                    ? "advice--reduce"
-                    : ""
-                }">
-                  <div>${advice.label}</div>
-                  ${advice.fatigue ? `<div class="advice__sub">${advice.fatigue}</div>` : ""}
-                </div>
-              `
-            : ""
-        }
-
-        <button class="button button--primary" data-action="validate-set">
-          Serie terminee
+        <button
+          id="validate-set-button"
+          class="${getValidationButtonClass(advice)}"
+          data-action="validate-set"
+          aria-label="${getValidationButtonLabel(advice)}"
+          ${hasValidRepsInput() ? "" : "disabled"}
+        >
+          ${renderValidationButtonContent(advice)}
         </button>
+
+        ${renderLastSetActions()}
       </div>
     </section>
   `;
@@ -786,26 +4685,36 @@ function renderWorkout() {
 function renderHistory() {
   if (!state.history.length) {
     return `
-      <section class="surface surface-pad">
-        <div class="muted">Aucune serie enregistree.</div>
+      <section class="stack-md">
+        ${renderRecordsSection()}
+        <section class="surface surface-pad">
+          <div class="muted">Aucune serie enregistree.</div>
+        </section>
       </section>
     `;
   }
 
+  const sortedHistory = getSortedHistory().slice(0, 24);
+
   return `
     <section class="history-list">
+      ${renderRecordsSection()}
       <h2 class="section-title">Historique</h2>
-      ${state.history
-        .slice(0, 24)
+      ${sortedHistory
         .map(
-          (item) => `
-            <article class="surface surface-pad">
+          (item, index) => `
+            <article class="surface surface-pad history-card">
               <div class="row row-start">
                 <div>
                   <div class="section-title" style="font-size:22px">${item.exercise}</div>
                   <div class="label" style="margin-top:4px">${item.day} · ${item.series}</div>
                 </div>
-                <span class="pill pill--outline">${formatDate(item.date)}</span>
+                <div class="history-card__head-tools">
+                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
+                    Modifier
+                  </button>
+                </div>
               </div>
               <div class="metric-grid">
                 <div class="metric">
@@ -816,10 +4725,6 @@ function renderHistory() {
                   <div class="label">Reps</div>
                   <div class="metric__value">${item.reps}</div>
                 </div>
-                <div class="metric">
-                  <div class="label">RPE</div>
-                  <div class="metric__value">${item.rpe}</div>
-                </div>
               </div>
             </article>
           `
@@ -829,11 +4734,389 @@ function renderHistory() {
   `;
 }
 
+function renderProgramEditor() {
+  const day = state.programEditorDay;
+  const entries = state.program[day] || [];
+
+  return `
+    <article class="surface surface-pad stack-md program-editor">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Modifier le programme</div>
+          <h3 class="section-title dashboard-section-head__title">Edition directe</h3>
+        </div>
+        <div class="label">Sauvegarde auto</div>
+      </div>
+
+      <div class="program-hint">
+        Modifie les exercices, les reps, le repos et les charges de depart directement depuis l'iPhone.
+      </div>
+
+      <div class="program-day-tabs">
+        ${getProgramDays()
+          .map(
+            (programDay) => `
+              <button
+                class="program-day-tab ${programDay === day ? "is-active" : ""}"
+                data-program-day="${programDay}"
+              >
+                ${programDay}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="program-editor-list">
+        ${
+          entries.length
+            ? entries
+                .map(
+                  (entry, index) => `
+                    <article class="surface surface--soft surface-pad program-entry">
+                      <div class="program-entry__head">
+                        <div class="stack-sm">
+                          <div class="label">Exercice ${index + 1}</div>
+                          <div class="program-entry__title">${entry.exercise}</div>
+                          <div class="program-entry__meta">${entry.series} · ${entry.targetLabel} reps · ${entry.rest}s</div>
+                        </div>
+                        <button
+                          class="program-entry__remove"
+                          data-action="remove-program-entry"
+                          data-program-day="${day}"
+                          data-program-index="${index}"
+                          aria-label="Supprimer ${entry.exercise}"
+                        >
+                          Suppr
+                        </button>
+                      </div>
+
+                      <div class="program-grid">
+                        <div class="field-wrap field-wrap--wide">
+                          <label class="label">Nom</label>
+                          <input
+                            class="input input--editor"
+                            type="text"
+                            value="${entry.exercise}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="exercise"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Serie</label>
+                          <input
+                            class="input input--editor"
+                            type="text"
+                            value="${entry.series}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="series"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Type</label>
+                          <select
+                            class="select select--editor"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="kind"
+                          >
+                            <option value="barbell" ${entry.kind === "barbell" ? "selected" : ""}>Barre</option>
+                            <option value="machine" ${entry.kind === "machine" ? "selected" : ""}>Machine</option>
+                            <option value="dumbbell" ${entry.kind === "dumbbell" ? "selected" : ""}>Halteres</option>
+                            <option value="isolation" ${entry.kind === "isolation" ? "selected" : ""}>Isolation</option>
+                          </select>
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Min reps</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            value="${entry.minReps}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="minReps"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Max reps</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            value="${entry.maxReps}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="maxReps"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Repos</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="0"
+                            inputmode="numeric"
+                            value="${entry.rest}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="rest"
+                          />
+                        </div>
+
+                        <div class="field-wrap">
+                          <label class="label">Charge dep.</label>
+                          <input
+                            class="input input--editor"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            inputmode="decimal"
+                            value="${entry.defaultLoad ?? ""}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="defaultLoad"
+                          />
+                        </div>
+
+                        <div class="field-wrap field-wrap--wide">
+                          <label class="label">Libelle charge</label>
+                          <input
+                            class="input input--editor"
+                            type="text"
+                            value="${entry.loadLabel}"
+                            data-program-input
+                            data-program-day="${day}"
+                            data-program-index="${index}"
+                            data-program-field="loadLabel"
+                          />
+                        </div>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")
+            : `
+                <article class="surface surface--soft surface-pad">
+                  <div class="muted">Aucun exercice sur ce bloc pour le moment.</div>
+                </article>
+              `
+        }
+      </div>
+
+      <div class="program-actions">
+        <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
+          Ajouter un exercice
+        </button>
+        <button class="button button--ghost" data-action="reset-program">
+          Revenir au programme de base
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderProgramPlanner() {
+  const selectedDays = [3, 4, 5, 6].includes(state.programPlannerDays) ? state.programPlannerDays : 4;
+  const templates = getProgramPlannerOptions(selectedDays);
+
+  return `
+    <article class="surface surface-pad stack-md program-planner">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix du split</div>
+          <h3 class="section-title dashboard-section-head__title">Assistant programme</h3>
+        </div>
+        <div class="label">${getProgramDays().length} blocs actifs</div>
+      </div>
+
+      <div class="program-hint">
+        Choisis ton nombre de jours, puis on te propose le split le plus logique avec deux alternatives deja pretes.
+      </div>
+
+      <div class="planner-days-tabs">
+        ${[3, 4, 5, 6]
+          .map(
+            (days) => `
+              <button class="program-day-tab ${selectedDays === days ? "is-active" : ""}" data-action="set-program-planner-days" data-program-days="${days}">
+                ${days} jours
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="template-list">
+        ${templates
+          .map((template) => `
+            <article class="surface surface--soft surface-pad template-card" data-accent-day="${getDayTheme(template.days[0]).accentDay}">
+              <div class="template-card__head">
+                <div class="stack-sm">
+                  <div class="template-card__eyebrow">${template.split}</div>
+                  <div class="template-card__title">${template.title}</div>
+                  <div class="template-card__meta">${template.why}</div>
+                </div>
+                <span class="pill ${template.split === "Recommande" ? "" : "pill--outline"}">${template.days.length}J</span>
+              </div>
+
+              <div class="template-card__days">
+                ${template.days.map((day) => `<span class="template-card__chip">${day}</span>`).join("")}
+              </div>
+
+              <button class="button ${template.split === "Recommande" ? "button--primary" : "button--ghost"}" data-action="apply-program-template" data-template-id="${template.id}">
+                Utiliser ${template.title}
+              </button>
+            </article>
+          `)
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderRestSettings() {
+  return `
+    <article class="surface surface-pad stack-md">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Alertes de repos</div>
+          <h3 class="section-title dashboard-section-head__title">Visuel + sonore</h3>
+        </div>
+        <div class="label">In-app</div>
+      </div>
+
+      <div class="program-hint">
+        Quand le repos se termine, l'app affiche une alerte plein ecran, joue un son si possible et vibre sur les appareils compatibles.
+      </div>
+
+      <div class="settings-toggle-list">
+        <button class="settings-toggle" data-action="toggle-rest-sound">
+          <div>
+            <div class="settings-toggle__title">Son de fin de repos</div>
+            <div class="settings-toggle__meta">Petit chime genere directement dans l'app</div>
+          </div>
+          <span class="settings-toggle__switch ${state.restSoundEnabled ? "is-on" : ""}">
+            ${state.restSoundEnabled ? "ON" : "OFF"}
+          </span>
+        </button>
+
+        <button class="settings-toggle" data-action="toggle-rest-vibration">
+          <div>
+            <div class="settings-toggle__title">Vibration</div>
+            <div class="settings-toggle__meta">Utilise la vibration si l'iPhone ou le navigateur l'autorise</div>
+          </div>
+          <span class="settings-toggle__switch ${state.restVibrationEnabled ? "is-on" : ""}">
+            ${state.restVibrationEnabled ? "ON" : "OFF"}
+          </span>
+        </button>
+      </div>
+
+      <button class="button button--ghost" data-action="test-rest-alert">
+        Tester l'alerte de repos
+      </button>
+    </article>
+  `;
+}
+
+function renderRestAlertOverlay() {
+  if (!state.restAlertVisible) return "";
+
+  const copy = getRestAlertCopy();
+
+  return `
+    <div class="rest-alert-overlay">
+      <article class="rest-alert-card">
+        <div class="rest-alert-card__pulse"></div>
+        <div class="rest-alert-card__content">
+          <div class="rest-alert-card__icon">GO</div>
+          <div class="stack-sm center-block">
+            <div class="label">Repos termine</div>
+            <h2 class="section-title rest-alert-card__title">${copy.title}</h2>
+            <div class="rest-alert-card__text">${copy.text}</div>
+          </div>
+
+          <div class="rest-alert-card__actions">
+            <button class="button button--ghost" data-action="extend-rest-30">
+              +30s
+            </button>
+            <button class="button button--primary" data-action="dismiss-rest-alert">
+              Continuer
+            </button>
+          </div>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderStorageConfidenceSection() {
+  const lastSavedLabel = formatDateTimeShort(state.storageMeta.lastSavedAt);
+  const backupLabel = state.storageMeta.backupAvailable ? "Actif" : "Absent";
+  const recoveryLabel = state.storageMeta.recoveredFromBackup ? "Oui" : "Non";
+  const healthLabel = state.storageMeta.saveError ? "A surveiller" : "OK";
+  const healthMeta = state.storageMeta.saveError || "Autosauvegarde locale + copie de secours";
+
+  return `
+    <article class="surface surface-pad stack-md storage-shell">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Confiance</div>
+          <h3 class="section-title dashboard-section-head__title">Sauvegarde locale</h3>
+        </div>
+        <div class="label">Auto</div>
+      </div>
+
+      <div class="storage-grid">
+        <div class="metric">
+          <div class="label">Derniere sauvegarde</div>
+          <div class="metric__value metric__value--text">${lastSavedLabel}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Copie de secours</div>
+          <div class="metric__value">${backupLabel}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Recuperee</div>
+          <div class="metric__value">${recoveryLabel}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Etat</div>
+          <div class="metric__value">${healthLabel}</div>
+        </div>
+      </div>
+
+      <div class="confidence-note">${healthMeta}</div>
+    </article>
+  `;
+}
+
 function renderSettings() {
   return `
-    <section class="stack-md">
-      <article class="surface surface-pad stack-md">
-        <h2 class="section-title">Reglages</h2>
+    <section class="stack-md settings-shell">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">App iPhone</div>
+            <h2 class="section-title dashboard-section-head__title">Reglages</h2>
+          </div>
+          <div class="label">PWA</div>
+        </div>
         <div class="install-hint">
           Pour l'avoir sur iPhone :
           <br />
@@ -846,24 +5129,56 @@ function renderSettings() {
         <div class="install-hint">
           Les donnees sont stockees localement sur l'appareil via le navigateur.
         </div>
+      </article>
+
+      ${renderCycleSettings()}
+      ${renderProgramPlanner()}
+      ${renderRestSettings()}
+      ${renderStorageConfidenceSection()}
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Donnees</div>
+            <h3 class="section-title dashboard-section-head__title">Backup et nettoyage</h3>
+          </div>
+          <div class="label">JSON</div>
+        </div>
+        <div class="muted">
+          Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
+        </div>
+        <div class="backup-actions">
+          <button class="button button--ghost" data-action="export-backup">
+            Exporter mes donnees
+          </button>
+          <button class="button button--primary" data-action="import-backup">
+            Importer un backup
+          </button>
+        </div>
+        <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
         <button class="button button--danger" data-action="clear-data">
           Reinitialiser toutes les donnees
         </button>
       </article>
+
+      ${renderProgramEditor()}
     </section>
   `;
 }
 
 function renderBody() {
-  if (state.screen === "dashboard") return renderDashboard();
+  if (state.screen === "dashboard") return renderPremiumDashboard();
   if (state.screen === "history") return renderHistory();
   if (state.screen === "settings") return renderSettings();
   return renderWorkout();
 }
 
 function renderApp() {
+  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
+
   root.innerHTML = `
-    <div class="app-shell">
+    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""}">
       <header class="app-header">
         <div class="app-width app-header__inner">
           <div>
@@ -872,7 +5187,7 @@ function renderApp() {
           </div>
 
           <button
-            class="timer-button ${state.timer.active ? "is-active" : ""}"
+            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""}"
             data-action="toggle-timer"
             aria-label="Pause ou reprise du timer"
           >
@@ -882,26 +5197,38 @@ function renderApp() {
         </div>
       </header>
 
+      ${renderPwaUpdateBanner()}
+
       <main class="app-width page">
         ${renderBody()}
       </main>
 
-      <nav class="bottom-nav">
-        <div class="bottom-nav__inner">
-          <button class="nav-button ${state.screen === "dashboard" ? "is-active" : ""}" data-screen="dashboard">
-            Dash
-          </button>
-          <button class="nav-button ${state.screen === "workout" ? "is-active" : ""}" data-screen="workout">
-            Train
-          </button>
-          <button class="nav-button ${state.screen === "history" ? "is-active" : ""}" data-screen="history">
-            Hist
-          </button>
-          <button class="nav-button ${state.screen === "settings" ? "is-active" : ""}" data-screen="settings">
-            Set
-          </button>
-        </div>
-      </nav>
+      ${
+        hideBottomNav
+          ? ""
+          : `
+              <nav class="bottom-nav">
+                <div class="bottom-nav__inner">
+                  <button class="nav-button ${state.screen === "dashboard" ? "is-active" : ""}" data-screen="dashboard">
+                    Dash
+                  </button>
+                  <button class="nav-button ${state.screen === "workout" ? "is-active" : ""}" data-screen="workout">
+                    Train
+                  </button>
+                  <button class="nav-button ${state.screen === "history" ? "is-active" : ""}" data-screen="history">
+                    Hist
+                  </button>
+                  <button class="nav-button ${state.screen === "settings" ? "is-active" : ""}" data-screen="settings">
+                    Set
+                  </button>
+                </div>
+              </nav>
+            `
+      }
+
+      ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
+      ${renderRestAlertOverlay()}
+      ${renderHistoryEditorOverlay()}
     </div>
   `;
 
@@ -911,22 +5238,43 @@ function renderApp() {
 function bindEvents() {
   document.querySelectorAll("[data-screen]").forEach((button) => {
     button.onclick = () => {
+      primeAudioEngine();
       state.screen = button.dataset.screen;
       saveState();
       renderApp();
     };
   });
 
-  document.querySelectorAll("[data-day]").forEach((button) => {
-    button.onclick = () => startWorkoutDay(button.dataset.day);
+  document.querySelectorAll("button[data-day]").forEach((button) => {
+    button.onclick = () => {
+      primeAudioEngine();
+      startWorkoutDay(button.dataset.day);
+    };
+  });
+
+  document.querySelectorAll(".program-day-tab").forEach((button) => {
+    button.onclick = () => setProgramEditorDay(button.dataset.programDay);
   });
 
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.onclick = () => {
+      primeAudioEngine();
       const action = button.dataset.action;
 
       if (action === "toggle-timer") {
-        state.timer.active = state.timer.seconds > 0 ? !state.timer.active : false;
+        if (state.timer.seconds <= 0) {
+          state.timer.active = false;
+          state.timerEndsAt = 0;
+          clearScheduledRestSound();
+        } else if (state.timer.active) {
+          state.timer.active = false;
+          state.timerEndsAt = 0;
+          clearScheduledRestSound();
+        } else {
+          state.timer.active = true;
+          state.timerEndsAt = getTimerEndTimestamp(state.timer.seconds);
+          scheduleRestSound(state.timer.seconds);
+        }
         saveState();
         renderApp();
       }
@@ -937,8 +5285,36 @@ function bindEvents() {
         renderApp();
       }
 
+      if (action === "toggle-focus-workout") {
+        toggleFocusWorkoutMode();
+      }
+
+      if (action === "increase-load") {
+        updateCurrentLoad("up");
+      }
+
+      if (action === "decrease-load") {
+        updateCurrentLoad("down");
+      }
+
+      if (action === "reset-load") {
+        resetCurrentLoad();
+      }
+
       if (action === "validate-set") {
         handleValidation();
+      }
+
+      if (action === "pick-reps") {
+        setRepsInputValue(button.dataset.repsValue);
+      }
+
+      if (action === "edit-last-set") {
+        reopenLastPendingSet(true);
+      }
+
+      if (action === "undo-last-set") {
+        reopenLastPendingSet(false);
       }
 
       if (action === "finalize-workout") {
@@ -951,13 +5327,144 @@ function bindEvents() {
         startWorkoutDay(state.day);
       }
 
+      if (action === "resume-workout") {
+        state.screen = "workout";
+        saveState();
+        renderApp();
+      }
+
+      if (action === "discard-workout") {
+        discardWorkoutProgress();
+      }
+
       if (action === "clear-data") {
         clearAllData();
+      }
+
+      if (action === "export-backup") {
+        exportBackup();
+      }
+
+      if (action === "import-backup") {
+        document.getElementById("backup-input")?.click();
+      }
+
+      if (action === "cycle-prev-week") {
+        changeCycleWeek(-1);
+      }
+
+      if (action === "cycle-next-week") {
+        changeCycleWeek(1);
+      }
+
+      if (action === "cycle-reset") {
+        resetCycleBlock();
+      }
+
+      if (action === "set-program-planner-days") {
+        setProgramPlannerDays(button.dataset.programDays);
+      }
+
+      if (action === "apply-program-template") {
+        applyProgramTemplate(button.dataset.templateId);
+      }
+
+      if (action === "toggle-rest-sound") {
+        toggleRestPreference("restSoundEnabled");
+      }
+
+      if (action === "toggle-rest-vibration") {
+        toggleRestPreference("restVibrationEnabled");
+      }
+
+      if (action === "test-rest-alert") {
+        testRestAlert();
+      }
+
+      if (action === "dismiss-rest-alert") {
+        dismissRestAlert();
+      }
+
+      if (action === "extend-rest-30") {
+        extendRest(30);
+      }
+
+      if (action === "add-program-entry") {
+        addProgramEntry(button.dataset.programDay || state.programEditorDay);
+      }
+
+      if (action === "remove-program-entry") {
+        removeProgramEntry(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programIndex)
+        );
+      }
+
+      if (action === "reset-program") {
+        resetProgram();
       }
 
       if (action === "dismiss-install") {
         dismissInstallHint();
       }
+
+      if (action === "open-history-editor") {
+        openHistoryEditor(Number(button.dataset.historyIndex));
+      }
+
+      if (action === "close-history-editor") {
+        closeHistoryEditor();
+      }
+
+      if (action === "save-history-entry") {
+        saveHistoryEditor();
+      }
+
+      if (action === "delete-history-entry") {
+        deleteHistoryEntry();
+      }
+
+      if (action === "dismiss-update-banner") {
+        pwaUpdateDismissed = true;
+        renderApp();
+      }
+
+      if (action === "refresh-app") {
+        pwaUpdateDismissed = false;
+        if (pwaRegistration?.waiting) {
+          pwaReloadOnControllerChange = true;
+          pwaRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+        } else {
+          window.location.reload();
+        }
+      }
+
+      if (action === "onboarding-next") {
+        state.onboardingStep = Math.min(state.onboardingStep + 1, getOnboardingSlides().length - 1);
+        saveState();
+        renderApp();
+      }
+
+      if (action === "onboarding-prev") {
+        state.onboardingStep = Math.max(state.onboardingStep - 1, 0);
+        saveState();
+        renderApp();
+      }
+
+      if (action === "onboarding-skip" || action === "onboarding-finish") {
+        completeOnboarding();
+      }
+    };
+  });
+
+  document.querySelectorAll("[data-program-input]").forEach((input) => {
+    input.onchange = (event) => {
+      updateProgramEntry(
+        event.target.dataset.programDay,
+        Number(event.target.dataset.programIndex),
+        event.target.dataset.programField,
+        event.target.value
+      );
     };
   });
 
@@ -970,11 +5477,35 @@ function bindEvents() {
     };
   }
 
+  const backupInput = document.getElementById("backup-input");
+  if (backupInput) {
+    backupInput.onchange = async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      await importBackupFromFile(file);
+    };
+  }
+
+  const cycleGoalSelect = document.getElementById("cycle-goal-select");
+  if (cycleGoalSelect) {
+    cycleGoalSelect.onchange = (event) => {
+      setCycleGoal(event.target.value);
+    };
+  }
+
+  const cycleLengthSelect = document.getElementById("cycle-length-select");
+  if (cycleLengthSelect) {
+    cycleLengthSelect.onchange = (event) => {
+      setCycleLength(event.target.value);
+    };
+  }
+
   const repsInput = document.getElementById("reps-input");
   if (repsInput) {
     repsInput.oninput = (event) => {
       state.repsInput = event.target.value;
       saveState();
+      syncValidationButton();
     };
     repsInput.onkeydown = (event) => {
       if (event.key === "Enter") {
@@ -991,28 +5522,1029 @@ function bindEvents() {
       renderApp();
     };
   }
+
+  const historyEditorReps = document.getElementById("history-editor-reps");
+  if (historyEditorReps) {
+    historyEditorReps.oninput = (event) => {
+      if (!state.historyEditor) return;
+      state.historyEditor.reps = event.target.value;
+    };
+  }
+
+  const historyEditorLoad = document.getElementById("history-editor-load");
+  if (historyEditorLoad) {
+    historyEditorLoad.oninput = (event) => {
+      if (!state.historyEditor) return;
+      state.historyEditor.load = event.target.value;
+    };
+  }
+
+  const historyEditorLabel = document.getElementById("history-editor-label");
+  if (historyEditorLabel) {
+    historyEditorLabel.oninput = (event) => {
+      if (!state.historyEditor) return;
+      state.historyEditor.loadLabel = event.target.value;
+    };
+  }
+
+  document.ondblclick = (event) => {
+    if (event.target.closest("button")) {
+      event.preventDefault();
+    }
+  };
 }
 
 function tickTimer() {
   if (!state.timer.active || state.timer.seconds <= 0) return;
+
+  if (state.timerEndsAt > 0) {
+    const remainingMs = state.timerEndsAt - Date.now();
+    if (remainingMs <= 0) {
+      state.timer.seconds = 0;
+      state.timer.active = false;
+      state.timerEndsAt = 0;
+      triggerRestAlert();
+      return;
+    }
+
+    state.timer.seconds = Math.ceil(remainingMs / 1000);
+    saveState();
+    syncTimerButtonUI();
+    return;
+  }
+
   state.timer.seconds -= 1;
   if (state.timer.seconds <= 0) {
     state.timer.seconds = 0;
     state.timer.active = false;
+    state.timerEndsAt = 0;
+    triggerRestAlert();
+    return;
   }
+
   saveState();
-  renderApp();
+  syncTimerButtonUI();
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (pwaReloadOnControllerChange) {
+      window.location.reload();
+    }
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+      pwaRegistration = registration;
+
+      const showUpdateReady = () => {
+        pwaUpdateReady = true;
+        pwaUpdateDismissed = false;
+        renderApp();
+      };
+
+      if (registration.waiting) {
+        showUpdateReady();
+      }
+
+      registration.addEventListener("updatefound", () => {
+        const installingWorker = registration.installing;
+        if (!installingWorker) return;
+
+        installingWorker.addEventListener("statechange", () => {
+          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateReady();
+          }
+        });
+      });
+
+      registration.update().catch(() => {});
+    }).catch(() => {});
   });
 }
 
+function renderPremiumDayList() {
+  return `
+    <section class="day-list">
+      ${getProgramDays()
+        .map((day) => {
+          const summary = getDaySummary(day);
+          const theme = getDayTheme(day);
+
+          return `
+            <button class="day-button" data-day="${day}">
+              <div>
+                <div class="day-button__eyebrow">${theme.badge}</div>
+                <div class="day-button__title">${day.toUpperCase()}</div>
+                <div class="day-button__meta">${theme.cue}</div>
+                <div class="day-button__stats">
+                  <span>${summary.exerciseCount} exos</span>
+                  <span>${summary.setCount} series</span>
+                </div>
+              </div>
+              <div class="day-button__arrow">></div>
+            </button>
+          `;
+        })
+        .join("")}
+    </section>
+  `;
+}
+
+function renderResumeCard() {
+  const resume = getSmartResumeData();
+  if (!resume) return "";
+  const theme = getDayTheme(resume.day);
+
+  return `
+    <article class="surface surface-pad smart-resume" data-accent-day="${theme.accentDay}">
+      <div class="row row-start">
+        <div class="stack-sm smart-resume__copy">
+          <div class="label">Reprise intelligente</div>
+          <h2 class="section-title smart-resume__title">${resume.title}</h2>
+          <div class="smart-resume__cue">${theme.cue}</div>
+          <div class="muted">${resume.subtitle}</div>
+          <div class="smart-resume__meta">
+            <span class="smart-resume__chip">${resume.day}</span>
+            <span class="smart-resume__chip">${resume.meta}</span>
+          </div>
+        </div>
+        <span class="pill">${resume.mode === "active" ? "Maintenant" : theme.badge}</span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="row">
+          <div class="label">${resume.mode === "active" ? "Progression" : "Preparation"}</div>
+          <div class="label">${resume.progress}%</div>
+        </div>
+        <div class="progress">
+          <div class="progress__fill" style="width:${resume.progress}%"></div>
+        </div>
+      </div>
+
+      <div class="smart-resume__actions">
+        <button class="button button--primary" ${resume.actionAttrs}>
+          ${resume.actionLabel}
+        </button>
+        <button class="button button--ghost" ${resume.secondaryAttrs}>
+          ${resume.secondaryLabel}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderWeeklyPlanner() {
+  const planner = getWeeklyPlanner();
+  const resume = getSmartResumeData();
+  const accentDay = resume?.day || getNextTrainingDay();
+  const theme = getDayTheme(accentDay);
+
+  return `
+    <article class="surface surface-pad planner-shell" data-accent-day="${theme.accentDay}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Planning</div>
+          <h3 class="section-title dashboard-section-head__title">Semaine en cours</h3>
+        </div>
+        <div class="label">${getWeeklySessionCount()} seance(s)</div>
+      </div>
+
+      <div class="planner-grid">
+        ${planner
+          .map(
+            (day) => `
+              <div class="planner-day ${day.count ? "is-done" : ""} ${day.isToday ? "is-today" : ""}">
+                <div class="planner-day__label">${day.label}</div>
+                <div class="planner-day__count">${day.count || "-"}</div>
+                <div class="planner-day__date">${day.dateLabel}</div>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="planner-note">
+        <span class="planner-note__pill">${hasWorkoutInProgress() ? "A finir" : theme.badge}</span>
+        <span>${resume?.title || `Prochaine ${getNextTrainingDay()}`}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderRecordsSection() {
+  const records = getExerciseRecords();
+  const { heaviest, bestReps } = getGlobalRecords();
+
+  return `
+    <section class="stack-md">
+      <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Records</div>
+            <h3 class="section-title dashboard-section-head__title">PR et meilleures perfs</h3>
+          </div>
+          <div class="label">${records.length} exos</div>
+        </div>
+
+        <div class="records-summary">
+          <div class="metric metric--record">
+            <div class="label">Charge max</div>
+            <div class="metric__value">
+              ${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "-"}
+            </div>
+            <div class="records-summary__meta">
+              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} - ${heaviest.reps} reps` : "Pas encore de PR"}
+            </div>
+          </div>
+          <div class="metric metric--record">
+            <div class="label">Reps max</div>
+            <div class="metric__value">${bestReps ? bestReps.reps : "-"}</div>
+            <div class="records-summary__meta">
+              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
+            </div>
+          </div>
+        </div>
+
+        ${
+          records.length
+            ? `
+                <div class="records-list">
+                  ${records
+                    .map(
+                      (record) => `
+                        <article class="record-card">
+                          <div class="record-card__top">
+                            <div>
+                              <div class="record-card__eyebrow">Record local</div>
+                              <div class="record-card__title">${record.exercise}</div>
+                            </div>
+                            <div class="record-card__count">${record.count} serie(s)</div>
+                          </div>
+                          <div class="record-card__stats">
+                            <span class="record-card__stat"><strong>${formatLoad(record.bestLoad, record.bestLoadLabel)}</strong><em>Charge</em></span>
+                            <span class="record-card__stat"><strong>${record.bestReps}</strong><em>Reps</em></span>
+                          </div>
+                          <div class="record-card__meta">Derniere: ${formatDate(record.lastDate)}</div>
+                        </article>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+            : `<div class="chart-empty">Aucun record disponible pour le moment.</div>`
+        }
+      </article>
+    </section>
+  `;
+}
+
+function renderCoachSection() {
+  const coach = getCoachSnapshot();
+
+  return `
+    <article class="surface surface-pad coach-shell coach-shell--${coach.tone}" data-accent-day="${coach.day}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Coach intelligent</div>
+          <h3 class="section-title dashboard-section-head__title">Prochaine ${coach.day}: ${coach.action}</h3>
+        </div>
+        <div class="coach-score coach-score--${coach.readinessTone}">
+          <span>${coach.readiness}</span>
+          <strong>${coach.scoreText}</strong>
+        </div>
+      </div>
+
+      <div class="coach-grid coach-grid--triple">
+        <div class="coach-card">
+          <div class="label">Charge</div>
+          <div class="coach-card__value">${coach.action}</div>
+          <div class="coach-card__meta">${coach.focus} - ${coach.signal}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Intensite</div>
+          <div class="coach-card__value">${coach.intensityCall.value}</div>
+          <div class="coach-card__meta">${coach.cycleLabel} - ${coach.streakText}</div>
+        </div>
+        <div class="coach-card">
+          <div class="label">Volume</div>
+          <div class="coach-card__value">${coach.volumeCall.value}</div>
+          <div class="coach-card__meta">${coach.volumeCall.meta}</div>
+        </div>
+      </div>
+
+      <div class="coach-note">${coach.note}</div>
+
+      <div class="coach-pulse-grid">
+        <div class="coach-pulse">
+          <span class="label">Recup</span>
+          <strong>${coach.recoveryCall.value}</strong>
+          <span>${coach.recoveryCall.meta}</span>
+        </div>
+        <div class="coach-pulse">
+          <span class="label">Bloc</span>
+          <strong>${coach.cycleLabel}</strong>
+          <span>${coach.focusMeta}</span>
+        </div>
+      </div>
+
+      <div class="coach-tags">
+        <span class="coach-tag">Fatigue ${coach.readiness}</span>
+        <span class="coach-tag">Lecture ${coach.signal}</span>
+        <span class="coach-tag">Bloc ${coach.day}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumDashboard() {
+  const chart = getChartData();
+  const historyKeys = getHistoryKeys();
+  const sessionCount = getSessionCount();
+  const weeklySessions = getWeeklySessionCount();
+  const recentSets = getRecentSets();
+  const resume = getSmartResumeData();
+  const heroDay = resume?.day || state.day;
+  const heroSummary = getDaySummary(heroDay);
+  const heroTheme = getDayTheme(heroDay);
+  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionAttrs = resume?.mode === "active"
+    ? `data-action="resume-workout"`
+    : `data-day="${heroDay}"`;
+  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
+  const heroCopy = resume?.mode === "active"
+    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
+    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+
+  return `
+    <section class="stack-md">
+      <article class="dashboard-hero" data-accent-day="${heroDay}">
+        <div class="dashboard-hero__content">
+          <div class="dashboard-hero__top">
+            <span class="dashboard-hero__badge">${heroBadge}</span>
+            <span class="dashboard-hero__tag">${heroDay}</span>
+          </div>
+
+          <div class="dashboard-hero__copy">
+            <div class="label dashboard-hero__label">Accueil premium</div>
+            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
+            <div class="dashboard-hero__subtag">${heroTheme.subtitle}</div>
+            <div class="dashboard-hero__cue">${heroTheme.cue}</div>
+            <p class="dashboard-hero__text">${heroCopy}</p>
+          </div>
+
+          <div class="dashboard-hero__stats">
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
+              <span class="dashboard-hero__stat-label">Semaine</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${sessionCount}</span>
+              <span class="dashboard-hero__stat-label">Total</span>
+            </div>
+            <div class="dashboard-hero__stat">
+              <span class="dashboard-hero__stat-value">${recentSets}</span>
+              <span class="dashboard-hero__stat-label">Series 7j</span>
+            </div>
+          </div>
+
+          <div class="dashboard-hero__actions">
+            <button class="button button--primary" ${heroActionAttrs}>
+              ${heroActionLabel}
+            </button>
+            <button class="button button--ghost" data-screen="history">
+              Voir historique
+            </button>
+          </div>
+        </div>
+      </article>
+
+      ${getInstallHintHtml()}
+      ${renderResumeCard()}
+      ${renderWeeklyPlanner()}
+      ${renderCycleSection()}
+      ${renderCoachSection()}
+
+      <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression recente</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
+            <div class="dashboard-hero__cue">${heroTheme.cue}</div>
+          </div>
+          <div class="chart-shell__metric">${chart.entries.length} pts - ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          historyKeys.length
+            ? `
+                <select class="select" id="chart-select" aria-label="Choisir un exercice">
+                  ${historyKeys
+                    .map(
+                      (item) => `
+                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
+                          ${item.exercise} - ${item.series}
+                        </option>
+                      `
+                    )
+                    .join("")}
+                </select>
+                <div class="chart-box">${renderChart()}</div>
+              `
+            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
+        }
+      </article>
+
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Choix des seances</div>
+          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
+        </div>
+        <div class="muted">${getProgramDays().length} blocs</div>
+      </div>
+
+      ${renderPremiumDayList()}
+    </section>
+  `;
+}
+
+function renderWeightView(settings, active, last, isFocusMode = false) {
+  const theme = getDayTheme(state.day);
+
+  return `
+    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}" data-accent-day="${theme.accentDay}">
+      ${
+        settings.deload
+          ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
+          : ""
+      }
+      <div class="weight-card__head">
+        <div class="label">Poids cible</div>
+        <span class="weight-card__theme">${theme.badge}</span>
+      </div>
+      <div class="weight-card__value">
+        ${
+          isNumericLoad(settings.load)
+            ? `${settings.load}<span class="weight-card__unit">kg</span>`
+            : `<span class="weight-card__free">${settings.loadLabel || "Charge libre"}</span>`
+        }
+      </div>
+      <div class="goal-line">
+        <span class="goal-line__chip">Objectif ${active.targetLabel} reps</span>
+        <span class="goal-line__chip">Repos ${active.rest}s</span>
+      </div>
+      ${
+        isNumericLoad(settings.load) && !isFocusMode
+          ? `
+              <div class="load-actions">
+                <button class="icon-button" data-action="decrease-load" aria-label="Baisser la charge">-</button>
+                <button class="button button--ghost load-reset" data-action="reset-load">Reset cible</button>
+                <button class="icon-button" data-action="increase-load" aria-label="Augmenter la charge">+</button>
+              </div>
+            `
+          : ""
+      }
+      ${
+        last && !isFocusMode
+          ? `<div class="last-performance">Precedent : <strong>${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}</strong></div>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function getWorkoutFinishTone(summary) {
+  if (!summary) return "hold";
+  if (summary.counts.progress >= summary.counts.hold && summary.counts.progress >= summary.counts.reduce) {
+    return "progress";
+  }
+  return summary.counts.reduce > summary.counts.hold ? "reduce" : "hold";
+}
+
+function renderWorkoutCompletionScreen() {
+  const summary = getWorkoutCompletionSummary();
+  const lastEntry = getLastPendingEntry();
+  const theme = getDayTheme(state.day);
+
+  if (!summary) {
+    return `
+      <section class="stack-md">
+        <section class="surface surface-pad-lg center-block stack-md session-finish" data-accent-day="${theme.accentDay}">
+          <div class="trophy">${theme.mark}</div>
+          <div class="stack-sm">
+            <h2 class="section-title">Seance terminee</h2>
+          </div>
+          <button class="button button--primary" data-action="finalize-workout">
+            Terminer la seance
+          </button>
+        </section>
+      </section>
+    `;
+  }
+
+  const finishTone = getWorkoutFinishTone(summary);
+  const finishBadge =
+    finishTone === "progress"
+      ? "Progression nette"
+      : finishTone === "reduce"
+      ? "Ajustement propre"
+      : "Base solide";
+
+  return `
+    <section class="stack-md">
+      <section class="surface surface-pad-lg session-finish session-finish--${finishTone}" data-accent-day="${state.day}">
+        <div class="session-finish__hero">
+          <div class="trophy">${theme.mark}</div>
+          <div class="stack-sm">
+            <div class="session-finish__topline">
+              <div class="label">Fin de seance</div>
+              <span class="session-finish__day">${state.day}</span>
+            </div>
+            <h2 class="section-title session-finish__title">Belle seance.</h2>
+            <div class="session-finish__subtag">${finishBadge} - ${theme.cue}</div>
+            <div class="muted">${summary.coachLine}</div>
+          </div>
+        </div>
+
+        <div class="grid-2 session-finish__stats">
+          <article class="dashboard-mini-card">
+            <div class="label">Series</div>
+            <div class="dashboard-mini-card__value">${summary.setCount}</div>
+            <div class="dashboard-mini-card__meta">${summary.exerciseCount} exos</div>
+          </article>
+          <article class="dashboard-mini-card">
+            <div class="label">Duree</div>
+            <div class="dashboard-mini-card__value">${summary.durationLabel}</div>
+            <div class="dashboard-mini-card__meta">${summary.volumeLabel} de volume</div>
+          </article>
+        </div>
+
+        <div class="session-finish__verdicts">
+          <span class="verdict-chip verdict-chip--progress">Monter ${summary.counts.progress}</span>
+          <span class="verdict-chip verdict-chip--hold">Garder ${summary.counts.hold}</span>
+          <span class="verdict-chip verdict-chip--reduce">Baisser ${summary.counts.reduce}</span>
+        </div>
+
+        ${
+          lastEntry
+            ? `
+                <div class="last-set-card last-set-card--summary">
+                  <div class="last-set-card__copy">
+                    <span class="label">Derniere serie</span>
+                    <strong>${lastEntry.exercise}</strong>
+                    <span>${lastEntry.reps} reps - ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+                  </div>
+                  <div class="last-set-card__actions">
+                    <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
+                    <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
+                  </div>
+                </div>
+              `
+            : ""
+        }
+
+        <div class="stack-sm session-finish__actions">
+          <button class="button button--primary" data-action="finalize-workout">
+            Enregistrer la seance
+          </button>
+          <button class="button button--ghost" data-action="restart-workout">
+            Annuler et recommencer
+          </button>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderWorkout() {
+  const active = getActiveExercise();
+  const settings = getCurrentSettings();
+  const last = getLastPerformance();
+  const advice = getCurrentAdvice();
+  const isFocusMode = state.focusWorkoutMode;
+  const theme = getDayTheme(state.day);
+
+  if (state.workoutFinished) {
+    return renderWorkoutCompletionScreen();
+  }
+
+  if (!active) {
+    return `
+      <section class="surface surface-pad">
+        <div class="muted">Aucun exercice disponible pour cette journee.</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
+      <div class="row row-start workout-shell__header">
+        <div class="workout-shell__hero-copy">
+          <div class="workout-shell__eyebrow-row">
+            <span class="pill">${active.series}</span>
+            <span class="workout-shell__day-badge">${theme.badge}</span>
+          </div>
+          <h2 class="hero-title">${active.exercise}</h2>
+          <div class="workout-shell__subtitle">${theme.subtitle}</div>
+          ${
+            isFocusMode
+              ? ""
+              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span class="workout-shell__meta-chip">Exo ${state.currentIndex + 1}/${getExercises().length} · ${getProgressPercent()}%</span></div>`
+          }
+        </div>
+        <div class="workout-shell__tools">
+          <button
+            class="icon-button ${state.focusWorkoutMode ? "is-active" : ""}"
+            data-action="toggle-focus-workout"
+            aria-label="${state.focusWorkoutMode ? "Quitter le mode focus" : "Activer le mode focus"}"
+          >
+            ${state.focusWorkoutMode ? "FOC" : "ZEN"}
+          </button>
+          <button
+            class="icon-button ${state.showPlates ? "is-active" : ""}"
+            data-action="toggle-plates"
+            aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
+          >
+            ${state.showPlates ? "KG" : "DB"}
+          </button>
+        </div>
+      </div>
+
+      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
+
+      <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
+        <div class="field-wrap workout-entry-field">
+          <label class="label" for="reps-input">Reps</label>
+          <input
+            id="reps-input"
+            class="input input--reps"
+            type="number"
+            min="1"
+            inputmode="numeric"
+            placeholder="${active.targetLabel}"
+            value="${state.repsInput}"
+          />
+        </div>
+
+        ${renderRepQuickPicks()}
+
+        <button
+          id="validate-set-button"
+          class="${getValidationButtonClass(advice)}"
+          data-action="validate-set"
+          aria-label="${getValidationButtonLabel(advice)}"
+          ${hasValidRepsInput() ? "" : "disabled"}
+        >
+          ${renderValidationButtonContent(advice)}
+        </button>
+
+        ${renderLastSetActions()}
+      </div>
+
+      ${renderLastPerformancePreviewCard()}
+    </section>
+  `;
+}
+
+function renderHistory() {
+  if (!state.history.length) {
+    return `
+      <section class="stack-md">
+        ${renderRecordsSection()}
+        <section class="surface surface-pad">
+          <div class="muted">Aucune serie enregistree.</div>
+        </section>
+      </section>
+    `;
+  }
+
+  const sortedHistory = getSortedHistory().slice(0, 24);
+
+  return `
+    <section class="history-list">
+      ${renderRecordsSection()}
+      <h2 class="section-title">Historique</h2>
+      ${sortedHistory
+        .map(
+          (item, index) => `
+            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
+              <div class="row row-start">
+                <div class="history-card__identity">
+                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
+                  <div class="history-card__title">${item.exercise}</div>
+                </div>
+                <div class="history-card__head-tools">
+                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
+                    Modifier
+                  </button>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <div class="metric metric--history">
+                  <div class="label">Charge</div>
+                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
+                </div>
+                <div class="metric metric--history">
+                  <div class="label">Reps</div>
+                  <div class="metric__value">${item.reps}</div>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function getScreenMeta(screen = state.screen) {
+  return {
+    dashboard: {
+      title: "Dashboard",
+      kicker: "Overview",
+      navLabel: "Accueil",
+    },
+    workout: {
+      title: "Seance",
+      kicker: "Training",
+      navLabel: "Seance",
+    },
+    history: {
+      title: "Suivi",
+      kicker: "Progress",
+      navLabel: "Suivi",
+    },
+    settings: {
+      title: "Reglages",
+      kicker: "Control",
+      navLabel: "Config",
+    },
+  }[screen] || {
+    title: "Dashboard",
+    kicker: "Overview",
+    navLabel: "Accueil",
+  };
+}
+
+function renderNavIcon(screen) {
+  if (screen === "dashboard") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="2"></rect>
+        <rect x="14" y="4" width="6" height="10" rx="2"></rect>
+        <rect x="4" y="14" width="6" height="6" rx="2"></rect>
+        <rect x="14" y="16" width="6" height="4" rx="2"></rect>
+      </svg>
+    `;
+  }
+
+  if (screen === "workout") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 10h3v4H3z"></path>
+        <path d="M18 10h3v4h-3z"></path>
+        <path d="M6 9h2v6H6z"></path>
+        <path d="M16 9h2v6h-2z"></path>
+        <path d="M8 11h8v2H8z"></path>
+      </svg>
+    `;
+  }
+
+  if (screen === "history") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 18h14"></path>
+        <path d="M7 15l3-3 3 2 4-5"></path>
+        <circle cx="7" cy="15" r="1.4"></circle>
+        <circle cx="10" cy="12" r="1.4"></circle>
+        <circle cx="13" cy="14" r="1.4"></circle>
+        <circle cx="17" cy="9" r="1.4"></circle>
+      </svg>
+    `;
+  }
+
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 7h14"></path>
+      <path d="M7 12h10"></path>
+      <path d="M9 17h6"></path>
+      <circle cx="7" cy="7" r="2"></circle>
+      <circle cx="15" cy="12" r="2"></circle>
+      <circle cx="11" cy="17" r="2"></circle>
+    </svg>
+  `;
+}
+
+function getNavItems() {
+  return ["dashboard", "workout", "history", "settings"].map((screen) => ({
+    screen,
+    ...getScreenMeta(screen),
+  }));
+}
+
+function dismissBootSplash() {
+  const splash = document.getElementById("boot-splash");
+  if (!splash || splash.dataset.dismissed === "1") return;
+
+  splash.dataset.dismissed = "1";
+  requestAnimationFrame(() => splash.classList.add("is-hidden"));
+  window.setTimeout(() => {
+    if (splash.parentNode) splash.parentNode.removeChild(splash);
+  }, 320);
+}
+
+function renderEmptyState(title, text, eyebrow = "A venir", accentDay = state.day) {
+  return `
+    <article class="surface surface-pad empty-state" data-accent-day="${accentDay}">
+      <div class="empty-state__icon">ET</div>
+      <div class="empty-state__eyebrow">${eyebrow}</div>
+      <h3 class="empty-state__title">${title}</h3>
+      <p class="empty-state__text">${text}</p>
+    </article>
+  `;
+}
+
+function renderChart() {
+  const chart = getChartData();
+
+  if (!chart.entries.length) {
+    return `
+      <div class="chart-empty">
+        <div class="chart-empty__icon">ET</div>
+        <strong>Pas encore de data</strong>
+        <span>Lance deux passages sur le meme exercice pour lire une vraie courbe.</span>
+      </div>
+    `;
+  }
+
+  const max = Math.max(...chart.entries.map((entry) => entry.chartValue), 1);
+
+  return `
+    <div class="chart-bars">
+      ${chart.entries
+        .map((entry, index) => {
+          const height = Math.max(24, Math.round((entry.chartValue / max) * 118));
+          return `
+            <div class="chart-column ${index === chart.entries.length - 1 ? "is-latest" : ""}">
+              <div class="chart-value">${entry.chartValue}${chart.metric === "load" ? "kg" : ""}</div>
+              <div class="chart-track">
+                <div
+                  class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
+                  style="height:${height}px"
+                ></div>
+              </div>
+              <div class="chart-date">${entry.shortDate}</div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderHistory() {
+  if (!state.history.length) {
+    return `
+      <section class="stack-md">
+        ${renderRecordsSection()}
+        ${renderEmptyState("Aucun log pour l'instant", "Ta premiere seance fera apparaitre ici ton suivi detaille, tes charges et tes meilleurs passages.", "Suivi", state.day)}
+      </section>
+    `;
+  }
+
+  const sortedHistory = getSortedHistory().slice(0, 24);
+
+  return `
+    <section class="history-list">
+      ${renderRecordsSection()}
+      <h2 class="section-title">Historique</h2>
+      ${sortedHistory
+        .map(
+          (item, index) => `
+            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
+              <div class="row row-start">
+                <div class="history-card__identity">
+                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
+                  <div class="history-card__title">${item.exercise}</div>
+                </div>
+                <div class="history-card__head-tools">
+                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
+                    Modifier
+                  </button>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <div class="metric metric--history">
+                  <div class="label">Charge</div>
+                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
+                </div>
+                <div class="metric metric--history">
+                  <div class="label">Reps</div>
+                  <div class="metric__value">${item.reps}</div>
+                </div>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function renderApp() {
+  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
+  const screenMeta = getScreenMeta();
+  const navItems = getNavItems();
+
+  root.innerHTML = `
+    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""}">
+      <header class="app-header">
+        <div class="app-width app-header__inner">
+          <div>
+            <h1 class="brand">ELITE<span class="brand__accent">TRAIN</span></h1>
+            <div class="screen-kicker">${screenMeta.kicker} - ${state.day}</div>
+          </div>
+
+          <button
+            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""}"
+            data-action="toggle-timer"
+            aria-label="Pause ou reprise du timer"
+          >
+            <span>${state.timer.active ? "Pause" : screenMeta.title}</span>
+            <span class="mono">${formatTimer(state.timer.seconds)}</span>
+          </button>
+        </div>
+      </header>
+
+      ${renderPwaUpdateBanner()}
+
+      <main class="app-width page">
+        ${renderBody()}
+      </main>
+
+      ${
+        hideBottomNav
+          ? ""
+          : `
+              <nav class="bottom-nav">
+                <div class="bottom-nav__inner">
+                  ${navItems
+                    .map(
+                      (item) => `
+                        <button class="nav-button ${state.screen === item.screen ? "is-active" : ""}" data-screen="${item.screen}" aria-label="${item.navLabel}">
+                          <span class="nav-button__icon">${renderNavIcon(item.screen)}</span>
+                          <span class="nav-button__label">${item.navLabel}</span>
+                        </button>
+                      `
+                    )
+                    .join("")}
+                </div>
+              </nav>
+            `
+      }
+
+      ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
+      ${renderRestAlertOverlay()}
+      ${renderHistoryEditorOverlay()}
+    </div>
+  `;
+
+  bindEvents();
+  dismissBootSplash();
+}
+
+function syncTimerButtonUI() {
+  const timerButton = document.querySelector(".timer-button");
+  if (!timerButton) return;
+
+  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
+  const screenMeta = getScreenMeta();
+
+  timerButton.className = `timer-button ${state.timer.active ? "is-active" : ""} ${
+    isTimerEndingSoon ? "is-warning" : ""
+  }`.trim();
+  timerButton.setAttribute("aria-label", "Pause ou reprise du timer");
+
+  const parts = timerButton.querySelectorAll("span");
+  if (parts[0]) {
+    parts[0].textContent = state.timer.active ? "Pause" : screenMeta.title;
+  }
+  if (parts[1]) {
+    parts[1].textContent = formatTimer(state.timer.seconds);
+  }
+}
+
 restoreState();
-seedPreviewData();
 renderApp();
 registerServiceWorker();
 setInterval(tickTimer, 1000);
+window.addEventListener("focus", tickTimer);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    tickTimer();
+  }
+});
