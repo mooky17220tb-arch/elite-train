@@ -1,0 +1,199 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <linearGradient id="pageBg" x1="120" y1="60" x2="1480" y2="880" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#140d0d"/>
+      <stop offset="1" stop-color="#040404"/>
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#210f10"/>
+      <stop offset="1" stop-color="#0b0909"/>
+    </linearGradient>
+    <radialGradient id="heroGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1210 160) rotate(90) scale(360 420)">
+      <stop stop-color="#ff2c2c" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#ff2c2c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="zoneFill" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ff6b63"/>
+      <stop offset="1" stop-color="#ff2d2d"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000000" flood-opacity=".34"/>
+    </filter>
+    <style>
+      .board-title { font: 900 52px 'Avenir Next Condensed', 'Arial Narrow', sans-serif; letter-spacing: .08em; fill: #f5f8f6; }
+      .board-subtitle { font: 700 18px 'Avenir Next', Arial, sans-serif; letter-spacing: .14em; fill: rgba(245,248,246,.62); }
+      .card-title { font: 900 28px 'Avenir Next Condensed', 'Arial Narrow', sans-serif; letter-spacing: .12em; fill: #f5f8f6; }
+      .card-meta { font: 700 13px 'Avenir Next', Arial, sans-serif; letter-spacing: .1em; fill: rgba(245,248,246,.54); }
+      .card-shell { fill: url(#cardBg); stroke: rgba(255,80,80,.20); stroke-width: 2; }
+      .card-grid { stroke: rgba(255,255,255,.05); stroke-width: 1.5; }
+      .body-base { fill: #b5b8bc; stroke: rgba(255,255,255,.28); stroke-width: 2.8; stroke-linejoin: round; }
+      .body-line { stroke: rgba(255,255,255,.14); stroke-width: 2; stroke-linecap: round; }
+      .zone { fill: url(#zoneFill); stroke: rgba(255,255,255,.68); stroke-width: 2.2; stroke-linejoin: round; }
+      .zone-soft { fill: #ff5555; stroke: rgba(255,255,255,.68); stroke-width: 2.2; stroke-linejoin: round; }
+      .chip { fill: rgba(255,255,255,.06); stroke: rgba(255,255,255,.08); stroke-width: 1.5; }
+      .chip-text { font: 800 11px 'Avenir Next', Arial, sans-serif; letter-spacing: .12em; fill: rgba(245,248,246,.72); }
+      .divider { stroke: rgba(255,255,255,.06); stroke-width: 1.5; }
+    </style>
+
+    <symbol id="front-base" viewBox="0 0 230 360">
+      <circle class="body-base" cx="115" cy="42" r="24"/>
+      <rect class="body-base" x="101" y="66" width="28" height="18" rx="9"/>
+      <path class="body-base" d="M79 90C88 80 101 75 115 75C129 75 142 80 151 90L166 134L154 226H76L64 134L79 90Z"/>
+      <path class="body-base" d="M87 226H143L149 264H81L87 226Z"/>
+      <path class="body-base" d="M72 92L46 118L34 186L50 192L66 144L76 122L72 92Z"/>
+      <path class="body-base" d="M158 92L184 118L196 186L180 192L164 144L154 122L158 92Z"/>
+      <path class="body-base" d="M50 192L34 258L48 264L70 206L50 192Z"/>
+      <path class="body-base" d="M180 192L196 258L182 264L160 206L180 192Z"/>
+      <path class="body-base" d="M88 264L76 350L100 352L115 282L130 352L154 350L142 264H88Z"/>
+      <path class="body-line" d="M115 84V264"/>
+      <path class="body-line" d="M88 154H142"/>
+      <path class="body-line" d="M90 202H140"/>
+    </symbol>
+
+    <symbol id="back-base" viewBox="0 0 230 360">
+      <circle class="body-base" cx="115" cy="42" r="24"/>
+      <rect class="body-base" x="101" y="66" width="28" height="18" rx="9"/>
+      <path class="body-base" d="M79 90C89 80 101 75 115 75C129 75 141 80 151 90L168 144L154 230H76L62 144L79 90Z"/>
+      <path class="body-base" d="M87 230H143L147 268H83L87 230Z"/>
+      <path class="body-base" d="M72 92L46 120L34 186L50 192L68 146L78 124L72 92Z"/>
+      <path class="body-base" d="M158 92L184 120L196 186L180 192L162 146L152 124L158 92Z"/>
+      <path class="body-base" d="M50 192L34 258L48 264L70 206L50 192Z"/>
+      <path class="body-base" d="M180 192L196 258L182 264L160 206L180 192Z"/>
+      <path class="body-base" d="M88 268L74 350L100 352L115 286L130 352L156 350L142 268H88Z"/>
+      <path class="body-line" d="M115 84V268"/>
+      <path class="body-line" d="M86 146H144"/>
+      <path class="body-line" d="M88 208H142"/>
+    </symbol>
+
+    <symbol id="push-front" viewBox="0 0 230 360">
+      <path class="zone" d="M80 94C90 86 101 82 115 82C129 82 140 86 150 94L152 132H78L80 94Z"/>
+      <path class="zone" d="M78 136H110L106 224H78L70 176L78 136Z"/>
+      <path class="zone" d="M152 136H120L124 224H152L160 176L152 136Z"/>
+      <path class="zone-soft" d="M54 98C60 92 68 90 78 90L92 114L80 140L58 134L50 112L54 98Z"/>
+      <path class="zone-soft" d="M176 98C170 92 162 90 152 90L138 114L150 140L172 134L180 112L176 98Z"/>
+      <path class="zone-soft" d="M50 140L64 144L72 194L58 198L40 170L50 140Z"/>
+      <path class="zone-soft" d="M180 140L166 144L158 194L172 198L190 170L180 140Z"/>
+    </symbol>
+
+    <symbol id="push-back" viewBox="0 0 230 360">
+      <path class="zone-soft" d="M56 98C64 92 72 90 82 90L94 116L78 142L56 136L50 110L56 98Z"/>
+      <path class="zone-soft" d="M174 98C166 92 158 90 148 90L136 116L152 142L174 136L180 110L174 98Z"/>
+      <path class="zone-soft" d="M50 140L66 144L74 198L60 202L40 170L50 140Z"/>
+      <path class="zone-soft" d="M180 140L164 144L156 198L170 202L190 170L180 140Z"/>
+      <path class="zone" d="M88 98H142L150 150H80L88 98Z"/>
+    </symbol>
+
+    <symbol id="pull-front" viewBox="0 0 230 360">
+      <path class="zone-soft" d="M48 140L66 146L76 194L60 202L42 194L36 170L48 140Z"/>
+      <path class="zone-soft" d="M182 140L164 146L154 194L170 202L188 194L194 170L182 140Z"/>
+      <path class="zone-soft" d="M56 198L70 204L66 244L50 248L42 224L56 198Z"/>
+      <path class="zone-soft" d="M174 198L160 204L164 244L180 248L188 224L174 198Z"/>
+      <path class="zone" d="M78 138L110 148L106 224H78L70 174L78 138Z"/>
+      <path class="zone" d="M152 138L120 148L124 224H152L160 174L152 138Z"/>
+    </symbol>
+
+    <symbol id="pull-back" viewBox="0 0 230 360">
+      <path class="zone" d="M78 92L115 84L152 92L162 148L140 228H90L68 148L78 92Z"/>
+      <path class="zone-soft" d="M52 98C60 92 70 90 80 90L92 116L76 142L54 136L46 110L52 98Z"/>
+      <path class="zone-soft" d="M178 98C170 92 160 90 150 90L138 116L154 142L176 136L184 110L178 98Z"/>
+      <path class="zone-soft" d="M50 140L68 146L74 202L58 206L40 170L50 140Z"/>
+      <path class="zone-soft" d="M180 140L162 146L156 202L172 206L190 170L180 140Z"/>
+    </symbol>
+
+    <symbol id="legs-front" viewBox="0 0 230 360">
+      <path class="zone" d="M88 264H112L100 352H74L88 264Z"/>
+      <path class="zone" d="M118 264H142L156 352H130L118 264Z"/>
+      <path class="zone-soft" d="M94 304H110L104 350H88L94 304Z"/>
+      <path class="zone-soft" d="M118 304H134L140 350H124L118 304Z"/>
+      <path class="zone-soft" d="M74 330H96L94 354H70L74 330Z"/>
+      <path class="zone-soft" d="M134 330H156L160 354H136L134 330Z"/>
+    </symbol>
+
+    <symbol id="legs-back" viewBox="0 0 230 360">
+      <path class="zone" d="M88 228H114L104 266H84L88 228Z"/>
+      <path class="zone" d="M116 228H142L146 266H126L116 228Z"/>
+      <path class="zone-soft" d="M88 266H112L100 352H76L88 266Z"/>
+      <path class="zone-soft" d="M118 266H142L154 352H130L118 266Z"/>
+      <path class="zone-soft" d="M76 330H98L96 354H72L76 330Z"/>
+      <path class="zone-soft" d="M132 330H154L158 354H134L132 330Z"/>
+    </symbol>
+
+    <symbol id="upper-front" viewBox="0 0 230 360">
+      <use href="#push-front"/>
+      <path class="zone-soft" d="M48 140L66 146L76 194L60 202L42 194L36 170L48 140Z"/>
+      <path class="zone-soft" d="M182 140L164 146L154 194L170 202L188 194L194 170L182 140Z"/>
+      <path class="zone-soft" d="M56 198L70 204L66 244L50 248L42 224L56 198Z"/>
+      <path class="zone-soft" d="M174 198L160 204L164 244L180 248L188 224L174 198Z"/>
+    </symbol>
+
+    <symbol id="upper-back" viewBox="0 0 230 360">
+      <use href="#pull-back"/>
+      <path class="zone-soft" d="M56 198L70 204L66 244L50 248L42 224L56 198Z"/>
+      <path class="zone-soft" d="M174 198L160 204L164 244L180 248L188 224L174 198Z"/>
+    </symbol>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#pageBg)"/>
+  <circle cx="1210" cy="160" r="360" fill="url(#heroGlow)"/>
+  <circle cx="220" cy="760" r="240" fill="#ffacac" opacity=".18"/>
+  <path d="M64 720C248 640 382 610 518 504" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+  <path d="M104 802C308 736 456 694 628 562" stroke="rgba(255,255,255,.04)" stroke-width="2"/>
+
+  <text x="74" y="80" class="board-title">Direction 3 · Performance luxe</text>
+  <text x="76" y="112" class="board-subtitle">plus sportif, plus aggressif, contraste fort et rendu elite</text>
+
+  <g filter="url(#shadow)">
+    <g transform="translate(60 150)">
+      <rect width="710" height="300" rx="34" class="card-shell"/>
+      <path d="M28 92H682" class="divider"/>
+      <text x="28" y="58" class="card-title">PUSH</text>
+      <text x="28" y="83" class="card-meta">pecs Â· deltoides ant. Â· triceps</text>
+      <rect x="564" y="34" width="118" height="28" rx="14" class="chip"/>
+      <text x="590" y="52" class="chip-text">FRONT/BACK</text>
+      <use href="#front-base" x="168" y="86" width="160" height="250"/>
+      <use href="#push-front" x="168" y="86" width="160" height="250"/>
+      <use href="#back-base" x="382" y="86" width="160" height="250"/>
+      <use href="#push-back" x="382" y="86" width="160" height="250"/>
+    </g>
+
+    <g transform="translate(830 150)">
+      <rect width="710" height="300" rx="34" class="card-shell"/>
+      <path d="M28 92H682" class="divider"/>
+      <text x="28" y="58" class="card-title">PULL</text>
+      <text x="28" y="83" class="card-meta">dos Â· deltoides post. Â· biceps</text>
+      <rect x="564" y="34" width="118" height="28" rx="14" class="chip"/>
+      <text x="590" y="52" class="chip-text">FRONT/BACK</text>
+      <use href="#front-base" x="168" y="86" width="160" height="250"/>
+      <use href="#pull-front" x="168" y="86" width="160" height="250"/>
+      <use href="#back-base" x="382" y="86" width="160" height="250"/>
+      <use href="#pull-back" x="382" y="86" width="160" height="250"/>
+    </g>
+
+    <g transform="translate(60 500)">
+      <rect width="710" height="300" rx="34" class="card-shell"/>
+      <path d="M28 92H682" class="divider"/>
+      <text x="28" y="58" class="card-title">LEGS</text>
+      <text x="28" y="83" class="card-meta">quadriceps Â· fessiers Â· ischios Â· mollets</text>
+      <rect x="564" y="34" width="118" height="28" rx="14" class="chip"/>
+      <text x="590" y="52" class="chip-text">FRONT/BACK</text>
+      <use href="#front-base" x="168" y="86" width="160" height="250"/>
+      <use href="#legs-front" x="168" y="86" width="160" height="250"/>
+      <use href="#back-base" x="382" y="86" width="160" height="250"/>
+      <use href="#legs-back" x="382" y="86" width="160" height="250"/>
+    </g>
+
+    <g transform="translate(830 500)">
+      <rect width="710" height="300" rx="34" class="card-shell"/>
+      <path d="M28 92H682" class="divider"/>
+      <text x="28" y="58" class="card-title">UPPER</text>
+      <text x="28" y="83" class="card-meta">haut du corps complet</text>
+      <rect x="564" y="34" width="118" height="28" rx="14" class="chip"/>
+      <text x="590" y="52" class="chip-text">FRONT/BACK</text>
+      <use href="#front-base" x="168" y="86" width="160" height="250"/>
+      <use href="#upper-front" x="168" y="86" width="160" height="250"/>
+      <use href="#back-base" x="382" y="86" width="160" height="250"/>
+      <use href="#upper-back" x="382" y="86" width="160" height="250"/>
+    </g>
+  </g>
+</svg>
+

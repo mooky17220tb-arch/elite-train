@@ -94,6 +94,8 @@ const state = {
   day: "Push",
   currentIndex: 0,
   program: createProgramCopy(),
+  programTemplateId: "ppl-upper-4",
+  programTemplateTitle: "PPL + Upper",
   programEditorDay: "Push",
   programPlannerDays: 4,
   programTemplatePreviewId: "",
@@ -1450,6 +1452,35 @@ function getProgramTemplateById(templateId) {
   return allOptions.find((template) => template.id === templateId) || null;
 }
 
+function inferProgramTemplateMeta(program = {}) {
+  const programDays = getProgramDayKeys(program);
+  const allOptions = [3, 4, 5, 6].flatMap((days) => getProgramPlannerOptions(days));
+  const matchedTemplate = allOptions.find(
+    (template) =>
+      template.days.length === programDays.length &&
+      template.days.every((day, index) => day === programDays[index])
+  );
+
+  if (matchedTemplate) {
+    return {
+      id: matchedTemplate.id,
+      title: matchedTemplate.title,
+    };
+  }
+
+  return {
+    id: "",
+    title: "Programme perso",
+  };
+}
+
+function getActiveProgramDisplay() {
+  const fallbackMeta = inferProgramTemplateMeta(state.program);
+  const title = sanitizePlainText(state.programTemplateTitle, fallbackMeta.title);
+  const dayCount = getProgramDays().length;
+  return `${title} · ${dayCount} jours`;
+}
+
 function summarizeTemplateDayEntries(entries = []) {
   const grouped = new Map();
 
@@ -2433,6 +2464,8 @@ function buildPersistedState() {
     savedAt: new Date().toISOString(),
     screen: state.screen,
     program: state.program,
+    programTemplateId: state.programTemplateId,
+    programTemplateTitle: state.programTemplateTitle,
     programEditorDay: state.programEditorDay,
     programPlannerDays: state.programPlannerDays,
     cycle: state.cycle,
@@ -2462,6 +2495,10 @@ function buildPersistedState() {
 
 function hydrateState(parsed = {}) {
   state.program = sanitizeProgram(parsed.program);
+  const inferredMeta = inferProgramTemplateMeta(state.program);
+  state.programTemplateId =
+    typeof parsed.programTemplateId === "string" ? parsed.programTemplateId : inferredMeta.id;
+  state.programTemplateTitle = sanitizePlainText(parsed.programTemplateTitle, inferredMeta.title);
   state.screen = parsed.screen || "dashboard";
   state.exerciseData = parsed.exerciseData || {};
   state.history = parsed.history || [];
@@ -2709,6 +2746,8 @@ function clearAllData() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(STORAGE_BACKUP_KEY);
   state.program = createProgramCopy();
+  state.programTemplateId = "ppl-upper-4";
+  state.programTemplateTitle = "PPL + Upper";
   state.programEditorDay = "Push";
   state.programPlannerDays = 4;
   state.cycle = createDefaultCycle();
@@ -2852,6 +2891,8 @@ function updateProgramEntry(day, index, field, value) {
     ...state.program,
     [day]: dayEntries,
   };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
   migrateExerciseIdentity(day, currentEntry, normalizedEntry);
 
   saveState();
@@ -2877,6 +2918,8 @@ function addProgramEntry(day) {
     ...state.program,
     [day]: [...dayEntries, nextEntry],
   };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
   state.programEditorDay = day;
   saveState();
   renderApp();
@@ -2891,6 +2934,8 @@ function removeProgramEntry(day, index) {
     ...state.program,
     [day]: dayEntries,
   };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
 
   if (state.day === day && state.currentIndex >= dayEntries.length) {
     state.currentIndex = Math.max(0, dayEntries.length - 1);
@@ -2903,6 +2948,8 @@ function removeProgramEntry(day, index) {
 
 function resetProgram() {
   state.program = createProgramCopy();
+  state.programTemplateId = "ppl-upper-4";
+  state.programTemplateTitle = "PPL + Upper";
   state.day = getProgramDayKeys(state.program)[0] || "Push";
   state.programEditorDay = state.day;
   state.programPlannerDays = 4;
@@ -2945,6 +2992,8 @@ function applyProgramTemplate(templateId) {
   }
 
   state.program = createProgramTemplate(templateId);
+  state.programTemplateId = template.id;
+  state.programTemplateTitle = template.title;
   state.programPlannerDays = template.days.length;
   state.programTemplatePreviewId = "";
   state.day = Object.keys(state.program)[0] || "Push";
@@ -4348,6 +4397,7 @@ function renderPremiumDashboard() {
   const heroCopy = resume?.mode === "active"
     ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
     : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+  const activeProgramDisplay = getActiveProgramDisplay();
 
   return `
     <section class="stack-md">
@@ -6078,11 +6128,11 @@ function renderPremiumDayList() {
           const theme = getDayTheme(day);
 
           return `
-            <button class="day-button" data-day="${day}">
+            <button class="day-button" data-day="${day}" data-theme-day="${theme.accentDay}">
               <div>
                 <div class="day-button__eyebrow">${theme.badge}</div>
                 <div class="day-button__title">${day.toUpperCase()}</div>
-                <div class="day-button__meta">${theme.cue}</div>
+                <div class="day-button__meta">${theme.subtitle} · ${theme.cue}</div>
                 <div class="day-button__stats">
                   <span>${summary.exerciseCount} exos</span>
                   <span>${summary.setCount} series</span>
@@ -6324,7 +6374,7 @@ function renderPremiumDashboard() {
 
   return `
     <section class="stack-md">
-      <article class="dashboard-hero" data-accent-day="${heroDay}">
+      <article class="dashboard-hero" data-accent-day="${heroTheme.accentDay}">
         <div class="dashboard-hero__content">
           <div class="dashboard-hero__top">
             <span class="dashboard-hero__badge">${heroBadge}</span>
@@ -6332,7 +6382,8 @@ function renderPremiumDashboard() {
           </div>
 
           <div class="dashboard-hero__copy">
-            <div class="label dashboard-hero__label">Accueil premium</div>
+            <div class="label dashboard-hero__label">Programme actif</div>
+            <div class="dashboard-hero__program">${activeProgramDisplay}</div>
             <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
             <div class="dashboard-hero__subtag">${heroTheme.subtitle}</div>
             <div class="dashboard-hero__cue">${heroTheme.cue}</div>
@@ -6359,7 +6410,7 @@ function renderPremiumDashboard() {
               ${heroActionLabel}
             </button>
             <button class="button button--ghost" data-screen="history">
-              Voir historique
+              Voir progression
             </button>
           </div>
         </div>
@@ -6498,7 +6549,7 @@ function renderWorkoutCompletionScreen() {
 
   return `
     <section class="stack-md">
-      <section class="surface surface-pad-lg session-finish session-finish--${finishTone}" data-accent-day="${state.day}">
+      <section class="surface surface-pad-lg session-finish session-finish--${finishTone}" data-accent-day="${theme.accentDay}">
         <div class="session-finish__hero">
           <div class="trophy">${theme.mark}</div>
           <div class="stack-sm">
@@ -6583,7 +6634,7 @@ function renderWorkout() {
   }
 
   return `
-    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${state.day}">
+    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${theme.accentDay}">
       <div class="row row-start workout-shell__header">
         <div class="workout-shell__hero-copy">
           <div class="workout-shell__eyebrow-row">
