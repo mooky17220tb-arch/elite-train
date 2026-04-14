@@ -4578,10 +4578,10 @@ body::before {
 }
 
 .bottom-nav__inner {
-  margin: 0 10px 0;
-  padding: 10px 12px calc(8px + env(safe-area-inset-bottom));
+  margin: 0 8px 0;
+  padding: 8px 10px calc(4px + env(safe-area-inset-bottom));
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 28px 28px 0 0;
+  border-radius: 24px 24px 0 0;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)),
     rgba(7, 9, 8, 0.84);
@@ -4592,15 +4592,15 @@ body::before {
 }
 
 .nav-button {
-  min-height: 56px;
-  border-radius: 18px;
+  min-height: 50px;
+  border-radius: 16px;
   color: rgba(236, 241, 238, 0.54);
 }
 
 .nav-button__icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 12px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.03);
@@ -4608,6 +4608,8 @@ body::before {
 
 .nav-button__label {
   color: currentColor;
+  font-size: 10px;
+  letter-spacing: 0.06em;
 }
 
 .nav-button.is-active {
@@ -4739,10 +4741,15 @@ body::before {
   }
 
   .bottom-nav__inner {
-    border-radius: 24px 24px 0 0;
+    border-radius: 22px 22px 0 0;
   }
 
   .nav-button {
-    min-height: 54px;
+    min-height: 48px;
+  }
+
+  .nav-button__icon {
+    width: 26px;
+    height: 26px;
   }
 }
