@@ -1318,6 +1318,10 @@ button {
   gap: 16px;
 }
 
+.program-entry--compact {
+  gap: 14px;
+}
+
 .program-entry__head {
   display: flex;
   align-items: flex-start;
@@ -1343,6 +1347,12 @@ button {
   border-radius: 14px;
   font-size: 12px;
   font-weight: 900;
+}
+
+.program-entry__quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .program-grid {
@@ -2726,11 +2736,16 @@ button {
   gap: 14px;
 }
 
+.sheet-card .muted {
+  margin-top: 6px;
+}
+
 @media (max-width: 360px) {
   .update-banner__actions,
   .history-card__head-tools,
   .sheet-card__actions,
-  .last-set-card__actions {
+  .last-set-card__actions,
+  .program-entry__quick-actions {
     flex-direction: column;
   }
 

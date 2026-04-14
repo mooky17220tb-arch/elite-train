@@ -120,6 +120,7 @@ const state = {
   onboardingCompleted: false,
   onboardingStep: 0,
   historyEditor: null,
+  programEntryEditor: null,
   storageMeta: {
     lastSavedAt: "",
     backupAvailable: false,
@@ -2301,6 +2302,86 @@ function renderHistoryEditorOverlay() {
   `;
 }
 
+function renderProgramEntryEditorOverlay() {
+  if (!state.programEntryEditor) return "";
+
+  const { day, index, draft } = state.programEntryEditor;
+  const title = index >= 0 ? "Modifier l'exercice" : "Ajouter un exercice";
+  const subtitle = index >= 0 ? `${day} · Exercice ${index + 1}` : `${day} · Nouveau slot`;
+
+  return `
+    <div class="sheet-overlay">
+      <article class="sheet-card">
+        <div class="sheet-card__head">
+          <div>
+            <div class="label">Edition rapide</div>
+            <h3 class="section-title">${title}</h3>
+            <div class="muted">${subtitle}</div>
+          </div>
+          <button class="icon-button" data-action="close-program-entry-editor" aria-label="Fermer l'edition">
+            X
+          </button>
+        </div>
+
+        <div class="sheet-card__body">
+          <div class="field-wrap">
+            <label class="label" for="program-editor-exercise">Exercice</label>
+            <input id="program-editor-exercise" class="input input--editor" type="text" value="${draft.exercise}" />
+          </div>
+
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="program-editor-series">Serie</label>
+              <input id="program-editor-series" class="input input--editor" type="text" value="${draft.series}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label" for="program-editor-kind">Type</label>
+              <select id="program-editor-kind" class="select select--editor">
+                <option value="barbell" ${draft.kind === "barbell" ? "selected" : ""}>Barre</option>
+                <option value="machine" ${draft.kind === "machine" ? "selected" : ""}>Machine</option>
+                <option value="dumbbell" ${draft.kind === "dumbbell" ? "selected" : ""}>Halteres</option>
+                <option value="isolation" ${draft.kind === "isolation" ? "selected" : ""}>Isolation</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="program-editor-min-reps">Min reps</label>
+              <input id="program-editor-min-reps" class="input input--editor" type="number" min="1" inputmode="numeric" value="${draft.minReps}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label" for="program-editor-max-reps">Max reps</label>
+              <input id="program-editor-max-reps" class="input input--editor" type="number" min="1" inputmode="numeric" value="${draft.maxReps}" />
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="program-editor-rest">Repos</label>
+              <input id="program-editor-rest" class="input input--editor" type="number" min="0" inputmode="numeric" value="${draft.rest}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label" for="program-editor-load">Charge dep.</label>
+              <input id="program-editor-load" class="input input--editor" type="number" min="0" step="0.5" inputmode="decimal" value="${draft.defaultLoad}" />
+            </div>
+          </div>
+
+          <div class="field-wrap">
+            <label class="label" for="program-editor-load-label">Libelle charge</label>
+            <input id="program-editor-load-label" class="input input--editor" type="text" value="${draft.loadLabel}" />
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--ghost" data-action="close-program-entry-editor">Annuler</button>
+          <button class="button button--primary" data-action="save-program-entry">Enregistrer</button>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
 function renderProgramTemplatePreviewOverlay() {
   if (!state.programTemplatePreviewId) return "";
 
@@ -2765,6 +2846,7 @@ function clearAllData() {
   state.restVibrationEnabled = true;
   state.focusWorkoutMode = false;
   state.historyEditor = null;
+  state.programEntryEditor = null;
   state.storageMeta = {
     lastSavedAt: "",
     backupAvailable: false,
@@ -2899,8 +2981,21 @@ function updateProgramEntry(day, index, field, value) {
   renderApp();
 }
 
-function addProgramEntry(day) {
-  const dayEntries = [...(state.program[day] || [])];
+function createProgramEntryDraft(entry) {
+  return {
+    exercise: sanitizePlainText(entry.exercise, "Nouvel exercice"),
+    series: sanitizePlainText(entry.series, "Serie 1"),
+    kind: entry.kind || "isolation",
+    minReps: String(entry.minReps ?? 10),
+    maxReps: String(entry.maxReps ?? 12),
+    rest: String(entry.rest ?? 60),
+    defaultLoad: isNumericLoad(entry.defaultLoad) ? String(entry.defaultLoad) : "",
+    loadLabel: sanitizePlainText(entry.loadLabel, entry.loadLabel || "Charge libre"),
+  };
+}
+
+function createNewProgramEntry(day) {
+  const dayEntries = state.program[day] || [];
   const nextIndex = dayEntries.length + 1;
   const nextEntry = normalizeProgramEntry({
     exercise: `Nouvel exercice ${nextIndex}`,
@@ -2913,16 +3008,159 @@ function addProgramEntry(day) {
     loadLabel: "Charge libre",
   });
   nextEntry.rest = getRecommendedRest(nextEntry);
+  return nextEntry;
+}
+
+function openProgramEntryEditor(day, index = -1) {
+  const dayEntries = state.program[day] || [];
+  const entry = index >= 0 ? dayEntries[index] : createNewProgramEntry(day);
+  if (!entry) return;
+
+  state.programEntryEditor = {
+    day,
+    index,
+    autoRest: entry.rest === getRecommendedRest(entry),
+    draft: createProgramEntryDraft(entry),
+  };
+  state.programEditorDay = day;
+  renderApp();
+}
+
+function closeProgramEntryEditor() {
+  state.programEntryEditor = null;
+  renderApp();
+}
+
+function updateProgramEntryEditorDraft(field, value) {
+  if (!state.programEntryEditor) return;
+
+  if (field === "kind") {
+    state.programEntryEditor.draft.kind = ["barbell", "machine", "dumbbell", "isolation"].includes(value)
+      ? value
+      : state.programEntryEditor.draft.kind;
+    return;
+  }
+
+  state.programEntryEditor.draft[field] = value;
+}
+
+function getNextSeriesLabelForDuplicate(entry, dayEntries) {
+  const patterns = [
+    { regex: /^Serie\s+(\d+)$/i, prefix: "Serie " },
+    { regex: /^Back-off\s+(\d+)$/i, prefix: "Back-off " },
+    { regex: /^Activation(?:\s+(\d+))?$/i, prefix: "Activation " },
+    { regex: /^Top Set(?:\s+(\d+))?$/i, prefix: "Top Set " },
+  ];
+
+  for (const pattern of patterns) {
+    const match = String(entry.series || "").match(pattern.regex);
+    if (match) {
+      const current = Number(match[1] || 1);
+      return `${pattern.prefix}${current + 1}`.trim();
+    }
+  }
+
+  const nextNumber = dayEntries.filter((item) => item.exercise === entry.exercise).length + 1;
+  return `Serie ${nextNumber}`;
+}
+
+function duplicateProgramEntry(day, index) {
+  const dayEntries = [...(state.program[day] || [])];
+  const entry = dayEntries[index];
+  if (!entry) return;
+
+  const duplicate = normalizeProgramEntry(
+    {
+      ...entry,
+      series: getNextSeriesLabelForDuplicate(entry, dayEntries),
+    },
+    entry
+  );
+
+  dayEntries.splice(index + 1, 0, duplicate);
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function bumpProgramEntryRest(day, index, delta) {
+  const dayEntries = [...(state.program[day] || [])];
+  const entry = dayEntries[index];
+  if (!entry) return;
+
+  dayEntries[index] = normalizeProgramEntry(
+    {
+      ...entry,
+      rest: Math.max(0, Number(entry.rest || 0) + Number(delta || 0)),
+    },
+    entry
+  );
 
   state.program = {
     ...state.program,
-    [day]: [...dayEntries, nextEntry],
+    [day]: dayEntries,
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+  saveState();
+  renderApp();
+}
+
+function saveProgramEntryEditor() {
+  if (!state.programEntryEditor) return;
+
+  const { day, index, draft, autoRest } = state.programEntryEditor;
+  const dayEntries = [...(state.program[day] || [])];
+  const currentEntry = index >= 0 ? dayEntries[index] : null;
+  const fallbackEntry = currentEntry || createNewProgramEntry(day);
+  const currentRecommendedRest = getRecommendedRest(fallbackEntry);
+
+  const normalizedEntry = normalizeProgramEntry(
+    {
+      exercise: draft.exercise,
+      series: draft.series,
+      kind: draft.kind,
+      minReps: draft.minReps,
+      maxReps: draft.maxReps,
+      rest: draft.rest,
+      defaultLoad: draft.defaultLoad,
+      loadLabel: draft.loadLabel,
+    },
+    fallbackEntry
+  );
+
+  if (autoRest && String(draft.rest).trim() === String(fallbackEntry.rest ?? currentRecommendedRest)) {
+    normalizedEntry.rest = getRecommendedRest(normalizedEntry);
+  }
+
+  if (index >= 0 && currentEntry) {
+    dayEntries[index] = normalizedEntry;
+    migrateExerciseIdentity(day, currentEntry, normalizedEntry);
+  } else {
+    dayEntries.push(normalizedEntry);
+  }
+
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
   };
   state.programTemplateId = "";
   state.programTemplateTitle = "Programme perso";
   state.programEditorDay = day;
+  state.programEntryEditor = null;
+  ensureSelectedChartKeyIsValid();
   saveState();
   renderApp();
+}
+
+function addProgramEntry(day) {
+  openProgramEntryEditor(day, -1);
 }
 
 function removeProgramEntry(day, index) {
@@ -2936,6 +3174,13 @@ function removeProgramEntry(day, index) {
   };
   state.programTemplateId = "";
   state.programTemplateTitle = "Programme perso";
+  if (
+    state.programEntryEditor &&
+    state.programEntryEditor.day === day &&
+    state.programEntryEditor.index === index
+  ) {
+    state.programEntryEditor = null;
+  }
 
   if (state.day === day && state.currentIndex >= dayEntries.length) {
     state.currentIndex = Math.max(0, dayEntries.length - 1);
@@ -2952,6 +3197,7 @@ function resetProgram() {
   state.programTemplateTitle = "PPL + Upper";
   state.day = getProgramDayKeys(state.program)[0] || "Push";
   state.programEditorDay = state.day;
+  state.programEntryEditor = null;
   state.programPlannerDays = 4;
   resetWorkoutState();
   ensureSelectedChartKeyIsValid();
@@ -2996,6 +3242,7 @@ function applyProgramTemplate(templateId) {
   state.programTemplateTitle = template.title;
   state.programPlannerDays = template.days.length;
   state.programTemplatePreviewId = "";
+  state.programEntryEditor = null;
   state.day = Object.keys(state.program)[0] || "Push";
   state.programEditorDay = state.day;
   state.pendingSession = [];
@@ -5419,6 +5666,98 @@ function renderProgramEditor() {
   `;
 }
 
+function renderProgramEditor() {
+  const day = state.programEditorDay;
+  const entries = state.program[day] || [];
+
+  return `
+    <article class="surface surface-pad stack-md program-editor">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Modifier le programme</div>
+          <h3 class="section-title dashboard-section-head__title">Edition rapide</h3>
+        </div>
+        <div class="label">Sauvegarde auto</div>
+      </div>
+
+      <div class="program-hint">
+        Vue compacte pour aller vite. Les details s'ouvrent seulement quand tu touches Modifier.
+      </div>
+
+      <div class="program-day-tabs">
+        ${getProgramDays()
+          .map(
+            (programDay) => `
+              <button
+                class="program-day-tab ${programDay === day ? "is-active" : ""}"
+                data-program-day="${programDay}"
+              >
+                ${programDay}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
+      <div class="program-editor-list">
+        ${
+          entries.length
+            ? entries
+                .map(
+                  (entry, index) => `
+                    <article class="surface surface--soft surface-pad program-entry program-entry--compact">
+                      <div class="program-entry__head">
+                        <div class="stack-sm">
+                          <div class="label">Exercice ${index + 1}</div>
+                          <div class="program-entry__title">${entry.exercise}</div>
+                          <div class="program-entry__meta">${entry.series} · ${entry.targetLabel} reps · ${entry.rest}s · ${formatLoad(entry.defaultLoad, entry.loadLabel)}</div>
+                        </div>
+                        <button
+                          class="program-entry__remove"
+                          data-action="remove-program-entry"
+                          data-program-day="${day}"
+                          data-program-index="${index}"
+                          aria-label="Supprimer ${entry.exercise}"
+                        >
+                          Suppr
+                        </button>
+                      </div>
+
+                      <div class="program-entry__quick-actions">
+                        <button class="button button--ghost button--compact" data-action="open-program-entry-editor" data-program-day="${day}" data-program-index="${index}">
+                          Modifier
+                        </button>
+                        <button class="button button--ghost button--compact" data-action="duplicate-program-entry" data-program-day="${day}" data-program-index="${index}">
+                          + Serie
+                        </button>
+                        <button class="button button--ghost button--compact" data-action="bump-program-entry-rest" data-program-day="${day}" data-program-index="${index}" data-rest-delta="15">
+                          +15s
+                        </button>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")
+            : `
+                <article class="surface surface--soft surface-pad">
+                  <div class="muted">Aucun exercice sur ce bloc pour le moment.</div>
+                </article>
+              `
+        }
+      </div>
+
+      <div class="program-actions">
+        <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
+          Ajouter un exercice
+        </button>
+        <button class="button button--ghost" data-action="reset-program">
+          Revenir au programme de base
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function renderProgramPlanner() {
   const selectedDays = [3, 4, 5, 6].includes(state.programPlannerDays) ? state.programPlannerDays : 4;
   const templates = getProgramPlannerOptions(selectedDays);
@@ -5717,6 +6056,7 @@ function renderApp() {
       ${renderRestAlertOverlay()}
       ${renderProgramTemplatePreviewOverlay()}
       ${renderHistoryEditorOverlay()}
+      ${renderProgramEntryEditorOverlay()}
     </div>
   `;
 
@@ -5896,6 +6236,36 @@ function bindEvents() {
         );
       }
 
+      if (action === "open-program-entry-editor") {
+        openProgramEntryEditor(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programIndex)
+        );
+      }
+
+      if (action === "close-program-entry-editor") {
+        closeProgramEntryEditor();
+      }
+
+      if (action === "save-program-entry") {
+        saveProgramEntryEditor();
+      }
+
+      if (action === "duplicate-program-entry") {
+        duplicateProgramEntry(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programIndex)
+        );
+      }
+
+      if (action === "bump-program-entry-rest") {
+        bumpProgramEntryRest(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programIndex),
+          Number(button.dataset.restDelta || 0)
+        );
+      }
+
       if (action === "reset-program") {
         resetProgram();
       }
@@ -6040,6 +6410,62 @@ function bindEvents() {
     historyEditorLabel.oninput = (event) => {
       if (!state.historyEditor) return;
       state.historyEditor.loadLabel = event.target.value;
+    };
+  }
+
+  const programEditorExercise = document.getElementById("program-editor-exercise");
+  if (programEditorExercise) {
+    programEditorExercise.oninput = (event) => {
+      updateProgramEntryEditorDraft("exercise", event.target.value);
+    };
+  }
+
+  const programEditorSeries = document.getElementById("program-editor-series");
+  if (programEditorSeries) {
+    programEditorSeries.oninput = (event) => {
+      updateProgramEntryEditorDraft("series", event.target.value);
+    };
+  }
+
+  const programEditorKind = document.getElementById("program-editor-kind");
+  if (programEditorKind) {
+    programEditorKind.onchange = (event) => {
+      updateProgramEntryEditorDraft("kind", event.target.value);
+    };
+  }
+
+  const programEditorMinReps = document.getElementById("program-editor-min-reps");
+  if (programEditorMinReps) {
+    programEditorMinReps.oninput = (event) => {
+      updateProgramEntryEditorDraft("minReps", event.target.value);
+    };
+  }
+
+  const programEditorMaxReps = document.getElementById("program-editor-max-reps");
+  if (programEditorMaxReps) {
+    programEditorMaxReps.oninput = (event) => {
+      updateProgramEntryEditorDraft("maxReps", event.target.value);
+    };
+  }
+
+  const programEditorRest = document.getElementById("program-editor-rest");
+  if (programEditorRest) {
+    programEditorRest.oninput = (event) => {
+      updateProgramEntryEditorDraft("rest", event.target.value);
+    };
+  }
+
+  const programEditorLoad = document.getElementById("program-editor-load");
+  if (programEditorLoad) {
+    programEditorLoad.oninput = (event) => {
+      updateProgramEntryEditorDraft("defaultLoad", event.target.value);
+    };
+  }
+
+  const programEditorLoadLabel = document.getElementById("program-editor-load-label");
+  if (programEditorLoadLabel) {
+    programEditorLoadLabel.oninput = (event) => {
+      updateProgramEntryEditorDraft("loadLabel", event.target.value);
     };
   }
 
@@ -7011,6 +7437,7 @@ function renderApp() {
       ${renderRestAlertOverlay()}
       ${renderProgramTemplatePreviewOverlay()}
       ${renderHistoryEditorOverlay()}
+      ${renderProgramEntryEditorOverlay()}
     </div>
   `;
 
