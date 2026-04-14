@@ -4836,6 +4836,7 @@ function renderPremiumDashboard() {
   const heroCopy = resume?.mode === "active"
     ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
     : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
+  const activeProgramDisplay = getActiveProgramDisplay();
 
   return `
     <section class="stack-md">
