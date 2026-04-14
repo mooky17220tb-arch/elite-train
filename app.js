@@ -89,6 +89,47 @@ const PROGRAM = {
   ],
 };
 
+const PROGRAM_ENTRY_PRESET_GROUPS = [
+  { id: "pecs", label: "Pecs" },
+  { id: "dos", label: "Dos" },
+  { id: "jambes", label: "Jambes" },
+  { id: "epaules", label: "Epaules" },
+  { id: "bras", label: "Bras" },
+];
+
+const PROGRAM_ENTRY_PRESETS = {
+  pecs: [
+    { id: "bench-machine", exercise: "Developpe incline machine", kind: "machine", minReps: 8, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "pec-deck", exercise: "Pec deck", kind: "machine", minReps: 10, maxReps: 15, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "fly-cable", exercise: "Ecarte poulie", kind: "isolation", minReps: 12, maxReps: 15, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "chest-press", exercise: "Chest press", kind: "machine", minReps: 8, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+  ],
+  dos: [
+    { id: "lat-pulldown", exercise: "Tirage vertical", kind: "machine", minReps: 8, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "seated-row", exercise: "Rowing poulie", kind: "machine", minReps: 10, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "one-arm-row", exercise: "Rowing haltere", kind: "dumbbell", minReps: 8, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "pullover", exercise: "Pullover poulie", kind: "isolation", minReps: 12, maxReps: 15, defaultLoad: null, loadLabel: "Charge libre" },
+  ],
+  jambes: [
+    { id: "leg-press", exercise: "Presse a cuisses", kind: "machine", minReps: 8, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "hip-thrust", exercise: "Hip thrust", kind: "barbell", minReps: 8, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "leg-curl", exercise: "Leg curl", kind: "machine", minReps: 10, maxReps: 15, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "leg-extension", exercise: "Leg extension", kind: "machine", minReps: 10, maxReps: 15, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "calves", exercise: "Mollets", kind: "isolation", minReps: 15, maxReps: 20, defaultLoad: null, loadLabel: "Pdc ou charge" },
+  ],
+  epaules: [
+    { id: "shoulder-press", exercise: "Developpe epaules", kind: "dumbbell", minReps: 8, maxReps: 10, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "lateral-raise", exercise: "Elevations laterales", kind: "isolation", minReps: 15, maxReps: 20, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "rear-delt", exercise: "Oiseau", kind: "isolation", minReps: 12, maxReps: 20, defaultLoad: null, loadLabel: "Charge libre" },
+  ],
+  bras: [
+    { id: "incline-curl", exercise: "Curl incline", kind: "dumbbell", minReps: 10, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "hammer-curl", exercise: "Curl marteau", kind: "dumbbell", minReps: 10, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "pushdown", exercise: "Triceps poulie", kind: "isolation", minReps: 10, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+    { id: "overhead-triceps", exercise: "Extension triceps corde", kind: "isolation", minReps: 10, maxReps: 12, defaultLoad: null, loadLabel: "Charge libre" },
+  ],
+};
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -425,6 +466,45 @@ function resolveDayThemeKey(day) {
   }
 
   return "Upper";
+}
+
+function getDefaultProgramPresetGroup(day, exercise = "") {
+  const exerciseValue = String(exercise || "").toLowerCase();
+  const dayValue = String(day || "").toLowerCase();
+
+  if (matchesExerciseKeyword(exerciseValue, ["curl", "triceps", "bras", "biceps"])) return "bras";
+  if (matchesExerciseKeyword(exerciseValue, ["laterales", "oiseau", "epaules", "epaule", "shoulder"])) return "epaules";
+  if (matchesExerciseKeyword(exerciseValue, ["rowing", "tirage", "pullover", "dos", "back"])) return "dos";
+  if (matchesExerciseKeyword(exerciseValue, ["squat", "leg", "fentes", "mollets", "jambes", "hip thrust"])) return "jambes";
+  if (matchesExerciseKeyword(exerciseValue, ["ecarte", "developpe", "chest", "pec", "incline"])) return "pecs";
+
+  if (matchesExerciseKeyword(dayValue, ["arm", "bras"])) return "bras";
+  if (matchesExerciseKeyword(dayValue, ["shoulder", "epaule", "epaules"])) return "epaules";
+
+  const theme = resolveDayThemeKey(day);
+  if (theme === "Push") return "pecs";
+  if (theme === "Pull") return "dos";
+  if (theme === "Legs") return "jambes";
+  return "pecs";
+}
+
+function getProgramEntryPresetGroups(day, exercise = "") {
+  const defaultGroup = getDefaultProgramPresetGroup(day, exercise);
+  const groups = [...PROGRAM_ENTRY_PRESET_GROUPS];
+  groups.sort((left, right) => {
+    if (left.id === defaultGroup) return -1;
+    if (right.id === defaultGroup) return 1;
+    return 0;
+  });
+  return groups;
+}
+
+function getProgramEntryPresets(groupId) {
+  return Array.isArray(PROGRAM_ENTRY_PRESETS[groupId]) ? PROGRAM_ENTRY_PRESETS[groupId] : [];
+}
+
+function getProgramEntryPreset(groupId, presetId) {
+  return getProgramEntryPresets(groupId).find((preset) => preset.id === presetId) || null;
 }
 
 function sanitizePositiveInteger(value, fallback, minimum = 1) {
@@ -2995,12 +3075,10 @@ function createProgramEntryDraft(entry) {
 }
 
 function createNewProgramEntry(day) {
-  const dayEntries = state.program[day] || [];
-  const nextIndex = dayEntries.length + 1;
   const nextEntry = normalizeProgramEntry({
-    exercise: `Nouvel exercice ${nextIndex}`,
+    exercise: "Nouvel exercice",
     kind: "isolation",
-    series: `Serie ${nextIndex}`,
+    series: "Serie 1",
     minReps: 10,
     maxReps: 12,
     rest: 60,
@@ -3020,6 +3098,8 @@ function openProgramEntryEditor(day, index = -1) {
     day,
     index,
     autoRest: entry.rest === getRecommendedRest(entry),
+    presetGroup: getDefaultProgramPresetGroup(day, entry.exercise),
+    showAdvanced: index >= 0,
     draft: createProgramEntryDraft(entry),
   };
   state.programEditorDay = day;
@@ -3038,10 +3118,64 @@ function updateProgramEntryEditorDraft(field, value) {
     state.programEntryEditor.draft.kind = ["barbell", "machine", "dumbbell", "isolation"].includes(value)
       ? value
       : state.programEntryEditor.draft.kind;
-    return;
+  } else {
+    state.programEntryEditor.draft[field] = value;
   }
 
-  state.programEntryEditor.draft[field] = value;
+  if (state.programEntryEditor.autoRest && ["exercise", "kind", "minReps", "maxReps"].includes(field)) {
+    const baseEntry = normalizeProgramEntry(
+      {
+        exercise: state.programEntryEditor.draft.exercise,
+        series: state.programEntryEditor.draft.series,
+        kind: state.programEntryEditor.draft.kind,
+        minReps: state.programEntryEditor.draft.minReps,
+        maxReps: state.programEntryEditor.draft.maxReps,
+        rest: state.programEntryEditor.draft.rest,
+        defaultLoad: state.programEntryEditor.draft.defaultLoad,
+        loadLabel: state.programEntryEditor.draft.loadLabel,
+      },
+      createNewProgramEntry(state.programEntryEditor.day)
+    );
+    state.programEntryEditor.draft.rest = String(getRecommendedRest(baseEntry));
+  }
+}
+
+function setProgramEntryPresetGroup(groupId) {
+  if (!state.programEntryEditor) return;
+
+  const nextGroup = getProgramEntryPresets(groupId).length ? groupId : state.programEntryEditor.presetGroup;
+  state.programEntryEditor.presetGroup = nextGroup;
+  renderApp();
+}
+
+function applyProgramEntryPreset(groupId, presetId) {
+  if (!state.programEntryEditor) return;
+
+  const preset = getProgramEntryPreset(groupId, presetId);
+  if (!preset) return;
+
+  const fallbackEntry = createNewProgramEntry(state.programEntryEditor.day);
+  const series = sanitizePlainText(state.programEntryEditor.draft.series, fallbackEntry.series || "Serie 1");
+  const nextEntry = normalizeProgramEntry(
+    {
+      ...preset,
+      series,
+    },
+    fallbackEntry
+  );
+  nextEntry.rest = getRecommendedRest(nextEntry);
+
+  state.programEntryEditor.presetGroup = groupId;
+  state.programEntryEditor.autoRest = true;
+  state.programEntryEditor.draft = createProgramEntryDraft(nextEntry);
+  renderApp();
+}
+
+function toggleProgramEntryAdvanced() {
+  if (!state.programEntryEditor) return;
+
+  state.programEntryEditor.showAdvanced = !state.programEntryEditor.showAdvanced;
+  renderApp();
 }
 
 function getNextSeriesLabelForDuplicate(entry, dayEntries) {
@@ -5468,6 +5602,149 @@ function renderHistory() {
   `;
 }
 
+function renderProgramEntryEditorOverlay() {
+  if (!state.programEntryEditor) return "";
+
+  const { day, index, draft, presetGroup, showAdvanced } = state.programEntryEditor;
+  const title = index >= 0 ? "Modifier l'exercice" : "Ajouter un exercice";
+  const subtitle = index >= 0 ? `${day} - Exercice ${index + 1}` : `${day} - Nouveau slot`;
+  const presetGroups = getProgramEntryPresetGroups(day, draft.exercise);
+  const presetOptions = getProgramEntryPresets(presetGroup);
+
+  return `
+    <div class="sheet-overlay">
+      <article class="sheet-card">
+        <div class="sheet-card__head">
+          <div>
+            <div class="label">Edition rapide</div>
+            <h3 class="section-title">${title}</h3>
+            <div class="muted">${subtitle}</div>
+          </div>
+          <button class="icon-button" data-action="close-program-entry-editor" aria-label="Fermer l'edition">
+            X
+          </button>
+        </div>
+
+        ${
+          index < 0
+            ? `
+                <div class="program-preset-shell">
+                  <div class="label">Ajout rapide</div>
+                  <div class="muted">Choisis un preset puis ajuste seulement ce qui t'interesse.</div>
+                  <div class="program-preset-groups">
+                    ${presetGroups
+                      .map(
+                        (group) => `
+                          <button
+                            class="program-preset-chip ${group.id === presetGroup ? "is-active" : ""}"
+                            data-action="select-program-preset-group"
+                            data-preset-group="${group.id}"
+                          >
+                            ${group.label}
+                          </button>
+                        `
+                      )
+                      .join("")}
+                  </div>
+                  <div class="program-preset-grid">
+                    ${presetOptions
+                      .map(
+                        (preset) => `
+                          <button
+                            class="program-preset-card ${draft.exercise === preset.exercise ? "is-active" : ""}"
+                            data-action="apply-program-preset"
+                            data-preset-group="${presetGroup}"
+                            data-preset-id="${preset.id}"
+                          >
+                            <span class="program-preset-card__title">${preset.exercise}</span>
+                            <span class="program-preset-card__meta">${formatTargetLabelFromRange(preset.minReps, preset.maxReps)} reps - ${getRecommendedRest(preset)}s</span>
+                          </button>
+                        `
+                      )
+                      .join("")}
+                  </div>
+                </div>
+              `
+            : ""
+        }
+
+        <div class="sheet-card__body">
+          <div class="field-wrap">
+            <label class="label" for="program-editor-exercise">Exercice</label>
+            <input id="program-editor-exercise" class="input input--editor" type="text" value="${draft.exercise}" />
+          </div>
+
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="program-editor-series">Serie</label>
+              <input id="program-editor-series" class="input input--editor" type="text" value="${draft.series}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label">Repos auto</label>
+              <div class="input input--editor input--readonly">${draft.rest}s</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field-wrap">
+              <label class="label" for="program-editor-min-reps">Min reps</label>
+              <input id="program-editor-min-reps" class="input input--editor" type="number" min="1" inputmode="numeric" value="${draft.minReps}" />
+            </div>
+            <div class="field-wrap">
+              <label class="label" for="program-editor-max-reps">Max reps</label>
+              <input id="program-editor-max-reps" class="input input--editor" type="number" min="1" inputmode="numeric" value="${draft.maxReps}" />
+            </div>
+          </div>
+
+          <button class="button button--ghost button--compact program-editor-toggle" data-action="toggle-program-entry-advanced">
+            ${showAdvanced ? "Masquer les details" : "Plus d'options"}
+          </button>
+
+          ${
+            showAdvanced
+              ? `
+                  <div class="program-editor-advanced">
+                    <div class="grid-2">
+                      <div class="field-wrap">
+                        <label class="label" for="program-editor-kind">Type</label>
+                        <select id="program-editor-kind" class="select select--editor">
+                          <option value="barbell" ${draft.kind === "barbell" ? "selected" : ""}>Barre</option>
+                          <option value="machine" ${draft.kind === "machine" ? "selected" : ""}>Machine</option>
+                          <option value="dumbbell" ${draft.kind === "dumbbell" ? "selected" : ""}>Halteres</option>
+                          <option value="isolation" ${draft.kind === "isolation" ? "selected" : ""}>Isolation</option>
+                        </select>
+                      </div>
+                      <div class="field-wrap">
+                        <label class="label" for="program-editor-rest">Repos</label>
+                        <input id="program-editor-rest" class="input input--editor" type="number" min="0" inputmode="numeric" value="${draft.rest}" />
+                      </div>
+                    </div>
+
+                    <div class="grid-2">
+                      <div class="field-wrap">
+                        <label class="label" for="program-editor-load">Charge dep.</label>
+                        <input id="program-editor-load" class="input input--editor" type="number" min="0" step="0.5" inputmode="decimal" value="${draft.defaultLoad}" />
+                      </div>
+                      <div class="field-wrap">
+                        <label class="label" for="program-editor-load-label">Libelle charge</label>
+                        <input id="program-editor-load-label" class="input input--editor" type="text" value="${draft.loadLabel}" />
+                      </div>
+                    </div>
+                  </div>
+                `
+              : ""
+          }
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--ghost" data-action="close-program-entry-editor">Annuler</button>
+          <button class="button button--primary" data-action="save-program-entry">Enregistrer</button>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
 function renderProgramEditor() {
   const day = state.programEditorDay;
   const entries = state.program[day] || [];
@@ -5656,7 +5933,7 @@ function renderProgramEditor() {
 
       <div class="program-actions">
         <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
-          Ajouter un exercice
+          Ajouter via preset
         </button>
         <button class="button button--ghost" data-action="reset-program">
           Revenir au programme de base
@@ -5681,7 +5958,7 @@ function renderProgramEditor() {
       </div>
 
       <div class="program-hint">
-        Vue compacte pour aller vite. Les details s'ouvrent seulement quand tu touches Modifier.
+        Vue compacte pour aller vite. Ajoute via presets, puis ouvre les details seulement si tu en as besoin.
       </div>
 
       <div class="program-day-tabs">
@@ -6249,6 +6526,21 @@ function bindEvents() {
 
       if (action === "save-program-entry") {
         saveProgramEntryEditor();
+      }
+
+      if (action === "select-program-preset-group") {
+        setProgramEntryPresetGroup(button.dataset.presetGroup || "");
+      }
+
+      if (action === "apply-program-preset") {
+        applyProgramEntryPreset(
+          button.dataset.presetGroup || "",
+          button.dataset.presetId || ""
+        );
+      }
+
+      if (action === "toggle-program-entry-advanced") {
+        toggleProgramEntryAdvanced();
       }
 
       if (action === "duplicate-program-entry") {
