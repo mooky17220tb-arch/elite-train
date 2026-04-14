@@ -2052,7 +2052,7 @@ function syncValidationButton() {
   const button = document.getElementById("validate-set-button");
   if (!button) return;
   const advice = getCurrentAdvice();
-  button.className = getValidationButtonClass(advice);
+  button.className = `${getValidationButtonClass(advice)} validation-button--inline`;
   button.innerHTML = renderValidationButtonContent(advice);
   button.setAttribute("aria-label", getValidationButtonLabel(advice));
   button.disabled = !hasValidRepsInput();
@@ -6672,30 +6672,32 @@ function renderWorkout() {
       ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
 
       <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
-        <div class="field-wrap workout-entry-field">
-          <label class="label" for="reps-input">Reps</label>
-          <input
-            id="reps-input"
-            class="input input--reps"
-            type="number"
-            min="1"
-            inputmode="numeric"
-            placeholder="${active.targetLabel}"
-            value="${state.repsInput}"
-          />
+        <div class="workout-entry-row">
+          <div class="field-wrap workout-entry-field">
+            <label class="label" for="reps-input">Reps</label>
+            <input
+              id="reps-input"
+              class="input input--reps"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              placeholder="${active.targetLabel}"
+              value="${state.repsInput}"
+            />
+          </div>
+
+          <button
+            id="validate-set-button"
+            class="${getValidationButtonClass(advice)} validation-button--inline"
+            data-action="validate-set"
+            aria-label="${getValidationButtonLabel(advice)}"
+            ${hasValidRepsInput() ? "" : "disabled"}
+          >
+            ${renderValidationButtonContent(advice)}
+          </button>
         </div>
 
         ${renderRepQuickPicks()}
-
-        <button
-          id="validate-set-button"
-          class="${getValidationButtonClass(advice)}"
-          data-action="validate-set"
-          aria-label="${getValidationButtonLabel(advice)}"
-          ${hasValidRepsInput() ? "" : "disabled"}
-        >
-          ${renderValidationButtonContent(advice)}
-        </button>
 
         ${renderLastSetActions()}
       </div>
