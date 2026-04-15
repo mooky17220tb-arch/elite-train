@@ -5509,6 +5509,7 @@ function getSettingsSections() {
       id: "app",
       label: "App iPhone",
       title: "Installation",
+      summary: "Ajout ecran d'accueil et mode app",
       meta: "Ajout ecran d'accueil et stockage local",
       stats: ["PWA", "Safari"],
       mark: "APP",
@@ -5519,6 +5520,7 @@ function getSettingsSections() {
       id: "cycle",
       label: "Bloc en cours",
       title: `${cycle.goalLabel} · S${cycle.week}/${cycle.length}`,
+      summary: "Objectif, semaine active et deload",
       meta: `${cycle.current.phase} - ${cycle.current.focus}`,
       stats: [cycle.current.phase, cycle.current.target],
       mark: "CYCLE",
@@ -5529,6 +5531,7 @@ function getSettingsSections() {
       id: "planner",
       label: "Assistant programme",
       title: getActiveProgramDisplay(),
+      summary: "Choix du split selon tes jours",
       meta: `${getProgramDays().length} bloc(s) actifs`,
       stats: [`${state.programPlannerDays} jours`, state.programTemplateId ? "Template" : "Perso"],
       mark: "SPLIT",
@@ -5539,6 +5542,7 @@ function getSettingsSections() {
       id: "editor",
       label: "Edition rapide",
       title: state.programEditorDay,
+      summary: "Series, top set, back-off et repos",
       meta: `${blocks.length} exercice(s) groupes`,
       stats: ["Series", "Repos"],
       mark: "EDIT",
@@ -5549,6 +5553,7 @@ function getSettingsSections() {
       id: "alerts",
       label: "Alertes",
       title: "Repos",
+      summary: "Son, vibration et test d'alerte",
       meta: `${soundLabel} · ${vibrationLabel}`,
       stats: [soundLabel, vibrationLabel],
       mark: "REST",
@@ -5559,6 +5564,7 @@ function getSettingsSections() {
       id: "data",
       label: "Donnees",
       title: backupLabel,
+      summary: "Export, import et reinitialisation",
       meta: state.storageMeta.saveError || "Export, import et reinitialisation",
       stats: [backupLabel, state.storageMeta.recoveredFromBackup ? "Recup OK" : "Local"],
       mark: "DATA",
@@ -5610,6 +5616,7 @@ function renderSettingsHub() {
                 <div>
                   <div class="settings-panel-card__eyebrow">Reglages</div>
                   <div class="settings-panel-card__title">${section.label}</div>
+                  <div class="settings-panel-card__desc">${section.summary}</div>
                 </div>
                 <div class="settings-panel-card__arrow">></div>
               </button>
