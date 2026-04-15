@@ -4623,9 +4623,163 @@ function renderProgramEntryEditorOverlay() {
   `;
 }
 
+function getProgramExerciseBlocks(day) {
+  const entries = state.program[day] || [];
+  const blocks = [];
+
+  entries.forEach((entry, index) => {
+    const previousBlock = blocks[blocks.length - 1];
+    if (previousBlock && previousBlock.exercise === entry.exercise) {
+      previousBlock.entries.push(entry);
+      previousBlock.endIndex = index;
+      return;
+    }
+
+    blocks.push({
+      day,
+      exercise: entry.exercise,
+      startIndex: index,
+      endIndex: index,
+      entries: [entry],
+    });
+  });
+
+  return blocks.map((block) => ({
+    ...block,
+    count: block.entries.length,
+    representative: block.entries[0],
+    meta: getProgramExerciseBlockMeta(block.entries),
+  }));
+}
+
+function getProgramExerciseBlockMeta(entries = []) {
+  if (!entries.length) return "";
+
+  const targets = [...new Set(entries.map((entry) => entry.targetLabel))];
+  const rests = [...new Set(entries.map((entry) => entry.rest))];
+  const loads = [...new Set(entries.map((entry) => formatLoad(entry.defaultLoad, entry.loadLabel)))];
+  const seriesCount = entries.length;
+
+  if (seriesCount === 1) {
+    const entry = entries[0];
+    return `${entry.targetLabel} reps - ${entry.rest}s - ${formatLoad(entry.defaultLoad, entry.loadLabel)}`;
+  }
+
+  const isMixed = targets.length > 1 || rests.length > 1 || loads.length > 1;
+  if (isMixed) {
+    return `${seriesCount} series - schema mixte`;
+  }
+
+  return `${seriesCount} series - ${targets[0]} reps - ${rests[0]}s - ${loads[0]}`;
+}
+
+function getProgramExerciseBlock(day, startIndex) {
+  return getProgramExerciseBlocks(day).find((block) => block.startIndex === startIndex) || null;
+}
+
+function setProgramBlockSeriesCount(day, startIndex, value) {
+  const nextCount = sanitizePositiveInteger(value, 1, 1);
+  const dayEntries = [...(state.program[day] || [])];
+  const block = getProgramExerciseBlock(day, startIndex);
+  if (!block) return;
+
+  const currentCount = block.count;
+  if (nextCount === currentCount) return;
+
+  if (nextCount < currentCount) {
+    dayEntries.splice(block.startIndex + nextCount, currentCount - nextCount);
+  } else {
+    let insertIndex = block.endIndex;
+    let workingEntries = [...dayEntries];
+
+    for (let iteration = 0; iteration < nextCount - currentCount; iteration += 1) {
+      const sourceEntry = workingEntries[insertIndex];
+      const duplicate = normalizeProgramEntry(
+        {
+          ...sourceEntry,
+          series: getNextSeriesLabelForDuplicate(sourceEntry, workingEntries),
+        },
+        sourceEntry
+      );
+      workingEntries.splice(insertIndex + 1, 0, duplicate);
+      insertIndex += 1;
+    }
+
+    dayEntries.splice(0, dayEntries.length, ...workingEntries);
+  }
+
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function removeProgramBlock(day, startIndex) {
+  const block = getProgramExerciseBlock(day, startIndex);
+  if (!block) return;
+
+  const dayEntries = [...(state.program[day] || [])];
+  dayEntries.splice(block.startIndex, block.count);
+
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+
+  if (
+    state.programEntryEditor &&
+    state.programEntryEditor.day === day &&
+    state.programEntryEditor.index >= block.startIndex &&
+    state.programEntryEditor.index <= block.endIndex
+  ) {
+    state.programEntryEditor = null;
+  }
+
+  if (state.day === day && state.currentIndex >= dayEntries.length) {
+    state.currentIndex = Math.max(0, dayEntries.length - 1);
+  }
+
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function bumpProgramBlockRest(day, startIndex, delta) {
+  const block = getProgramExerciseBlock(day, startIndex);
+  if (!block) return;
+
+  const dayEntries = [...(state.program[day] || [])];
+  for (let index = block.startIndex; index <= block.endIndex; index += 1) {
+    const entry = dayEntries[index];
+    dayEntries[index] = normalizeProgramEntry(
+      {
+        ...entry,
+        rest: Math.max(0, Number(entry.rest || 0) + Number(delta || 0)),
+      },
+      entry
+    );
+  }
+
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+  saveState();
+  renderApp();
+}
+
 function renderProgramEditor() {
   const day = state.programEditorDay;
-  const entries = state.program[day] || [];
+  const blocks = getProgramExerciseBlocks(day);
 
   return `
     <article class="surface surface-pad stack-md program-editor">
@@ -4638,7 +4792,7 @@ function renderProgramEditor() {
       </div>
 
       <div class="program-hint">
-        Vue compacte pour aller vite. Ajoute via presets, puis ouvre les details seulement si tu en as besoin.
+        Vue compacte par exercice. Tu regles surtout le nombre de series, puis tu ouvres les details seulement si besoin.
       </div>
 
       <div class="program-day-tabs">
@@ -4658,38 +4812,46 @@ function renderProgramEditor() {
 
       <div class="program-editor-list">
         ${
-          entries.length
-            ? entries
+          blocks.length
+            ? blocks
                 .map(
-                  (entry, index) => `
-                    <article class="surface surface--soft surface-pad program-entry program-entry--compact">
+                  (block, index) => `
+                    <article class="surface surface--soft surface-pad program-entry program-entry--compact program-block">
                       <div class="program-entry__head">
                         <div class="stack-sm">
                           <div class="label">Exercice ${index + 1}</div>
-                          <div class="program-entry__title">${entry.exercise}</div>
-                          <div class="program-entry__meta">${entry.series} Â· ${entry.targetLabel} reps Â· ${entry.rest}s Â· ${formatLoad(entry.defaultLoad, entry.loadLabel)}</div>
+                          <div class="program-entry__title">${block.exercise}</div>
+                          <div class="program-entry__meta">${block.meta}</div>
                         </div>
-                        <button
-                          class="program-entry__remove"
-                          data-action="remove-program-entry"
-                          data-program-day="${day}"
-                          data-program-index="${index}"
-                          aria-label="Supprimer ${entry.exercise}"
-                        >
-                          Suppr
-                        </button>
                       </div>
 
-                      <div class="program-entry__quick-actions">
-                        <button class="button button--ghost button--compact" data-action="open-program-entry-editor" data-program-day="${day}" data-program-index="${index}">
-                          Modifier
-                        </button>
-                        <button class="button button--ghost button--compact" data-action="duplicate-program-entry" data-program-day="${day}" data-program-index="${index}">
-                          + Serie
-                        </button>
-                        <button class="button button--ghost button--compact" data-action="bump-program-entry-rest" data-program-day="${day}" data-program-index="${index}" data-rest-delta="15">
-                          +15s
-                        </button>
+                      <div class="program-block__controls">
+                        <div class="field-wrap program-block__series">
+                          <label class="label" for="program-block-series-${day}-${block.startIndex}">Series</label>
+                          <input
+                            id="program-block-series-${day}-${block.startIndex}"
+                            class="input input--editor input--series-count"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            value="${block.count}"
+                            data-program-block-count
+                            data-program-day="${day}"
+                            data-program-block-start="${block.startIndex}"
+                          />
+                        </div>
+
+                        <div class="program-entry__quick-actions">
+                          <button class="button button--ghost button--compact" data-action="open-program-entry-editor" data-program-day="${day}" data-program-index="${block.startIndex}">
+                            Details
+                          </button>
+                          <button class="button button--ghost button--compact" data-action="bump-program-block-rest" data-program-day="${day}" data-program-block-start="${block.startIndex}" data-rest-delta="15">
+                            +15s
+                          </button>
+                          <button class="button button--ghost button--compact" data-action="remove-program-block" data-program-day="${day}" data-program-block-start="${block.startIndex}">
+                            Suppr
+                          </button>
+                        </div>
                       </div>
                     </article>
                   `
@@ -4705,7 +4867,7 @@ function renderProgramEditor() {
 
       <div class="program-actions">
         <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
-          Ajouter un exercice
+          Ajouter via preset
         </button>
         <button class="button button--ghost" data-action="reset-program">
           Revenir au programme de base
@@ -5129,6 +5291,13 @@ function bindEvents() {
         );
       }
 
+      if (action === "remove-program-block") {
+        removeProgramBlock(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programBlockStart)
+        );
+      }
+
       if (action === "open-program-entry-editor") {
         openProgramEntryEditor(
           button.dataset.programDay || state.programEditorDay,
@@ -5170,6 +5339,14 @@ function bindEvents() {
         bumpProgramEntryRest(
           button.dataset.programDay || state.programEditorDay,
           Number(button.dataset.programIndex),
+          Number(button.dataset.restDelta || 0)
+        );
+      }
+
+      if (action === "bump-program-block-rest") {
+        bumpProgramBlockRest(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programBlockStart),
           Number(button.dataset.restDelta || 0)
         );
       }
@@ -5237,6 +5414,16 @@ function bindEvents() {
         event.target.dataset.programDay,
         Number(event.target.dataset.programIndex),
         event.target.dataset.programField,
+        event.target.value
+      );
+    };
+  });
+
+  document.querySelectorAll("[data-program-block-count]").forEach((input) => {
+    input.onchange = (event) => {
+      setProgramBlockSeriesCount(
+        event.target.dataset.programDay,
+        Number(event.target.dataset.programBlockStart),
         event.target.value
       );
     };
