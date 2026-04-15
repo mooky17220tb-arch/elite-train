@@ -2913,49 +2913,76 @@ button {
 
 .settings-panel-card::before,
 .settings-panel-card::after {
-  position: absolute;
-  inset: 0;
   pointer-events: none;
 }
 
 .settings-panel-card::before {
+  position: absolute;
+  inset: 0;
   content: "";
-  background-position: center;
-  background-size: cover;
-  transform: scale(1.02);
-  opacity: 0.96;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(22, 196, 127, 0.2), transparent 28%),
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.07), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(5, 8, 7, 0.12), rgba(5, 8, 7, 0.44) 62%, rgba(5, 8, 7, 0.82) 100%);
   z-index: 0;
 }
 
-.settings-panel-card[data-settings-section="app"]::before {
-  background-image: url("./assets/settings-app-card.svg");
+.settings-panel-card[data-accent-day="Push"]::before {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(255, 107, 107, 0.26), transparent 28%),
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.07), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(5, 8, 7, 0.12), rgba(5, 8, 7, 0.44) 62%, rgba(5, 8, 7, 0.82) 100%);
 }
 
-.settings-panel-card[data-settings-section="cycle"]::before {
-  background-image: url("./assets/settings-cycle-card.svg");
+.settings-panel-card[data-accent-day="Pull"]::before {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(92, 199, 255, 0.24), transparent 28%),
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.07), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(5, 8, 7, 0.12), rgba(5, 8, 7, 0.44) 62%, rgba(5, 8, 7, 0.82) 100%);
 }
 
-.settings-panel-card[data-settings-section="planner"]::before {
-  background-image: url("./assets/settings-program-card.svg");
+.settings-panel-card[data-accent-day="Legs"]::before {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(255, 182, 88, 0.24), transparent 28%),
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.07), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(5, 8, 7, 0.12), rgba(5, 8, 7, 0.44) 62%, rgba(5, 8, 7, 0.82) 100%);
 }
 
-.settings-panel-card[data-settings-section="editor"]::before {
-  background-image: url("./assets/settings-editor-card.svg");
+.settings-panel-card[data-accent-day="Upper"]::before {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(112, 231, 176, 0.24), transparent 28%),
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.07), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(5, 8, 7, 0.12), rgba(5, 8, 7, 0.44) 62%, rgba(5, 8, 7, 0.82) 100%);
 }
 
-.settings-panel-card[data-settings-section="alerts"]::before {
-  background-image: url("./assets/settings-alerts-card.svg");
-}
-
-.settings-panel-card[data-settings-section="data"]::before {
-  background-image: url("./assets/settings-data-card.svg");
+.settings-panel-card[data-accent-day="Full"]::before,
+.settings-panel-card[data-accent-day="Lower"]::before,
+.settings-panel-card[data-accent-day="Arms"]::before,
+.settings-panel-card[data-accent-day="ChestBack"]::before,
+.settings-panel-card[data-accent-day="ShouldersArms"]::before {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(22, 196, 127, 0.2), transparent 28%),
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.07), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(5, 8, 7, 0.12), rgba(5, 8, 7, 0.44) 62%, rgba(5, 8, 7, 0.82) 100%);
 }
 
 .settings-panel-card::after {
-  content: "";
-  background:
-    linear-gradient(115deg, rgba(2, 4, 3, 0.08) 0%, rgba(2, 4, 3, 0) 30%),
-    linear-gradient(180deg, rgba(2, 4, 3, 0.14) 0%, rgba(2, 4, 3, 0.68) 62%, rgba(2, 4, 3, 0.92) 100%);
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  content: attr(data-settings-mark);
+  color: rgba(255, 255, 255, 0.08);
+  font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", sans-serif;
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.9;
   z-index: 0;
 }
 
