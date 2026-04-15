@@ -2912,27 +2912,59 @@ button {
 }
 
 .settings-panel-card::before {
-  top: -18%;
-  right: -8%;
-  width: 138px;
-  height: 138px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 68%);
-  opacity: 0.48;
-  filter: blur(4px);
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  opacity: 0.72;
   z-index: 0;
 }
 
+.settings-panel-card[data-accent-day="Push"]::before {
+  background:
+    radial-gradient(circle at top right, rgba(255, 107, 107, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+}
+
+.settings-panel-card[data-accent-day="Pull"]::before {
+  background:
+    radial-gradient(circle at top right, rgba(107, 184, 255, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+}
+
+.settings-panel-card[data-accent-day="Legs"]::before {
+  background:
+    radial-gradient(circle at top right, rgba(255, 178, 107, 0.24), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+}
+
+.settings-panel-card[data-accent-day="Upper"]::before {
+  background:
+    radial-gradient(circle at top right, rgba(124, 227, 180, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+}
+
+.settings-panel-card[data-accent-day="Full"]::before,
+.settings-panel-card[data-accent-day="Lower"]::before,
+.settings-panel-card[data-accent-day="Arms"]::before,
+.settings-panel-card[data-accent-day="ChestBack"]::before,
+.settings-panel-card[data-accent-day="ShouldersArms"]::before {
+  background:
+    radial-gradient(circle at top right, rgba(22, 196, 127, 0.2), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+}
+
 .settings-panel-card::after {
-  top: 14px;
-  right: 18px;
+  top: auto;
+  right: 16px;
+  bottom: 10px;
   content: attr(data-settings-mark);
-  color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.09);
   font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", sans-serif;
-  font-size: 54px;
+  font-size: 42px;
   font-weight: 900;
   letter-spacing: -0.08em;
-  line-height: 1;
+  line-height: 0.9;
   z-index: 0;
 }
 
@@ -2942,23 +2974,12 @@ button {
 }
 
 .settings-panel-card__title {
-  color: white;
   max-width: 72%;
-  font-size: 24px;
+  color: white;
+  font-size: 26px;
   font-weight: 900;
-  line-height: 0.96;
+  line-height: 0.94;
   letter-spacing: -0.05em;
-}
-
-.settings-panel-card__gear {
-  position: absolute;
-  right: 18px;
-  bottom: 10px;
-  color: rgba(255, 255, 255, 0.18);
-  font-size: 38px;
-  line-height: 1;
-  transform: rotate(-12deg);
-  z-index: 1;
 }
 
 .settings-detail-shell {

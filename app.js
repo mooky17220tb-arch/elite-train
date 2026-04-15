@@ -5511,7 +5511,7 @@ function getSettingsSections() {
       title: "Installation",
       meta: "Ajout ecran d'accueil et stockage local",
       stats: ["PWA", "Safari"],
-      mark: "CFG",
+      mark: "APP",
       accentDay: state.day,
       content: renderSettingsInstallSection(),
     },
@@ -5521,7 +5521,7 @@ function getSettingsSections() {
       title: `${cycle.goalLabel} · S${cycle.week}/${cycle.length}`,
       meta: `${cycle.current.phase} - ${cycle.current.focus}`,
       stats: [cycle.current.phase, cycle.current.target],
-      mark: "CYC",
+      mark: "CYCLE",
       accentDay: state.day,
       content: renderCycleSettings(),
     },
@@ -5531,7 +5531,7 @@ function getSettingsSections() {
       title: getActiveProgramDisplay(),
       meta: `${getProgramDays().length} bloc(s) actifs`,
       stats: [`${state.programPlannerDays} jours`, state.programTemplateId ? "Template" : "Perso"],
-      mark: "SPL",
+      mark: "SPLIT",
       accentDay: getProgramDays()[0] || state.day,
       content: renderProgramPlanner(),
     },
@@ -5541,7 +5541,7 @@ function getSettingsSections() {
       title: state.programEditorDay,
       meta: `${blocks.length} exercice(s) groupes`,
       stats: ["Series", "Repos"],
-      mark: "EDT",
+      mark: "EDIT",
       accentDay: state.programEditorDay,
       content: renderProgramEditor(),
     },
@@ -5551,7 +5551,7 @@ function getSettingsSections() {
       title: "Repos",
       meta: `${soundLabel} · ${vibrationLabel}`,
       stats: [soundLabel, vibrationLabel],
-      mark: "ALT",
+      mark: "REST",
       accentDay: state.day,
       content: renderRestSettings(),
     },
@@ -5561,7 +5561,7 @@ function getSettingsSections() {
       title: backupLabel,
       meta: state.storageMeta.saveError || "Export, import et reinitialisation",
       stats: [backupLabel, state.storageMeta.recoveredFromBackup ? "Recup OK" : "Local"],
-      mark: "DAT",
+      mark: "DATA",
       accentDay: state.day,
       content: renderSettingsDataSection(),
     },
@@ -5607,8 +5607,7 @@ function renderSettingsHub() {
           .map(
             (section) => `
               <button class="surface surface-pad settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}" data-settings-mark="${section.mark}">
-                <span class="settings-panel-card__gear" aria-hidden="true">⚙</span>
-                <div class="settings-panel-card__title">${section.title}</div>
+                <div class="settings-panel-card__title">${section.label}</div>
               </button>
             `
           )
@@ -5635,8 +5634,8 @@ function renderSettingsDetail() {
         </div>
         <div class="stack-sm">
           <div class="label">Reglages</div>
-          <h2 class="section-title dashboard-section-head__title">${section.title}</h2>
-          <div class="muted">${section.meta}</div>
+          <h2 class="section-title dashboard-section-head__title">${section.label}</h2>
+          <div class="muted">${section.title} - ${section.meta}</div>
         </div>
       </article>
 
