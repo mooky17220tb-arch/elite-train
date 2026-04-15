@@ -1,4 +1,4 @@
-const STORAGE_KEY = "elite-train-iphone-v1";
+﻿const STORAGE_KEY = "elite-train-iphone-v1";
 const STORAGE_BACKUP_KEY = `${STORAGE_KEY}-backup`;
 const STORAGE_SCHEMA_VERSION = 2;
 const CURRENT_REST_PROFILE_VERSION = 2;
@@ -550,7 +550,7 @@ function getRestAlertCopy() {
   return {
     title: "Repos termine",
     text: state.workoutFinished ? "Tu peux terminer ta seance." : upcoming
-      ? `Tu peux repartir sur ${upcoming.exercise} · ${upcoming.series}.`
+      ? `Tu peux repartir sur ${upcoming.exercise} Â· ${upcoming.series}.`
       : "Tu peux reprendre ton entrainement.",
   };
 }
@@ -1559,7 +1559,7 @@ function getActiveProgramDisplay() {
   const fallbackMeta = inferProgramTemplateMeta(state.program);
   const title = sanitizePlainText(state.programTemplateTitle, fallbackMeta.title);
   const dayCount = getProgramDays().length;
-  return `${title} · ${dayCount} jours`;
+  return `${title} Â· ${dayCount} jours`;
 }
 
 function summarizeTemplateDayEntries(entries = []) {
@@ -2023,7 +2023,7 @@ function getLastPerformancePreviewCard() {
     eyebrow: "Derniere fois",
     verdict,
     title: `${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}`,
-    meta: `${last.series} · ${formatDate(last.date)}`,
+    meta: `${last.series} Â· ${formatDate(last.date)}`,
   };
 }
 
@@ -2064,8 +2064,8 @@ function getNextExercisePreview() {
   };
 
   return {
-    title: `${next.exercise} · ${next.series}`,
-    meta: `${formatLoad(nextSettings.load, nextSettings.loadLabel)} · ${next.rest}s de repos`,
+    title: `${next.exercise} Â· ${next.series}`,
+    meta: `${formatLoad(nextSettings.load, nextSettings.loadLabel)} Â· ${next.rest}s de repos`,
     tone: "next",
   };
 }
@@ -2240,7 +2240,7 @@ function renderLastSetActions() {
       <div class="last-set-card__copy">
         <span class="label">Derniere serie</span>
         <strong>${lastEntry.exercise}</strong>
-        <span>${lastEntry.reps} reps · ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+        <span>${lastEntry.reps} reps Â· ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
       </div>
       <div class="last-set-card__actions">
         <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
@@ -2355,7 +2355,7 @@ function renderHistoryEditorOverlay() {
         </div>
 
         <div class="sheet-card__body">
-          <div class="muted">${currentEntry.exercise} · ${currentEntry.series} · ${formatDate(currentEntry.date)}</div>
+          <div class="muted">${currentEntry.exercise} Â· ${currentEntry.series} Â· ${formatDate(currentEntry.date)}</div>
           <div class="grid-2">
             <div class="field-wrap">
               <label class="label" for="history-editor-reps">Reps</label>
@@ -2376,86 +2376,6 @@ function renderHistoryEditorOverlay() {
           <button class="button button--danger" data-action="delete-history-entry">Supprimer</button>
           <button class="button button--ghost" data-action="close-history-editor">Annuler</button>
           <button class="button button--primary" data-action="save-history-entry">Enregistrer</button>
-        </div>
-      </article>
-    </div>
-  `;
-}
-
-function renderProgramEntryEditorOverlay() {
-  if (!state.programEntryEditor) return "";
-
-  const { day, index, draft } = state.programEntryEditor;
-  const title = index >= 0 ? "Modifier l'exercice" : "Ajouter un exercice";
-  const subtitle = index >= 0 ? `${day} · Exercice ${index + 1}` : `${day} · Nouveau slot`;
-
-  return `
-    <div class="sheet-overlay">
-      <article class="sheet-card">
-        <div class="sheet-card__head">
-          <div>
-            <div class="label">Edition rapide</div>
-            <h3 class="section-title">${title}</h3>
-            <div class="muted">${subtitle}</div>
-          </div>
-          <button class="icon-button" data-action="close-program-entry-editor" aria-label="Fermer l'edition">
-            X
-          </button>
-        </div>
-
-        <div class="sheet-card__body">
-          <div class="field-wrap">
-            <label class="label" for="program-editor-exercise">Exercice</label>
-            <input id="program-editor-exercise" class="input input--editor" type="text" value="${draft.exercise}" />
-          </div>
-
-          <div class="grid-2">
-            <div class="field-wrap">
-              <label class="label" for="program-editor-series">Serie</label>
-              <input id="program-editor-series" class="input input--editor" type="text" value="${draft.series}" />
-            </div>
-            <div class="field-wrap">
-              <label class="label" for="program-editor-kind">Type</label>
-              <select id="program-editor-kind" class="select select--editor">
-                <option value="barbell" ${draft.kind === "barbell" ? "selected" : ""}>Barre</option>
-                <option value="machine" ${draft.kind === "machine" ? "selected" : ""}>Machine</option>
-                <option value="dumbbell" ${draft.kind === "dumbbell" ? "selected" : ""}>Halteres</option>
-                <option value="isolation" ${draft.kind === "isolation" ? "selected" : ""}>Isolation</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="grid-2">
-            <div class="field-wrap">
-              <label class="label" for="program-editor-min-reps">Min reps</label>
-              <input id="program-editor-min-reps" class="input input--editor" type="number" min="1" inputmode="numeric" value="${draft.minReps}" />
-            </div>
-            <div class="field-wrap">
-              <label class="label" for="program-editor-max-reps">Max reps</label>
-              <input id="program-editor-max-reps" class="input input--editor" type="number" min="1" inputmode="numeric" value="${draft.maxReps}" />
-            </div>
-          </div>
-
-          <div class="grid-2">
-            <div class="field-wrap">
-              <label class="label" for="program-editor-rest">Repos</label>
-              <input id="program-editor-rest" class="input input--editor" type="number" min="0" inputmode="numeric" value="${draft.rest}" />
-            </div>
-            <div class="field-wrap">
-              <label class="label" for="program-editor-load">Charge dep.</label>
-              <input id="program-editor-load" class="input input--editor" type="number" min="0" step="0.5" inputmode="decimal" value="${draft.defaultLoad}" />
-            </div>
-          </div>
-
-          <div class="field-wrap">
-            <label class="label" for="program-editor-load-label">Libelle charge</label>
-            <input id="program-editor-load-label" class="input input--editor" type="text" value="${draft.loadLabel}" />
-          </div>
-        </div>
-
-        <div class="sheet-card__actions">
-          <button class="button button--ghost" data-action="close-program-entry-editor">Annuler</button>
-          <button class="button button--primary" data-action="save-program-entry">Enregistrer</button>
         </div>
       </article>
     </div>
@@ -3587,154 +3507,6 @@ function discardWorkoutProgress() {
 }
 
 function renderPendingSessionSummary(compact = false) {
-  if (!state.pendingSession.length) return "";
-
-  const classes = compact
-    ? "surface surface--soft surface-pad stack-sm"
-    : "surface surface--soft surface-pad stack-md";
-
-  return `
-    <section class="${classes}">
-      <div class="row">
-        <div class="label">Seance en attente</div>
-        <div class="label">${state.pendingSession.length} serie(s)</div>
-      </div>
-      <div class="pending-list">
-        ${state.pendingSession
-          .map(
-            (item, index) => `
-              <article class="pending-item">
-                <div>
-                  <div class="pending-item__title">${index + 1}. ${item.exercise}</div>
-                  <div class="pending-item__meta">${item.series} · ${formatLoad(item.load, item.loadLabel)}</div>
-                </div>
-                <div class="pending-item__score">${item.reps} reps · RPE ${item.rpe}</div>
-              </article>
-            `
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderPendingSessionSummary(compact = false) {
-  const summary = getPendingAdviceSummary();
-  if (!summary) return "";
-
-  const classes = compact
-    ? "surface surface--soft surface-pad stack-sm verdict-summary verdict-summary--compact"
-    : "surface surface--soft surface-pad stack-md verdict-summary";
-
-  return `
-    <section class="${classes}">
-      <div class="row row-start">
-        <div class="stack-sm">
-          <div class="label">Bilan progression</div>
-          <div class="verdict-summary__headline verdict-summary__headline--${summary.latestPresentation.tone}">
-            ${summary.latestPresentation.headline}
-          </div>
-          <div class="verdict-summary__text">${summary.latestPresentation.text}</div>
-          ${
-            summary.latestAdvice.fatigue
-              ? `<div class="verdict-summary__fatigue">${summary.latestAdvice.fatigue}</div>`
-              : ""
-          }
-        </div>
-        <div class="verdict-summary__badge">${state.pendingSession.length} serie(s)</div>
-      </div>
-
-      <div class="verdict-summary__chips">
-        <span class="verdict-chip verdict-chip--progress">Monter : ${summary.counts.progress}</span>
-        <span class="verdict-chip verdict-chip--hold">Garder : ${summary.counts.hold}</span>
-        <span class="verdict-chip verdict-chip--reduce">Baisser : ${summary.counts.reduce}</span>
-      </div>
-
-      <div class="verdict-summary__latest">
-        Derniere serie : <strong>${summary.latestEntry.exercise}</strong> · ${summary.latestEntry.series} · ${summary.latestEntry.reps} reps
-      </div>
-    </section>
-  `;
-}
-
-function renderPendingSessionSummary(compact = false) {
-  const summary = getPendingAdviceSummary();
-  if (!summary) return "";
-
-  const classes = compact
-    ? "surface surface--soft surface-pad verdict-summary verdict-summary--compact"
-    : "surface surface--soft surface-pad verdict-summary";
-
-  const verdictLabel =
-    summary.latestPresentation.tone === "progress"
-      ? "Valide · Monte"
-      : summary.latestPresentation.tone === "reduce"
-      ? "Ajuste · Baisse"
-      : "Solide · Garde";
-
-  return `
-    <section class="${classes}">
-      <div class="verdict-summary__row verdict-summary__row--${summary.latestPresentation.tone}">
-        <span class="verdict-summary__label">Prochaine</span>
-        <span class="verdict-summary__headline verdict-summary__headline--${summary.latestPresentation.tone}">
-          ${verdictLabel}
-        </span>
-        <span class="verdict-summary__latest">
-          ${summary.latestEntry.reps} reps · ${summary.latestEntry.exercise}
-        </span>
-      </div>
-    </section>
-  `;
-}
-
-function renderResumeCard() {
-  if (!hasWorkoutInProgress()) return "";
-
-  const exercises = getExercises();
-  const progress = getProgressPercent();
-  const headline = state.workoutFinished
-    ? "Seance terminee a valider"
-    : "Seance en cours";
-  const detail = state.workoutFinished
-    ? `${state.pendingSession.length} serie(s) pretes a etre enregistrees`
-    : `${state.day} · ${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length}`;
-
-  return `
-    <article class="surface surface-pad stack-md">
-      <div class="row row-start">
-        <div class="stack-sm">
-          <div class="label">Reprise rapide</div>
-          <h2 class="section-title">${headline}</h2>
-          <div class="muted">${detail}</div>
-        </div>
-        <span class="pill">${state.day}</span>
-      </div>
-
-      <div class="progress-wrap">
-        <div class="row">
-          <div class="label">Progression</div>
-          <div class="label">${progress}%</div>
-        </div>
-        <div class="progress">
-          <div class="progress__fill" style="width:${progress}%"></div>
-        </div>
-      </div>
-
-      ${state.pendingSession.length ? renderPendingSessionSummary(true) : ""}
-
-      <div class="grid-2">
-        <button class="button button--primary" data-action="resume-workout">
-          Reprendre
-        </button>
-        <button class="button button--ghost" data-action="discard-workout">
-          Annuler
-        </button>
-      </div>
-    </article>
-  `;
-}
-
-function renderPendingSessionSummary(compact = false) {
   return "";
 }
 
@@ -3759,38 +3531,6 @@ function getInstallHintHtml() {
   `;
 }
 
-function renderChart() {
-  const chart = getChartData();
-
-  if (!chart.entries.length) {
-    return `<div class="chart-empty">Pas encore de points sur cet exercice.</div>`;
-  }
-
-  const max = Math.max(...chart.entries.map((entry) => entry.chartValue), 1);
-
-  return `
-    <div class="chart-bars">
-      ${chart.entries
-        .map((entry, index) => {
-          const height = Math.max(24, Math.round((entry.chartValue / max) * 118));
-          return `
-            <div class="chart-column ${index === chart.entries.length - 1 ? "is-latest" : ""}">
-              <div class="chart-value">${entry.chartValue}${chart.metric === "load" ? "kg" : ""}</div>
-              <div class="chart-track">
-                <div
-                  class="chart-bar ${chart.metric === "reps" ? "chart-bar--reps" : ""}"
-                  style="height:${height}px"
-                ></div>
-              </div>
-              <div class="chart-date">${entry.shortDate}</div>
-            </div>
-          `;
-        })
-        .join("")}
-    </div>
-  `;
-}
-
 function renderDashboard() {
   const chart = getChartData();
   const historyKeys = getHistoryKeys();
@@ -3803,7 +3543,7 @@ function renderDashboard() {
       <article class="surface surface-pad chart-shell">
         <div class="row">
           <div class="label">Progression recente</div>
-          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
+          <div class="label">${chart.entries.length} points Â· ${chart.metric === "load" ? "charge" : "reps"}</div>
         </div>
 
         ${
@@ -3814,7 +3554,7 @@ function renderDashboard() {
                     .map(
                       (item) => `
                         <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
-                          ${item.exercise} · ${item.series}
+                          ${item.exercise} Â· ${item.series}
                         </option>
                       `
                     )
@@ -3846,7 +3586,7 @@ function renderDashboard() {
                   <div class="day-button__title">${day.toUpperCase()}</div>
                   <div class="muted">${state.program[day].length} exercices</div>
                 </div>
-                <div class="day-button__arrow">›</div>
+                <div class="day-button__arrow">â€º</div>
               </button>
             `
           )
@@ -3974,106 +3714,6 @@ function getExerciseRecords(limit = 8) {
     .slice(0, limit);
 }
 
-function renderWeeklyPlanner() {
-  const planner = getWeeklyPlanner();
-  const resume = getSmartResumeData();
-
-  return `
-    <article class="surface surface-pad planner-shell">
-      <div class="dashboard-section-head">
-        <div>
-          <div class="label">Planning</div>
-          <h3 class="section-title dashboard-section-head__title">Semaine en cours</h3>
-        </div>
-        <div class="label">${getWeeklySessionCount()} seance(s)</div>
-      </div>
-
-      <div class="planner-grid">
-        ${planner
-          .map(
-            (day) => `
-              <div class="planner-day ${day.count ? "is-done" : ""} ${day.isToday ? "is-today" : ""}">
-                <div class="planner-day__label">${day.label}</div>
-                <div class="planner-day__count">${day.count || "—"}</div>
-                <div class="planner-day__date">${day.dateLabel}</div>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-
-      <div class="planner-note">
-        <span class="planner-note__pill">${hasWorkoutInProgress() ? "A finir" : "A lancer"}</span>
-        <span>${resume?.title || `Prochaine ${getNextTrainingDay()}`}</span>
-      </div>
-    </article>
-  `;
-}
-
-function renderRecordsSection() {
-  const records = getExerciseRecords();
-  const { heaviest, bestReps } = getGlobalRecords();
-
-  return `
-    <section class="stack-md">
-      <article class="surface surface-pad records-shell">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Records</div>
-            <h3 class="section-title dashboard-section-head__title">PR et meilleures perfs</h3>
-          </div>
-          <div class="label">${records.length} exos</div>
-        </div>
-
-        <div class="records-summary">
-          <div class="metric">
-            <div class="label">Charge max</div>
-            <div class="metric__value">
-              ${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "—"}
-            </div>
-            <div class="records-summary__meta">
-              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} · ${heaviest.reps} reps` : "Pas encore de PR"}
-            </div>
-          </div>
-          <div class="metric">
-            <div class="label">Reps max</div>
-            <div class="metric__value">${bestReps ? bestReps.reps : "—"}</div>
-            <div class="records-summary__meta">
-              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
-            </div>
-          </div>
-        </div>
-
-        ${
-          records.length
-            ? `
-                <div class="records-list">
-                  ${records
-                    .map(
-                      (record) => `
-                        <article class="record-card">
-                          <div class="record-card__top">
-                            <div class="record-card__title">${record.exercise}</div>
-                            <div class="record-card__count">${record.count} serie(s)</div>
-                          </div>
-                          <div class="record-card__stats">
-                            <span>Charge: ${formatLoad(record.bestLoad, record.bestLoadLabel)}</span>
-                            <span>Reps: ${record.bestReps}</span>
-                          </div>
-                          <div class="record-card__meta">Derniere: ${formatDate(record.lastDate)}</div>
-                        </article>
-                      `
-                    )
-                    .join("")}
-                </div>
-              `
-            : `<div class="chart-empty">Aucun record disponible pour le moment.</div>`
-        }
-      </article>
-    </section>
-  `;
-}
-
 function getCycleGoalLabel(goal) {
   return goal === "strength" ? "Force" : "Hypertrophie";
 }
@@ -4098,7 +3738,7 @@ function getCycleBlueprint(goal, length) {
       { phase: "Base", tone: "hold", focus: "Reference", target: "RIR 2", prescription: "Installe un point de depart propre sur tous les mouvements." },
       { phase: "Accumulation 1", tone: "progress", focus: "Reps", target: "Milieu de fourchette", prescription: "Monte les reps progressivement sans griller la technique." },
       { phase: "Accumulation 2", tone: "progress", focus: "Volume", target: "Haut de fourchette", prescription: "Pousse le volume utile sur les exos prioritaires." },
-      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids sur les tops sets validés." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids sur les tops sets validÃ©s." },
       { phase: "Build 2", tone: "progress", focus: "Charge + reps", target: "Solide", prescription: "Essaie de tenir la nouvelle charge avec des reps propres." },
       { phase: "Intensification", tone: "hold", focus: "Stabilite", target: "Lourd propre", prescription: "Freine le volume et verrouille les mouvements forts." },
       { phase: "Pic", tone: "progress", focus: "Validation", target: "Top performance", prescription: "Cherche une grosse seance sans disperser le volume." },
@@ -4115,7 +3755,7 @@ function getCycleBlueprint(goal, length) {
     ],
     6: [
       { phase: "Base", tone: "hold", focus: "Calage", target: "Vitesse", prescription: "Fixe les charges de reference avec une execution nickel." },
-      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Monte legerement sur les tops sets validés." },
+      { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Monte legerement sur les tops sets validÃ©s." },
       { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue a charger sans perdre la vitesse de barre." },
       { phase: "Intensification", tone: "hold", focus: "Lourd propre", target: "Bas de fourchette", prescription: "Garde les accessoires simples et concentre-toi sur les mouvements forts." },
       { phase: "Pic", tone: "progress", focus: "Validation", target: "Perf", prescription: "Cherche une grosse validation sur les principaux lifts." },
@@ -4124,7 +3764,7 @@ function getCycleBlueprint(goal, length) {
     8: [
       { phase: "Technique", tone: "hold", focus: "Bar path", target: "Qualite", prescription: "Verrouille la technique et les repos sur les lifts principaux." },
       { phase: "Build 1", tone: "progress", focus: "Charge", target: "Petit palier", prescription: "Ajoute du poids progressivement sans te crisper." },
-      { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue la montée de charge sur les mouvements forts." },
+      { phase: "Build 2", tone: "progress", focus: "Charge", target: "Top set", prescription: "Continue la montÃ©e de charge sur les mouvements forts." },
       { phase: "Build 3", tone: "progress", focus: "Charge tenue", target: "Reps bas propres", prescription: "Garde le bas de fourchette avec une execution propre." },
       { phase: "Intensification", tone: "hold", focus: "Nerveux", target: "Repos longs", prescription: "Diminue un peu le volume accessoire pour garder du jus." },
       { phase: "Intensification 2", tone: "hold", focus: "Lourd stable", target: "Top sets", prescription: "Ne cherche pas a tout monter: verrouille les charges lourdes." },
@@ -4199,7 +3839,7 @@ function renderCycleSection() {
       <div class="dashboard-section-head">
         <div>
           <div class="label">Bloc de progression</div>
-          <h3 class="section-title dashboard-section-head__title">Semaine ${cycle.week} / ${cycle.length} · ${cycle.current.phase}</h3>
+          <h3 class="section-title dashboard-section-head__title">Semaine ${cycle.week} / ${cycle.length} Â· ${cycle.current.phase}</h3>
         </div>
         <div class="cycle-badge">${cycle.goalLabel}</div>
       </div>
@@ -4307,30 +3947,6 @@ function getDaySummary(day) {
   return {
     exerciseCount: new Set(entries.map((item) => item.exercise)).size,
     setCount: entries.length,
-  };
-}
-
-function getDayTheme(day) {
-  return {
-    Push: {
-      subtitle: "Pecs · epaules · triceps",
-      cue: "Poussee lourde et propre",
-    },
-    Pull: {
-      subtitle: "Dos · biceps · arriere d'epaules",
-      cue: "Tirages solides et amplitude",
-    },
-    Legs: {
-      subtitle: "Quadris · ischios · fessiers",
-      cue: "Jambes, gainage et moteur",
-    },
-    Upper: {
-      subtitle: "Haut du corps complet",
-      cue: "Equilibre pecs, dos et bras",
-    },
-  }[day] || {
-    subtitle: "Bloc complet",
-    cue: "Construis une seance propre",
   };
 }
 
@@ -4485,7 +4101,7 @@ function getSmartResumeData() {
       subtitle: state.workoutFinished
         ? `${state.pendingSession.length} series a enregistrer`
         : `${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length} series`,
-      meta: active ? `${active.exercise} · ${active.series}` : "Session en cours",
+      meta: active ? `${active.exercise} Â· ${active.series}` : "Session en cours",
       progress: getProgressPercent(),
       actionLabel: "Reprendre",
       actionAttrs: `data-action="resume-workout"`,
@@ -4502,7 +4118,7 @@ function getSmartResumeData() {
     mode: "next",
     day,
     title: `Prochaine ${day}`,
-    subtitle: `${summary.exerciseCount} exos · ${summary.setCount} series`,
+    subtitle: `${summary.exerciseCount} exos Â· ${summary.setCount} series`,
     meta: lastEntry ? `Derniere ${formatDate(lastEntry.date)}` : "Jamais lancee",
     progress: 0,
     actionLabel: `Lancer ${day}`,
@@ -4578,306 +4194,6 @@ function getTrendInsight() {
     value: "Stable",
     detail: `${shortenLabel(latest.exercise, 18)} tient le rythme`,
   };
-}
-
-function renderPremiumDayList() {
-  return `
-    <section class="day-list">
-      ${getProgramDays()
-        .map((day) => {
-          const summary = getDaySummary(day);
-          const theme = getDayTheme(day);
-
-          return `
-            <button class="day-button" data-day="${day}" data-theme-day="${theme.accentDay}">
-              <div>
-                <div class="day-button__eyebrow">${theme.subtitle}</div>
-                <div class="day-button__title">${day.toUpperCase()}</div>
-                <div class="day-button__meta">${theme.cue} · ${summary.exerciseCount} exos · ${summary.setCount} series</div>
-              </div>
-              <div class="day-button__arrow">â€º</div>
-            </button>
-          `;
-        })
-        .join("")}
-    </section>
-  `;
-}
-
-function renderPremiumDashboard() {
-  const chart = getChartData();
-  const historyKeys = getHistoryKeys();
-  const sessionCount = getSessionCount();
-  const recentSets = getRecentSets();
-  const uniqueExercises = new Set((state.program[state.day] || []).map((item) => item.exercise)).size;
-  const heroTheme = getDayTheme(state.day);
-  const heroActionLabel = hasWorkoutInProgress()
-    ? "Reprendre la seance"
-    : `Lancer ${state.day}`;
-  const heroBadge = hasWorkoutInProgress() ? "Session active" : "Programme pret";
-  const heroCopy = hasWorkoutInProgress()
-    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${state.day.toUpperCase()}.`
-    : `${state.day.toUpperCase()} regroupe ${uniqueExercises} exercices distincts et ${state.program[state.day].length} series programmees.`;
-
-  return `
-    <section class="stack-md">
-      <article class="dashboard-hero" data-accent-day="${state.day}">
-        <div class="dashboard-hero__content">
-          <div class="dashboard-hero__top">
-            <span class="dashboard-hero__badge">${heroBadge}</span>
-            <span class="dashboard-hero__tag">${state.day}</span>
-          </div>
-
-          <div class="dashboard-hero__copy">
-            <div class="label dashboard-hero__label">Accueil premium</div>
-            <h2 class="dashboard-hero__title">${state.day.toUpperCase()}</h2>
-            <p class="dashboard-hero__text">${heroCopy}</p>
-          </div>
-
-          <div class="dashboard-hero__stats">
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${state.history.length}</span>
-              <span class="dashboard-hero__stat-label">Series</span>
-            </div>
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${sessionCount}</span>
-              <span class="dashboard-hero__stat-label">Seances</span>
-            </div>
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${recentSets}</span>
-              <span class="dashboard-hero__stat-label">7 jours</span>
-            </div>
-          </div>
-
-          <div class="dashboard-hero__actions">
-            <button class="button button--primary" data-day="${state.day}">
-              ${heroActionLabel}
-            </button>
-            <button class="button button--ghost" data-screen="history">
-              Voir historique
-            </button>
-          </div>
-        </div>
-      </article>
-
-      ${getInstallHintHtml()}
-      ${renderResumeCard()}
-
-      <section class="dashboard-mini-grid">
-        <article class="surface dashboard-mini-card">
-          <div class="label">Bloc actif</div>
-          <div class="dashboard-mini-card__value">${state.day}</div>
-          <div class="dashboard-mini-card__meta">${uniqueExercises} exercices distincts</div>
-        </article>
-        <article class="surface dashboard-mini-card">
-          <div class="label">Volume recent</div>
-          <div class="dashboard-mini-card__value">${recentSets}</div>
-          <div class="dashboard-mini-card__meta">series sur 7 jours</div>
-        </article>
-      </section>
-
-      <article class="surface surface-pad chart-shell">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Progression recente</div>
-            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
-          </div>
-          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
-        </div>
-
-        ${
-          historyKeys.length
-            ? `
-                <select class="select" id="chart-select" aria-label="Choisir un exercice">
-                  ${historyKeys
-                    .map(
-                      (item) => `
-                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
-                          ${item.exercise} · ${item.series}
-                        </option>
-                      `
-                    )
-                    .join("")}
-                </select>
-                <div class="chart-box">${renderChart()}</div>
-              `
-            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
-        }
-      </article>
-
-      <div class="dashboard-section-head">
-        <div>
-          <div class="label">Choix des seances</div>
-          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
-        </div>
-        <div class="muted">${getProgramDays().length} blocs</div>
-      </div>
-
-      ${renderPremiumDayList()}
-    </section>
-  `;
-}
-
-function renderResumeCard() {
-  const resume = getSmartResumeData();
-  if (!resume) return "";
-
-  return `
-    <article class="surface surface-pad smart-resume">
-      <div class="row row-start">
-        <div class="stack-sm smart-resume__copy">
-          <div class="label">Reprise intelligente</div>
-          <h2 class="section-title smart-resume__title">${resume.title}</h2>
-          <div class="muted">${resume.subtitle}</div>
-          <div class="smart-resume__meta">
-            <span class="smart-resume__chip">${resume.day}</span>
-            <span class="smart-resume__chip">${resume.meta}</span>
-          </div>
-        </div>
-        <span class="pill">${resume.mode === "active" ? "Maintenant" : "Ensuite"}</span>
-      </div>
-
-      <div class="progress-wrap">
-        <div class="row">
-          <div class="label">${resume.mode === "active" ? "Progression" : "Preparation"}</div>
-          <div class="label">${resume.progress}%</div>
-        </div>
-        <div class="progress">
-          <div class="progress__fill" style="width:${resume.progress}%"></div>
-        </div>
-      </div>
-
-      <div class="smart-resume__actions">
-        <button class="button button--primary" ${resume.actionAttrs}>
-          ${resume.actionLabel}
-        </button>
-        <button class="button button--ghost" ${resume.secondaryAttrs}>
-          ${resume.secondaryLabel}
-        </button>
-      </div>
-    </article>
-  `;
-}
-
-function renderPremiumDashboard() {
-  const chart = getChartData();
-  const historyKeys = getHistoryKeys();
-  const sessionCount = getSessionCount();
-  const weeklySessions = getWeeklySessionCount();
-  const recentSets = getRecentSets();
-  const resume = getSmartResumeData();
-  const heroDay = resume?.day || state.day;
-  const heroSummary = getDaySummary(heroDay);
-  const topExercise = getTopExerciseInsight();
-  const trend = getTrendInsight();
-  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
-  const heroActionAttrs = resume?.mode === "active"
-    ? `data-action="resume-workout"`
-    : `data-day="${heroDay}"`;
-  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
-  const heroCopy = resume?.mode === "active"
-    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
-    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
-  const activeProgramDisplay = getActiveProgramDisplay();
-
-  return `
-    <section class="stack-md">
-      <article class="dashboard-hero" data-accent-day="${heroTheme.accentDay}">
-        <div class="dashboard-hero__content">
-          <div class="dashboard-hero__top">
-            <span class="dashboard-hero__badge">${heroBadge}</span>
-            <span class="dashboard-hero__tag">${heroDay}</span>
-          </div>
-
-          <div class="dashboard-hero__copy">
-            <div class="label dashboard-hero__label">Accueil premium</div>
-            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
-            <p class="dashboard-hero__text">${heroCopy}</p>
-          </div>
-
-          <div class="dashboard-hero__stats">
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
-              <span class="dashboard-hero__stat-label">Semaine</span>
-            </div>
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${sessionCount}</span>
-              <span class="dashboard-hero__stat-label">Total</span>
-            </div>
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${recentSets}</span>
-              <span class="dashboard-hero__stat-label">Series 7j</span>
-            </div>
-          </div>
-
-          <div class="dashboard-hero__actions">
-            <button class="button button--primary" ${heroActionAttrs}>
-              ${heroActionLabel}
-            </button>
-            <button class="button button--ghost" data-screen="history">
-              Voir historique
-            </button>
-          </div>
-        </div>
-      </article>
-
-      ${getInstallHintHtml()}
-      ${renderResumeCard()}
-      ${renderWeeklyPlanner()}
-
-      <section class="dashboard-mini-grid dashboard-mini-grid--insights">
-        <article class="surface dashboard-mini-card">
-          <div class="label">Le plus regulier</div>
-          <div class="dashboard-mini-card__value dashboard-mini-card__value--text">${topExercise.value}</div>
-          <div class="dashboard-mini-card__meta">${topExercise.detail}</div>
-        </article>
-        <article class="surface dashboard-mini-card dashboard-mini-card--trend dashboard-mini-card--${trend.tone}">
-          <div class="label">Tendance</div>
-          <div class="dashboard-mini-card__value">${trend.value}</div>
-          <div class="dashboard-mini-card__meta">${trend.detail}</div>
-        </article>
-      </section>
-
-      <article class="surface surface-pad chart-shell">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Progression recente</div>
-            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
-          </div>
-          <div class="label">${chart.entries.length} points · ${chart.metric === "load" ? "charge" : "reps"}</div>
-        </div>
-
-        ${
-          historyKeys.length
-            ? `
-                <select class="select" id="chart-select" aria-label="Choisir un exercice">
-                  ${historyKeys
-                    .map(
-                      (item) => `
-                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
-                          ${item.exercise} · ${item.series}
-                        </option>
-                      `
-                    )
-                    .join("")}
-                </select>
-                <div class="chart-box">${renderChart()}</div>
-              `
-            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
-        }
-      </article>
-
-      <div class="dashboard-section-head">
-        <div>
-          <div class="label">Choix des seances</div>
-          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
-        </div>
-        <div class="muted">${getProgramDays().length} blocs</div>
-      </div>
-
-      ${renderPremiumDayList()}
-    </section>
-  `;
 }
 
 function getRecentTrainingStreak(days = 7) {
@@ -5132,181 +4448,13 @@ function getCoachSnapshot() {
       : "Pas encore assez de data sur ce bloc",
     signal,
     note,
-    cycleLabel: `S${cycle.week}/${cycle.length} · ${cycle.current.phase}`,
+    cycleLabel: `S${cycle.week}/${cycle.length} Â· ${cycle.current.phase}`,
     scoreText: `${fatigue.score}/4`,
     streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
     intensityCall,
     volumeCall,
     recoveryCall,
   };
-}
-
-function renderCoachSection() {
-  const coach = getCoachSnapshot();
-
-  return `
-    <article class="surface surface-pad coach-shell coach-shell--${coach.tone}">
-      <div class="dashboard-section-head">
-        <div>
-          <div class="label">Coach intelligent</div>
-          <h3 class="section-title dashboard-section-head__title">Prochaine ${coach.day}: ${coach.action}</h3>
-        </div>
-        <div class="coach-score coach-score--${coach.readinessTone}">
-          <span>${coach.readiness}</span>
-          <strong>${coach.scoreText}</strong>
-        </div>
-      </div>
-
-      <div class="coach-grid coach-grid--triple">
-        <div class="coach-card">
-          <div class="label">Charge</div>
-          <div class="coach-card__value">${coach.action}</div>
-          <div class="coach-card__meta">${coach.focus} · ${coach.signal}</div>
-        </div>
-        <div class="coach-card">
-          <div class="label">Intensite</div>
-          <div class="coach-card__value">${coach.intensityCall.value}</div>
-          <div class="coach-card__meta">${coach.cycleLabel} · ${coach.streakText}</div>
-        </div>
-        <div class="coach-card">
-          <div class="label">Volume</div>
-          <div class="coach-card__value">${coach.volumeCall.value}</div>
-          <div class="coach-card__meta">${coach.volumeCall.meta}</div>
-        </div>
-      </div>
-
-      <div class="coach-note">${coach.note}</div>
-
-      <div class="coach-pulse-grid">
-        <div class="coach-pulse">
-          <span class="label">Recup</span>
-          <strong>${coach.recoveryCall.value}</strong>
-          <span>${coach.recoveryCall.meta}</span>
-        </div>
-        <div class="coach-pulse">
-          <span class="label">Bloc</span>
-          <strong>${coach.cycleLabel}</strong>
-          <span>${coach.focusMeta}</span>
-        </div>
-      </div>
-
-      <div class="coach-tags">
-        <span class="coach-tag">Fatigue ${coach.readiness}</span>
-        <span class="coach-tag">Lecture ${coach.signal}</span>
-        <span class="coach-tag">Bloc ${coach.day}</span>
-      </div>
-    </article>
-  `;
-}
-
-function renderPremiumDashboard() {
-  const chart = getChartData();
-  const historyKeys = getHistoryKeys();
-  const sessionCount = getSessionCount();
-  const weeklySessions = getWeeklySessionCount();
-  const recentSets = getRecentSets();
-  const resume = getSmartResumeData();
-  const heroDay = resume?.day || state.day;
-  const heroSummary = getDaySummary(heroDay);
-  const heroTheme = getDayTheme(heroDay);
-  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
-  const heroActionAttrs = resume?.mode === "active"
-    ? `data-action="resume-workout"`
-    : `data-day="${heroDay}"`;
-  const heroBadge = resume?.mode === "active" ? "Session active" : "Prochaine seance";
-  const heroCopy = resume?.mode === "active"
-    ? `Tu peux reprendre exactement la ou tu t'es arrete sur ${heroDay.toUpperCase()}.`
-    : `${heroDay.toUpperCase()} t'attend avec ${heroSummary.exerciseCount} exercices et ${heroSummary.setCount} series bien posees.`;
-  const activeProgramDisplay = getActiveProgramDisplay();
-
-  return `
-    <section class="stack-md">
-      <article class="dashboard-hero" data-accent-day="${heroDay}">
-        <div class="dashboard-hero__content">
-          <div class="dashboard-hero__top">
-            <span class="dashboard-hero__badge">${heroBadge}</span>
-            <span class="dashboard-hero__tag">${heroDay}</span>
-          </div>
-
-          <div class="dashboard-hero__copy">
-            <div class="label dashboard-hero__label">Accueil premium</div>
-            <h2 class="dashboard-hero__title">${heroDay.toUpperCase()}</h2>
-            <div class="dashboard-hero__subtag">${heroTheme.subtitle}</div>
-            <p class="dashboard-hero__text">${heroCopy}</p>
-          </div>
-
-          <div class="dashboard-hero__stats">
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${weeklySessions}</span>
-              <span class="dashboard-hero__stat-label">Semaine</span>
-            </div>
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${sessionCount}</span>
-              <span class="dashboard-hero__stat-label">Total</span>
-            </div>
-            <div class="dashboard-hero__stat">
-              <span class="dashboard-hero__stat-value">${recentSets}</span>
-              <span class="dashboard-hero__stat-label">Series 7j</span>
-            </div>
-          </div>
-
-          <div class="dashboard-hero__actions">
-            <button class="button button--primary" ${heroActionAttrs}>
-              ${heroActionLabel}
-            </button>
-            <button class="button button--ghost" data-screen="history">
-              Voir historique
-            </button>
-          </div>
-        </div>
-      </article>
-
-      ${getInstallHintHtml()}
-      ${renderResumeCard()}
-      ${renderWeeklyPlanner()}
-      ${renderCycleSection()}
-      ${renderCoachSection()}
-
-      <article class="surface surface-pad chart-shell">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Progression recente</div>
-            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
-          </div>
-          <div class="label">${chart.entries.length} points - ${chart.metric === "load" ? "charge" : "reps"}</div>
-        </div>
-
-        ${
-          historyKeys.length
-            ? `
-                <select class="select" id="chart-select" aria-label="Choisir un exercice">
-                  ${historyKeys
-                    .map(
-                      (item) => `
-                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
-                          ${item.exercise} - ${item.series}
-                        </option>
-                      `
-                    )
-                    .join("")}
-                </select>
-                <div class="chart-box">${renderChart()}</div>
-              `
-            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
-        }
-      </article>
-
-      <div class="dashboard-section-head">
-        <div>
-          <div class="label">Choix des seances</div>
-          <h3 class="section-title dashboard-section-head__title">Ton split premium</h3>
-        </div>
-        <div class="muted">${getProgramDays().length} blocs</div>
-      </div>
-
-      ${renderPremiumDayList()}
-    </section>
-  `;
 }
 
 function renderPlateView(settings) {
@@ -5329,276 +4477,6 @@ function renderPlateView(settings) {
       </div>
       <div class="plate-caption label">Charge : ${formatLoad(settings.load, settings.loadLabel)}</div>
     </div>
-  `;
-}
-
-function renderWeightView(settings, active, last, isFocusMode = false) {
-  return `
-    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}">
-      ${
-        settings.deload
-          ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
-          : ""
-      }
-      <div class="label">Poids cible</div>
-      <div class="weight-card__value">
-        ${
-          isNumericLoad(settings.load)
-            ? `${settings.load}<span class="weight-card__unit">kg</span>`
-            : `<span class="weight-card__free">${settings.loadLabel || "Charge libre"}</span>`
-        }
-      </div>
-      <div class="goal-line">
-        <span class="goal-line__chip">Objectif ${active.targetLabel} reps</span>
-        <span class="goal-line__chip">Repos ${active.rest}s</span>
-      </div>
-      ${
-        isNumericLoad(settings.load) && !isFocusMode
-          ? `
-              <div class="load-actions">
-                <button class="icon-button" data-action="decrease-load" aria-label="Baisser la charge">-</button>
-                <button class="button button--ghost load-reset" data-action="reset-load">Reset cible</button>
-                <button class="icon-button" data-action="increase-load" aria-label="Augmenter la charge">+</button>
-              </div>
-            `
-          : ""
-      }
-      ${
-        last && !isFocusMode
-          ? `<div class="last-performance">Precedent : <strong>${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}</strong></div>`
-          : ""
-      }
-    </div>
-  `;
-}
-
-function renderWorkoutCompletionScreen() {
-  const summary = getWorkoutCompletionSummary();
-  const lastEntry = getLastPendingEntry();
-
-  if (!summary) {
-    return `
-      <section class="stack-md">
-        <section class="surface surface-pad-lg center-block stack-md">
-          <div class="trophy">T</div>
-          <div class="stack-sm">
-            <h2 class="section-title">Seance terminee</h2>
-          </div>
-          <button class="button button--primary" data-action="finalize-workout">
-            Terminer la seance
-          </button>
-        </section>
-      </section>
-    `;
-  }
-
-  return `
-    <section class="stack-md">
-      <section class="surface surface-pad-lg session-finish">
-        <div class="session-finish__hero">
-          <div class="trophy">T</div>
-          <div class="stack-sm">
-            <div class="label">Fin de seance</div>
-            <h2 class="section-title session-finish__title">Belle seance.</h2>
-            <div class="muted">${summary.coachLine}</div>
-          </div>
-        </div>
-
-        <div class="grid-2 session-finish__stats">
-          <article class="dashboard-mini-card">
-            <div class="label">Series</div>
-            <div class="dashboard-mini-card__value">${summary.setCount}</div>
-            <div class="dashboard-mini-card__meta">${summary.exerciseCount} exos</div>
-          </article>
-          <article class="dashboard-mini-card">
-            <div class="label">Duree</div>
-            <div class="dashboard-mini-card__value">${summary.durationLabel}</div>
-            <div class="dashboard-mini-card__meta">${summary.volumeLabel} de volume</div>
-          </article>
-        </div>
-
-        <div class="session-finish__verdicts">
-          <span class="verdict-chip verdict-chip--progress">Monter ${summary.counts.progress}</span>
-          <span class="verdict-chip verdict-chip--hold">Garder ${summary.counts.hold}</span>
-          <span class="verdict-chip verdict-chip--reduce">Baisser ${summary.counts.reduce}</span>
-        </div>
-
-        ${
-          lastEntry
-            ? `
-                <div class="last-set-card last-set-card--summary">
-                  <div class="last-set-card__copy">
-                    <span class="label">Derniere serie</span>
-                    <strong>${lastEntry.exercise}</strong>
-                    <span>${lastEntry.reps} reps · ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
-                  </div>
-                  <div class="last-set-card__actions">
-                    <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
-                    <button class="button button--ghost button--compact" data-action="undo-last-set">Annuler</button>
-                  </div>
-                </div>
-              `
-            : ""
-        }
-
-        <div class="stack-sm">
-          <button class="button button--primary" data-action="finalize-workout">
-            Enregistrer la seance
-          </button>
-          <button class="button button--ghost" data-action="restart-workout">
-            Annuler et recommencer
-          </button>
-        </div>
-      </section>
-    </section>
-  `;
-}
-
-function renderWorkout() {
-  const active = getActiveExercise();
-  const settings = getCurrentSettings();
-  const last = getLastPerformance();
-  const advice = getCurrentAdvice();
-  const isFocusMode = state.focusWorkoutMode;
-
-  if (state.workoutFinished) {
-    return renderWorkoutCompletionScreen();
-  }
-
-  if (!active) {
-    return `
-      <section class="surface surface-pad">
-        <div class="muted">Aucun exercice disponible pour cette journee.</div>
-      </section>
-    `;
-  }
-
-  return `
-    <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${theme.accentDay}">
-      <div class="row row-start">
-        <div>
-          <span class="pill">${active.series}</span>
-          <h2 class="hero-title">${active.exercise}</h2>
-          ${isFocusMode ? "" : `<div class="hero-subtitle">Exercice ${state.currentIndex + 1} sur ${getExercises().length}</div>`}
-        </div>
-        <div class="workout-shell__tools">
-          <button
-            class="icon-button ${state.focusWorkoutMode ? "is-active" : ""}"
-            data-action="toggle-focus-workout"
-            aria-label="${state.focusWorkoutMode ? "Quitter le mode focus" : "Activer le mode focus"}"
-          >
-            ${state.focusWorkoutMode ? "FOC" : "ZEN"}
-          </button>
-          <button
-            class="icon-button ${state.showPlates ? "is-active" : ""}"
-            data-action="toggle-plates"
-            aria-label="${state.showPlates ? "Masquer les disques" : "Afficher les disques"}"
-          >
-            ${state.showPlates ? "KG" : "DB"}
-          </button>
-        </div>
-      </div>
-
-      ${
-        isFocusMode
-          ? ""
-          : `
-              <div class="progress-wrap">
-                <div class="row">
-                  <div class="label">Progression seance</div>
-                  <div class="label">${getProgressPercent()}%</div>
-                </div>
-                <div class="progress">
-                  <div class="progress__fill" style="width:${getProgressPercent()}%"></div>
-                </div>
-              </div>
-            `
-      }
-
-      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
-      ${renderLastPerformancePreviewCard()}
-
-      <div class="stack-md">
-        <div class="field-wrap">
-          <label class="label" for="reps-input">Reps</label>
-          <input
-            id="reps-input"
-            class="input"
-            type="number"
-            min="1"
-            inputmode="numeric"
-            placeholder="${active.targetLabel}"
-            value="${state.repsInput}"
-          />
-        </div>
-
-        ${renderRepQuickPicks()}
-
-        <button
-          id="validate-set-button"
-          class="${getValidationButtonClass(advice)}"
-          data-action="validate-set"
-          aria-label="${getValidationButtonLabel(advice)}"
-          ${hasValidRepsInput() ? "" : "disabled"}
-        >
-          ${renderValidationButtonContent(advice)}
-        </button>
-
-        ${renderLastSetActions()}
-      </div>
-    </section>
-  `;
-}
-
-function renderHistory() {
-  if (!state.history.length) {
-    return `
-      <section class="stack-md">
-        ${renderRecordsSection()}
-        <section class="surface surface-pad">
-          <div class="muted">Aucune serie enregistree.</div>
-        </section>
-      </section>
-    `;
-  }
-
-  const sortedHistory = getSortedHistory().slice(0, 24);
-
-  return `
-    <section class="history-list">
-      ${renderRecordsSection()}
-      <h2 class="section-title">Historique</h2>
-      ${sortedHistory
-        .map(
-          (item, index) => `
-            <article class="surface surface-pad history-card">
-              <div class="row row-start">
-                <div>
-                  <div class="section-title" style="font-size:22px">${item.exercise}</div>
-                  <div class="label" style="margin-top:4px">${item.day} · ${item.series}</div>
-                </div>
-                <div class="history-card__head-tools">
-                  <span class="pill pill--outline">${formatDate(item.date)}</span>
-                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
-                    Modifier
-                  </button>
-                </div>
-              </div>
-              <div class="metric-grid">
-                <div class="metric">
-                  <div class="label">Charge</div>
-                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
-                </div>
-                <div class="metric">
-                  <div class="label">Reps</div>
-                  <div class="metric__value">${item.reps}</div>
-                </div>
-              </div>
-            </article>
-          `
-        )
-        .join("")}
-    </section>
   `;
 }
 
@@ -5754,204 +4632,6 @@ function renderProgramEditor() {
       <div class="dashboard-section-head">
         <div>
           <div class="label">Modifier le programme</div>
-          <h3 class="section-title dashboard-section-head__title">Edition directe</h3>
-        </div>
-        <div class="label">Sauvegarde auto</div>
-      </div>
-
-      <div class="program-hint">
-        Modifie les exercices, les reps, le repos et les charges de depart directement depuis l'iPhone.
-      </div>
-
-      <div class="program-day-tabs">
-        ${getProgramDays()
-          .map(
-            (programDay) => `
-              <button
-                class="program-day-tab ${programDay === day ? "is-active" : ""}"
-                data-program-day="${programDay}"
-              >
-                ${programDay}
-              </button>
-            `
-          )
-          .join("")}
-      </div>
-
-      <div class="program-editor-list">
-        ${
-          entries.length
-            ? entries
-                .map(
-                  (entry, index) => `
-                    <article class="surface surface--soft surface-pad program-entry">
-                      <div class="program-entry__head">
-                        <div class="stack-sm">
-                          <div class="label">Exercice ${index + 1}</div>
-                          <div class="program-entry__title">${entry.exercise}</div>
-                          <div class="program-entry__meta">${entry.series} · ${entry.targetLabel} reps · ${entry.rest}s</div>
-                        </div>
-                        <button
-                          class="program-entry__remove"
-                          data-action="remove-program-entry"
-                          data-program-day="${day}"
-                          data-program-index="${index}"
-                          aria-label="Supprimer ${entry.exercise}"
-                        >
-                          Suppr
-                        </button>
-                      </div>
-
-                      <div class="program-grid">
-                        <div class="field-wrap field-wrap--wide">
-                          <label class="label">Nom</label>
-                          <input
-                            class="input input--editor"
-                            type="text"
-                            value="${entry.exercise}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="exercise"
-                          />
-                        </div>
-
-                        <div class="field-wrap">
-                          <label class="label">Serie</label>
-                          <input
-                            class="input input--editor"
-                            type="text"
-                            value="${entry.series}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="series"
-                          />
-                        </div>
-
-                        <div class="field-wrap">
-                          <label class="label">Type</label>
-                          <select
-                            class="select select--editor"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="kind"
-                          >
-                            <option value="barbell" ${entry.kind === "barbell" ? "selected" : ""}>Barre</option>
-                            <option value="machine" ${entry.kind === "machine" ? "selected" : ""}>Machine</option>
-                            <option value="dumbbell" ${entry.kind === "dumbbell" ? "selected" : ""}>Halteres</option>
-                            <option value="isolation" ${entry.kind === "isolation" ? "selected" : ""}>Isolation</option>
-                          </select>
-                        </div>
-
-                        <div class="field-wrap">
-                          <label class="label">Min reps</label>
-                          <input
-                            class="input input--editor"
-                            type="number"
-                            min="1"
-                            inputmode="numeric"
-                            value="${entry.minReps}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="minReps"
-                          />
-                        </div>
-
-                        <div class="field-wrap">
-                          <label class="label">Max reps</label>
-                          <input
-                            class="input input--editor"
-                            type="number"
-                            min="1"
-                            inputmode="numeric"
-                            value="${entry.maxReps}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="maxReps"
-                          />
-                        </div>
-
-                        <div class="field-wrap">
-                          <label class="label">Repos</label>
-                          <input
-                            class="input input--editor"
-                            type="number"
-                            min="0"
-                            inputmode="numeric"
-                            value="${entry.rest}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="rest"
-                          />
-                        </div>
-
-                        <div class="field-wrap">
-                          <label class="label">Charge dep.</label>
-                          <input
-                            class="input input--editor"
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            inputmode="decimal"
-                            value="${entry.defaultLoad ?? ""}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="defaultLoad"
-                          />
-                        </div>
-
-                        <div class="field-wrap field-wrap--wide">
-                          <label class="label">Libelle charge</label>
-                          <input
-                            class="input input--editor"
-                            type="text"
-                            value="${entry.loadLabel}"
-                            data-program-input
-                            data-program-day="${day}"
-                            data-program-index="${index}"
-                            data-program-field="loadLabel"
-                          />
-                        </div>
-                      </div>
-                    </article>
-                  `
-                )
-                .join("")
-            : `
-                <article class="surface surface--soft surface-pad">
-                  <div class="muted">Aucun exercice sur ce bloc pour le moment.</div>
-                </article>
-              `
-        }
-      </div>
-
-      <div class="program-actions">
-        <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
-          Ajouter via preset
-        </button>
-        <button class="button button--ghost" data-action="reset-program">
-          Revenir au programme de base
-        </button>
-      </div>
-    </article>
-  `;
-}
-
-function renderProgramEditor() {
-  const day = state.programEditorDay;
-  const entries = state.program[day] || [];
-
-  return `
-    <article class="surface surface-pad stack-md program-editor">
-      <div class="dashboard-section-head">
-        <div>
-          <div class="label">Modifier le programme</div>
           <h3 class="section-title dashboard-section-head__title">Edition rapide</h3>
         </div>
         <div class="label">Sauvegarde auto</div>
@@ -5987,7 +4667,7 @@ function renderProgramEditor() {
                         <div class="stack-sm">
                           <div class="label">Exercice ${index + 1}</div>
                           <div class="program-entry__title">${entry.exercise}</div>
-                          <div class="program-entry__meta">${entry.series} · ${entry.targetLabel} reps · ${entry.rest}s · ${formatLoad(entry.defaultLoad, entry.loadLabel)}</div>
+                          <div class="program-entry__meta">${entry.series} Â· ${entry.targetLabel} reps Â· ${entry.rest}s Â· ${formatLoad(entry.defaultLoad, entry.loadLabel)}</div>
                         </div>
                         <button
                           class="program-entry__remove"
@@ -6274,70 +4954,6 @@ function renderBody() {
   if (state.screen === "history") return renderHistory();
   if (state.screen === "settings") return renderSettings();
   return renderWorkout();
-}
-
-function renderApp() {
-  const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
-  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
-
-  root.innerHTML = `
-    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""}">
-      <header class="app-header">
-        <div class="app-width app-header__inner">
-          <div>
-            <h1 class="brand">ELITE<span class="brand__accent">TRAIN</span></h1>
-            <div class="screen-kicker">${state.screen} · ${state.day}</div>
-          </div>
-
-          <button
-            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""}"
-            data-action="toggle-timer"
-            aria-label="Pause ou reprise du timer"
-          >
-            <span>${state.timer.active ? "Pause" : "Timer"}</span>
-            <span class="mono">${formatTimer(state.timer.seconds)}</span>
-          </button>
-        </div>
-      </header>
-
-      ${renderPwaUpdateBanner()}
-
-      <main class="app-width page">
-        ${renderBody()}
-      </main>
-
-      ${
-        hideBottomNav
-          ? ""
-          : `
-              <nav class="bottom-nav">
-                <div class="bottom-nav__inner">
-                  <button class="nav-button ${state.screen === "dashboard" ? "is-active" : ""}" data-screen="dashboard">
-                    Dash
-                  </button>
-                  <button class="nav-button ${state.screen === "workout" ? "is-active" : ""}" data-screen="workout">
-                    Train
-                  </button>
-                  <button class="nav-button ${state.screen === "history" ? "is-active" : ""}" data-screen="history">
-                    Hist
-                  </button>
-                  <button class="nav-button ${state.screen === "settings" ? "is-active" : ""}" data-screen="settings">
-                    Set
-                  </button>
-                </div>
-              </nav>
-            `
-      }
-
-      ${!state.onboardingCompleted ? renderOnboardingOverlay() : ""}
-      ${renderRestAlertOverlay()}
-      ${renderProgramTemplatePreviewOverlay()}
-      ${renderHistoryEditorOverlay()}
-      ${renderProgramEntryEditorOverlay()}
-    </div>
-  `;
-
-  bindEvents();
 }
 
 function bindEvents() {
@@ -6851,7 +5467,7 @@ function renderPremiumDayList() {
               <div>
                 <div class="day-button__eyebrow">${theme.badge}</div>
                 <div class="day-button__title">${day.toUpperCase()}</div>
-                <div class="day-button__meta">${theme.subtitle} · ${theme.cue}</div>
+                <div class="day-button__meta">${theme.subtitle} Â· ${theme.cue}</div>
                 <div class="day-button__stats">
                   <span>${summary.exerciseCount} exos</span>
                   <span>${summary.setCount} series</span>
@@ -7366,7 +5982,7 @@ function renderWorkout() {
           ${
             isFocusMode
               ? ""
-              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span class="workout-shell__meta-chip">Exo ${state.currentIndex + 1}/${getExercises().length} · ${getProgressPercent()}%</span></div>`
+              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span class="workout-shell__meta-chip">Exo ${state.currentIndex + 1}/${getExercises().length} Â· ${getProgressPercent()}%</span></div>`
           }
         </div>
         <div class="workout-shell__tools">
@@ -7421,58 +6037,6 @@ function renderWorkout() {
       </div>
 
       ${renderLastPerformancePreviewCard()}
-    </section>
-  `;
-}
-
-function renderHistory() {
-  if (!state.history.length) {
-    return `
-      <section class="stack-md">
-        ${renderRecordsSection()}
-        <section class="surface surface-pad">
-          <div class="muted">Aucune serie enregistree.</div>
-        </section>
-      </section>
-    `;
-  }
-
-  const sortedHistory = getSortedHistory().slice(0, 24);
-
-  return `
-    <section class="history-list">
-      ${renderRecordsSection()}
-      <h2 class="section-title">Historique</h2>
-      ${sortedHistory
-        .map(
-          (item, index) => `
-            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
-              <div class="row row-start">
-                <div class="history-card__identity">
-                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
-                  <div class="history-card__title">${item.exercise}</div>
-                </div>
-                <div class="history-card__head-tools">
-                  <span class="pill pill--outline">${formatDate(item.date)}</span>
-                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
-                    Modifier
-                  </button>
-                </div>
-              </div>
-              <div class="metric-grid">
-                <div class="metric metric--history">
-                  <div class="label">Charge</div>
-                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
-                </div>
-                <div class="metric metric--history">
-                  <div class="label">Reps</div>
-                  <div class="metric__value">${item.reps}</div>
-                </div>
-              </div>
-            </article>
-          `
-        )
-        .join("")}
     </section>
   `;
 }
