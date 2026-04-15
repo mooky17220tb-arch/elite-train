@@ -2378,6 +2378,12 @@ button {
   font-style: normal;
 }
 
+.history-group-card__detail {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .history-detail-hero {
   display: grid;
   gap: 14px;

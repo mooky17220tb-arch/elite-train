@@ -2266,7 +2266,7 @@ function ensureSelectedChartKeyIsValid() {
 }
 
 function ensureHistoryDetailKeyIsValid() {
-  if (state.historyDetailKey && state.history.some((item) => item.exercise === state.historyDetailKey)) {
+  if (state.historyDetailKey && state.history.some((item) => item.day === state.historyDetailKey)) {
     return;
   }
 
@@ -3748,30 +3748,31 @@ function getHistoryOverviewCards() {
   const cards = new Map();
 
   getSortedHistory().forEach((item) => {
-    const current = cards.get(item.exercise) || {
-      key: item.exercise,
+    const current = cards.get(item.day) || {
+      key: item.day,
       day: item.day,
-      exercise: item.exercise,
       bestLoad: null,
       bestLoadLabel: item.loadLabel,
       bestLoadReps: 0,
+      bestLoadExercise: "",
       bestReps: 0,
+      bestRepsExercise: "",
       lastDate: item.date,
       count: 0,
-      dayCount: 0,
+      exerciseCount: 0,
       slotCount: 0,
-      days: new Set(),
+      exercises: new Set(),
       slots: new Set(),
     };
 
     current.count += 1;
     if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
       current.lastDate = item.date;
-      current.day = item.day;
     }
 
     if (item.reps > current.bestReps) {
       current.bestReps = item.reps;
+      current.bestRepsExercise = item.exercise;
     }
 
     if (
@@ -3783,20 +3784,21 @@ function getHistoryOverviewCards() {
       current.bestLoad = item.load;
       current.bestLoadLabel = item.loadLabel;
       current.bestLoadReps = item.reps;
+      current.bestLoadExercise = item.exercise;
     }
 
-    current.days.add(item.day);
+    current.exercises.add(item.exercise);
     current.slots.add(item.key);
-    current.dayCount = current.days.size;
+    current.exerciseCount = current.exercises.size;
     current.slotCount = current.slots.size;
 
-    cards.set(item.exercise, current);
+    cards.set(item.day, current);
   });
 
   return Array.from(cards.values())
     .map((card) => ({
       ...card,
-      dayCount: card.days.size,
+      exerciseCount: card.exercises.size,
       slotCount: card.slots.size,
     }))
     .sort(
@@ -3806,7 +3808,7 @@ function getHistoryOverviewCards() {
 }
 
 function getHistoryDetailEntries(key) {
-  return getSortedHistory().filter((item) => item.exercise === key);
+  return getSortedHistory().filter((item) => item.day === key);
 }
 
 function getHistorySeriesPriority(series) {
@@ -3830,13 +3832,14 @@ function getBestRepsEntry(entries) {
     .sort((left, right) => right.reps - left.reps || (right.load || 0) - (left.load || 0))[0] || null;
 }
 
-function getHistoryDetailSlotOptions(exercise) {
+function getHistoryDetailSlotOptions(day) {
   const slots = new Map();
 
-  getHistoryDetailEntries(exercise).forEach((item) => {
+  getHistoryDetailEntries(day).forEach((item) => {
     const current = slots.get(item.key) || {
       key: item.key,
       day: item.day,
+      exercise: item.exercise,
       series: item.series,
       count: 0,
       lastDate: item.date,
@@ -3853,13 +3856,14 @@ function getHistoryDetailSlotOptions(exercise) {
 
   return Array.from(slots.values()).sort(
     (left, right) =>
+      left.exercise.localeCompare(right.exercise, "fr", { sensitivity: "base" }) ||
       getHistorySeriesPriority(left.series) - getHistorySeriesPriority(right.series) ||
       new Date(right.lastDate).getTime() - new Date(left.lastDate).getTime()
   );
 }
 
-function getPreferredHistoryChartKey(exercise, preferredKey = "") {
-  const slotOptions = getHistoryDetailSlotOptions(exercise);
+function getPreferredHistoryChartKey(day, preferredKey = "") {
+  const slotOptions = getHistoryDetailSlotOptions(day);
   if (!slotOptions.length) return "";
 
   if (preferredKey && slotOptions.some((item) => item.key === preferredKey)) {
@@ -3880,9 +3884,47 @@ function getHistoryDetailGroups(exercise) {
   const groups = new Map();
 
   getHistoryDetailEntries(exercise).forEach((item) => {
+    const current = groups.get(item.exercise) || {
+      key: item.exercise,
+      exercise: item.exercise,
+      day: item.day,
+      lastDate: item.date,
+      entries: [],
+      slots: new Set(),
+    };
+
+    current.entries.push(item);
+    current.slots.add(item.key);
+    if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
+      current.lastDate = item.date;
+    }
+
+    groups.set(item.exercise, current);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      slotCount: group.slots.size,
+      bestLoadEntry: getBestLoadEntry(group.entries),
+      bestRepsEntry: getBestRepsEntry(group.entries),
+      slotGroups: getHistoryExerciseSlotGroups(group.entries),
+    }))
+    .sort(
+      (left, right) =>
+        new Date(right.lastDate).getTime() - new Date(left.lastDate).getTime() ||
+        left.exercise.localeCompare(right.exercise, "fr", { sensitivity: "base" })
+    );
+}
+
+function getHistoryExerciseSlotGroups(entries) {
+  const groups = new Map();
+
+  entries.forEach((item) => {
     const current = groups.get(item.key) || {
       key: item.key,
       day: item.day,
+      exercise: item.exercise,
       series: item.series,
       lastDate: item.date,
       entries: [],
@@ -3891,7 +3933,6 @@ function getHistoryDetailGroups(exercise) {
     current.entries.push(item);
     if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
       current.lastDate = item.date;
-      current.day = item.day;
     }
 
     groups.set(item.key, current);
@@ -6743,9 +6784,9 @@ function renderHistoryOverview() {
         <div class="dashboard-section-head">
           <div>
             <div class="label">Suivi</div>
-            <h3 class="section-title dashboard-section-head__title">Meilleurs PR par exo</h3>
+            <h3 class="section-title dashboard-section-head__title">Meilleurs PR par seance</h3>
           </div>
-          <div class="label">${cards.length} groupes</div>
+          <div class="label">${cards.length} seances</div>
         </div>
 
         <div class="records-summary">
@@ -6773,8 +6814,8 @@ function renderHistoryOverview() {
               <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
                 <div class="history-group-card__top">
                   <div class="history-card__identity">
-                    <div class="history-card__eyebrow">${card.day} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
-                    <div class="history-card__title">${card.exercise}</div>
+                    <div class="history-card__eyebrow">${card.exerciseCount} exo${card.exerciseCount > 1 ? "s" : ""} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
+                    <div class="history-card__title">${card.day}</div>
                   </div>
                   <span class="pill pill--outline">${formatDate(card.lastDate)}</span>
                 </div>
@@ -6783,18 +6824,20 @@ function renderHistoryOverview() {
                   <span class="history-group-card__stat">
                     <strong>${isNumericLoad(card.bestLoad) ? formatLoad(card.bestLoad, card.bestLoadLabel) : "-"}</strong>
                     <em>PR charge</em>
+                    <span class="history-group-card__detail">${card.bestLoadExercise ? shortenLabel(card.bestLoadExercise, 16) : "Aucun exo"}</span>
                   </span>
                   <span class="history-group-card__stat">
                     <strong>${card.bestReps}</strong>
                     <em>PR reps</em>
+                    <span class="history-group-card__detail">${card.bestRepsExercise ? shortenLabel(card.bestRepsExercise, 16) : "Aucun exo"}</span>
                   </span>
                   <span class="history-group-card__stat">
                     <strong>${card.count}</strong>
                     <em>Logs</em>
                   </span>
                   <span class="history-group-card__stat">
-                    <strong>${card.dayCount}</strong>
-                    <em>Seances</em>
+                    <strong>${card.exerciseCount}</strong>
+                    <em>Exos</em>
                   </span>
                 </div>
               </button>
@@ -6807,8 +6850,8 @@ function renderHistoryOverview() {
 }
 
 function renderHistoryDetail() {
-  const exercise = state.historyDetailKey;
-  const entries = getHistoryDetailEntries(exercise);
+  const day = state.historyDetailKey;
+  const entries = getHistoryDetailEntries(day);
   if (!entries.length) {
     return renderHistoryOverview();
   }
@@ -6816,9 +6859,9 @@ function renderHistoryDetail() {
   const latest = entries[0];
   const bestLoadEntry = getBestLoadEntry(entries);
   const bestRepsEntry = getBestRepsEntry(entries);
-  const slotOptions = getHistoryDetailSlotOptions(exercise);
-  const detailGroups = getHistoryDetailGroups(exercise);
-  const chartKey = getPreferredHistoryChartKey(exercise, state.selectedChartKey);
+  const slotOptions = getHistoryDetailSlotOptions(day);
+  const detailGroups = getHistoryDetailGroups(day);
+  const chartKey = getPreferredHistoryChartKey(day, state.selectedChartKey);
   const chart = getChartData(chartKey);
   const sortedHistory = getSortedHistory();
 
@@ -6833,9 +6876,9 @@ function renderHistoryDetail() {
         </div>
 
         <div class="stack-sm">
-          <div class="history-card__eyebrow">${latest.day} - ${slotOptions.length} slot${slotOptions.length > 1 ? "s" : ""}</div>
-          <h2 class="section-title">${latest.exercise}</h2>
-          <div class="muted">Vue groupee par exercice, puis detail par slot pour retrouver vite un PR.</div>
+          <div class="history-card__eyebrow">${detailGroups.length} exo${detailGroups.length > 1 ? "s" : ""} - ${slotOptions.length} slot${slotOptions.length > 1 ? "s" : ""}</div>
+          <h2 class="section-title">${latest.day}</h2>
+          <div class="muted">Tous les PR de cette seance, puis le detail groupe par exercice.</div>
         </div>
 
         <div class="records-summary">
@@ -6858,7 +6901,7 @@ function renderHistoryDetail() {
         <div class="dashboard-section-head">
           <div>
             <div class="label">Progression</div>
-            <h3 class="section-title dashboard-section-head__title">Courbe de ${latest.exercise}</h3>
+            <h3 class="section-title dashboard-section-head__title">Courbe d'un slot de ${latest.day}</h3>
           </div>
           <div class="chart-shell__metric">${chart.entries.length} pts - ${chart.metric === "load" ? "charge" : "reps"}</div>
         </div>
@@ -6871,7 +6914,7 @@ function renderHistoryDetail() {
                   .map(
                     (option) => `
                       <option value="${option.key}" ${option.key === chartKey ? "selected" : ""}>
-                        ${option.series} - ${option.day}
+                        ${option.exercise} - ${option.series}
                       </option>
                     `
                   )
@@ -6891,8 +6934,8 @@ function renderHistoryDetail() {
               <article class="surface surface-pad history-slot-card" data-accent-day="${group.day}">
                 <div class="history-group-card__top">
                   <div class="history-card__identity">
-                    <div class="history-card__eyebrow">${group.day}</div>
-                    <div class="history-card__title">${group.series}</div>
+                    <div class="history-card__eyebrow">${group.slotCount} slot${group.slotCount > 1 ? "s" : ""}</div>
+                    <div class="history-card__title">${group.exercise}</div>
                   </div>
                   <span class="pill pill--outline">${group.entries.length} log${group.entries.length > 1 ? "s" : ""}</span>
                 </div>
@@ -6918,37 +6961,50 @@ function renderHistoryDetail() {
           (group) => `
             <section class="stack-sm">
               <div class="row">
-                <div class="label">${group.series}</div>
-                <div class="label">${group.day}</div>
+                <div class="label">${group.exercise}</div>
+                <div class="label">${group.slotCount} slot${group.slotCount > 1 ? "s" : ""}</div>
               </div>
 
-              ${group.entries
+              ${group.slotGroups
                 .map(
-                  (item) => `
-                    <article class="surface surface-pad history-card" data-accent-day="${item.day}">
-                      <div class="row row-start">
-                        <div class="history-card__identity">
-                          <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
-                          <div class="history-card__title">${item.exercise}</div>
-                        </div>
-                        <div class="history-card__head-tools">
-                          <span class="pill pill--outline">${formatDate(item.date)}</span>
-                          <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${sortedHistory.findIndex((sortedItem) => sortedItem.key === item.key && sortedItem.date === item.date && sortedItem.series === item.series)}">
-                            Modifier
-                          </button>
-                        </div>
+                  (slotGroup) => `
+                    <section class="stack-sm">
+                      <div class="row">
+                        <div class="label">${slotGroup.series}</div>
+                        <div class="label">${slotGroup.entries.length} log${slotGroup.entries.length > 1 ? "s" : ""}</div>
                       </div>
-                      <div class="metric-grid">
-                        <div class="metric metric--history">
-                          <div class="label">Charge</div>
-                          <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
-                        </div>
-                        <div class="metric metric--history">
-                          <div class="label">Reps</div>
-                          <div class="metric__value">${item.reps}</div>
-                        </div>
-                      </div>
-                    </article>
+
+                      ${slotGroup.entries
+                        .map(
+                          (item) => `
+                            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
+                              <div class="row row-start">
+                                <div class="history-card__identity">
+                                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
+                                  <div class="history-card__title">${item.exercise}</div>
+                                </div>
+                                <div class="history-card__head-tools">
+                                  <span class="pill pill--outline">${formatDate(item.date)}</span>
+                                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${sortedHistory.findIndex((sortedItem) => sortedItem.key === item.key && sortedItem.date === item.date && sortedItem.series === item.series)}">
+                                    Modifier
+                                  </button>
+                                </div>
+                              </div>
+                              <div class="metric-grid">
+                                <div class="metric metric--history">
+                                  <div class="label">Charge</div>
+                                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
+                                </div>
+                                <div class="metric metric--history">
+                                  <div class="label">Reps</div>
+                                  <div class="metric__value">${item.reps}</div>
+                                </div>
+                              </div>
+                            </article>
+                          `
+                        )
+                        .join("")}
+                    </section>
                   `
                 )
                 .join("")}
