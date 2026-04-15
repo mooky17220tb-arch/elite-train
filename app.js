@@ -4673,8 +4673,89 @@ function getProgramExerciseBlockMeta(entries = []) {
   return `${seriesCount} series - ${targets[0]} reps - ${rests[0]}s - ${loads[0]}`;
 }
 
+function getProgramSeriesGroupDefinition(series = "") {
+  const raw = sanitizePlainText(series, "Serie");
+  const value = raw.toLowerCase();
+
+  if (/^activation(?:\s+\d+)?$/i.test(raw)) {
+    return {
+      key: "activation",
+      label: "Activation",
+      createSeriesLabel: (index) => (index <= 1 ? "Activation" : `Activation ${index}`),
+    };
+  }
+
+  if (/^top set(?:\s+\d+)?$/i.test(raw)) {
+    return {
+      key: "top-set",
+      label: "Top Set",
+      createSeriesLabel: (index) => (index <= 1 ? "Top Set" : `Top Set ${index}`),
+    };
+  }
+
+  if (/^back-?off(?:\s+\d+)?$/i.test(raw)) {
+    return {
+      key: "back-off",
+      label: "Back-off",
+      createSeriesLabel: (index) => `Back-off ${index}`,
+    };
+  }
+
+  if (/^serie\s+\d+$/i.test(raw)) {
+    return {
+      key: "serie",
+      label: "Serie",
+      createSeriesLabel: (index) => `Serie ${index}`,
+    };
+  }
+
+  return {
+    key: `custom:${value}`,
+    label: raw,
+    createSeriesLabel: (index) => (index <= 1 ? raw : `${raw} ${index}`),
+  };
+}
+
+function getProgramSeriesGroups(block) {
+  const groups = [];
+
+  block.entries.forEach((entry, localIndex) => {
+    const definition = getProgramSeriesGroupDefinition(entry.series);
+    const absoluteIndex = block.startIndex + localIndex;
+    const previousGroup = groups[groups.length - 1];
+
+    if (previousGroup && previousGroup.key === definition.key) {
+      previousGroup.entries.push(entry);
+      previousGroup.endIndex = absoluteIndex;
+      return;
+    }
+
+    groups.push({
+      key: definition.key,
+      label: definition.label,
+      definition,
+      startIndex: absoluteIndex,
+      endIndex: absoluteIndex,
+      entries: [entry],
+    });
+  });
+
+  return groups.map((group) => ({
+    ...group,
+    count: group.entries.length,
+    meta: getProgramExerciseBlockMeta(group.entries),
+    representative: group.entries[0],
+  }));
+}
+
 function getProgramExerciseBlock(day, startIndex) {
   return getProgramExerciseBlocks(day).find((block) => block.startIndex === startIndex) || null;
+}
+
+function getProgramSeriesGroup(day, blockStartIndex, groupStartIndex) {
+  const block = getProgramExerciseBlock(day, blockStartIndex);
+  if (!block) return null;
+  return getProgramSeriesGroups(block).find((group) => group.startIndex === groupStartIndex) || null;
 }
 
 function setProgramBlockSeriesCount(day, startIndex, value) {
@@ -4698,6 +4779,48 @@ function setProgramBlockSeriesCount(day, startIndex, value) {
         {
           ...sourceEntry,
           series: getNextSeriesLabelForDuplicate(sourceEntry, workingEntries),
+        },
+        sourceEntry
+      );
+      workingEntries.splice(insertIndex + 1, 0, duplicate);
+      insertIndex += 1;
+    }
+
+    dayEntries.splice(0, dayEntries.length, ...workingEntries);
+  }
+
+  state.program = {
+    ...state.program,
+    [day]: dayEntries,
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
+function setProgramSeriesGroupCount(day, blockStartIndex, groupStartIndex, value) {
+  const nextCount = sanitizePositiveInteger(value, 1, 1);
+  const dayEntries = [...(state.program[day] || [])];
+  const group = getProgramSeriesGroup(day, blockStartIndex, groupStartIndex);
+  if (!group) return;
+
+  const currentCount = group.count;
+  if (nextCount === currentCount) return;
+
+  if (nextCount < currentCount) {
+    dayEntries.splice(group.startIndex + nextCount, currentCount - nextCount);
+  } else {
+    let insertIndex = group.endIndex;
+    let workingEntries = [...dayEntries];
+
+    for (let iteration = 0; iteration < nextCount - currentCount; iteration += 1) {
+      const sourceEntry = workingEntries[insertIndex];
+      const duplicate = normalizeProgramEntry(
+        {
+          ...sourceEntry,
+          series: group.definition.createSeriesLabel(currentCount + iteration + 1),
         },
         sourceEntry
       );
@@ -4792,7 +4915,7 @@ function renderProgramEditor() {
       </div>
 
       <div class="program-hint">
-        Vue compacte par exercice. Tu regles surtout le nombre de series, puis tu ouvres les details seulement si besoin.
+        Vue compacte par exercice, avec reglage separe pour Activation, Top Set, Back-off ou Series classiques.
       </div>
 
       <div class="program-day-tabs">
@@ -4821,37 +4944,60 @@ function renderProgramEditor() {
                         <div class="stack-sm">
                           <div class="label">Exercice ${index + 1}</div>
                           <div class="program-entry__title">${block.exercise}</div>
-                          <div class="program-entry__meta">${block.meta}</div>
+                          <div class="program-entry__meta">${block.count} series au total</div>
                         </div>
+                        <button
+                          class="program-entry__remove"
+                          data-action="remove-program-block"
+                          data-program-day="${day}"
+                          data-program-block-start="${block.startIndex}"
+                          aria-label="Supprimer ${block.exercise}"
+                        >
+                          Suppr
+                        </button>
                       </div>
 
-                      <div class="program-block__controls">
-                        <div class="field-wrap program-block__series">
-                          <label class="label" for="program-block-series-${day}-${block.startIndex}">Series</label>
-                          <input
-                            id="program-block-series-${day}-${block.startIndex}"
-                            class="input input--editor input--series-count"
-                            type="number"
-                            min="1"
-                            inputmode="numeric"
-                            value="${block.count}"
-                            data-program-block-count
-                            data-program-day="${day}"
-                            data-program-block-start="${block.startIndex}"
-                          />
-                        </div>
+                      <div class="program-block__groups">
+                        ${getProgramSeriesGroups(block)
+                          .map(
+                            (group) => `
+                              <div class="program-series-group">
+                                <div class="stack-sm">
+                                  <div class="label">${group.label}</div>
+                                  <div class="program-series-group__meta">${group.meta}</div>
+                                </div>
 
-                        <div class="program-entry__quick-actions">
-                          <button class="button button--ghost button--compact" data-action="open-program-entry-editor" data-program-day="${day}" data-program-index="${block.startIndex}">
-                            Details
-                          </button>
-                          <button class="button button--ghost button--compact" data-action="bump-program-block-rest" data-program-day="${day}" data-program-block-start="${block.startIndex}" data-rest-delta="15">
-                            +15s
-                          </button>
-                          <button class="button button--ghost button--compact" data-action="remove-program-block" data-program-day="${day}" data-program-block-start="${block.startIndex}">
-                            Suppr
-                          </button>
-                        </div>
+                                <div class="program-series-group__actions">
+                                  <div class="field-wrap program-block__series">
+                                    <label class="label" for="program-group-series-${day}-${group.startIndex}">Series</label>
+                                    <input
+                                      id="program-group-series-${day}-${group.startIndex}"
+                                      class="input input--editor input--series-count"
+                                      type="number"
+                                      min="1"
+                                      inputmode="numeric"
+                                      value="${group.count}"
+                                      data-program-group-count
+                                      data-program-day="${day}"
+                                      data-program-block-start="${block.startIndex}"
+                                      data-program-group-start="${group.startIndex}"
+                                    />
+                                  </div>
+
+                                  <button class="button button--ghost button--compact" data-action="open-program-entry-editor" data-program-day="${day}" data-program-index="${group.startIndex}">
+                                    Details
+                                  </button>
+                                </div>
+                              </div>
+                            `
+                          )
+                          .join("")}
+                      </div>
+
+                      <div class="program-entry__quick-actions">
+                        <button class="button button--ghost button--compact" data-action="bump-program-block-rest" data-program-day="${day}" data-program-block-start="${block.startIndex}" data-rest-delta="15">
+                          +15s exo
+                        </button>
                       </div>
                     </article>
                   `
@@ -5419,11 +5565,12 @@ function bindEvents() {
     };
   });
 
-  document.querySelectorAll("[data-program-block-count]").forEach((input) => {
+  document.querySelectorAll("[data-program-group-count]").forEach((input) => {
     input.onchange = (event) => {
-      setProgramBlockSeriesCount(
+      setProgramSeriesGroupCount(
         event.target.dataset.programDay,
         Number(event.target.dataset.programBlockStart),
+        Number(event.target.dataset.programGroupStart),
         event.target.value
       );
     };
