@@ -156,6 +156,7 @@ const state = {
   timerEndsAt: 0,
   workoutStartedAt: "",
   selectedChartKey: "",
+  historyDetailKey: "",
   pendingSession: [],
   installHintDismissed: false,
   onboardingCompleted: false,
@@ -2264,6 +2265,28 @@ function ensureSelectedChartKeyIsValid() {
   state.selectedChartKey = state.history[0]?.key || "";
 }
 
+function ensureHistoryDetailKeyIsValid() {
+  if (state.historyDetailKey && state.history.some((item) => item.exercise === state.historyDetailKey)) {
+    return;
+  }
+
+  state.historyDetailKey = "";
+}
+
+function openHistoryDetail(key) {
+  if (!key) return;
+  state.historyDetailKey = key;
+  state.selectedChartKey = getPreferredHistoryChartKey(key, state.selectedChartKey);
+  saveState();
+  renderApp();
+}
+
+function closeHistoryDetail() {
+  state.historyDetailKey = "";
+  saveState();
+  renderApp();
+}
+
 function openHistoryEditor(index) {
   const sortedHistory = getSortedHistory();
   const entry = sortedHistory[index];
@@ -2318,6 +2341,7 @@ function saveHistoryEditor() {
   state.historyEditor = null;
   recomputeExerciseDataForKey(affectedKey);
   ensureSelectedChartKeyIsValid();
+  ensureHistoryDetailKeyIsValid();
   saveState();
   renderApp();
 }
@@ -2331,6 +2355,7 @@ function deleteHistoryEntry() {
   state.historyEditor = null;
   recomputeExerciseDataForKey(affectedKey);
   ensureSelectedChartKeyIsValid();
+  ensureHistoryDetailKeyIsValid();
   saveState();
   renderApp();
 }
@@ -2502,12 +2527,12 @@ function getHistoryKeys() {
   return [...map.values()];
 }
 
-function getChartKey() {
-  return state.selectedChartKey || getHistoryKeys()[0]?.key || getExerciseKey();
+function getChartKey(preferredKey = "") {
+  return preferredKey || state.selectedChartKey || getHistoryKeys()[0]?.key || getExerciseKey();
 }
 
-function getChartEntries() {
-  const key = getChartKey();
+function getChartEntries(preferredKey = "") {
+  const key = getChartKey(preferredKey);
   if (!key) return [];
   return state.history
     .filter((item) => item.key === key)
@@ -2519,8 +2544,9 @@ function getChartMetric(entries) {
   return entries.some((item) => isNumericLoad(item.load)) ? "load" : "reps";
 }
 
-function getChartData() {
-  const entries = getChartEntries();
+function getChartData(preferredKey = "") {
+  const selectedKey = getChartKey(preferredKey);
+  const entries = getChartEntries(selectedKey);
   const metric = getChartMetric(entries);
   const source =
     metric === "load"
@@ -2529,7 +2555,7 @@ function getChartData() {
 
   return {
     metric,
-    selectedKey: getChartKey(),
+    selectedKey,
     entries: source.map((item) => ({
       ...item,
       shortDate: formatDate(item.date),
@@ -2568,6 +2594,7 @@ function buildPersistedState() {
     workoutStartedAt: state.workoutStartedAt,
     pendingSession: state.pendingSession,
     selectedChartKey: state.selectedChartKey,
+    historyDetailKey: state.historyDetailKey,
     installHintDismissed: state.installHintDismissed,
     onboardingCompleted: state.onboardingCompleted,
     onboardingStep: state.onboardingStep,
@@ -2610,10 +2637,12 @@ function hydrateState(parsed = {}) {
   state.workoutStartedAt = typeof parsed.workoutStartedAt === "string" ? parsed.workoutStartedAt : "";
   state.pendingSession = parsed.pendingSession || [];
   state.selectedChartKey = parsed.selectedChartKey || "";
+  state.historyDetailKey = parsed.historyDetailKey || "";
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
   state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
   state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
   state.historyEditor = null;
+  ensureHistoryDetailKeyIsValid();
   state.storageMeta.recoveredFromBackup = false;
   state.storageMeta.backupAvailable = Boolean(localStorage.getItem(STORAGE_BACKUP_KEY));
   state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
@@ -2836,6 +2865,7 @@ function clearAllData() {
   state.history = [];
   state.pendingSession = [];
   state.selectedChartKey = "";
+  state.historyDetailKey = "";
   state.installHintDismissed = false;
   state.onboardingCompleted = false;
   state.onboardingStep = 0;
@@ -3712,6 +3742,172 @@ function getExerciseRecords(limit = 8) {
         b.bestReps - a.bestReps
     )
     .slice(0, limit);
+}
+
+function getHistoryOverviewCards() {
+  const cards = new Map();
+
+  getSortedHistory().forEach((item) => {
+    const current = cards.get(item.exercise) || {
+      key: item.exercise,
+      day: item.day,
+      exercise: item.exercise,
+      bestLoad: null,
+      bestLoadLabel: item.loadLabel,
+      bestLoadReps: 0,
+      bestReps: 0,
+      lastDate: item.date,
+      count: 0,
+      dayCount: 0,
+      slotCount: 0,
+      days: new Set(),
+      slots: new Set(),
+    };
+
+    current.count += 1;
+    if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
+      current.lastDate = item.date;
+      current.day = item.day;
+    }
+
+    if (item.reps > current.bestReps) {
+      current.bestReps = item.reps;
+    }
+
+    if (
+      isNumericLoad(item.load) &&
+      (!isNumericLoad(current.bestLoad) ||
+        item.load > current.bestLoad ||
+        (item.load === current.bestLoad && item.reps > current.bestLoadReps))
+    ) {
+      current.bestLoad = item.load;
+      current.bestLoadLabel = item.loadLabel;
+      current.bestLoadReps = item.reps;
+    }
+
+    current.days.add(item.day);
+    current.slots.add(item.key);
+    current.dayCount = current.days.size;
+    current.slotCount = current.slots.size;
+
+    cards.set(item.exercise, current);
+  });
+
+  return Array.from(cards.values())
+    .map((card) => ({
+      ...card,
+      dayCount: card.days.size,
+      slotCount: card.slots.size,
+    }))
+    .sort(
+      (left, right) =>
+        new Date(right.lastDate).getTime() - new Date(left.lastDate).getTime()
+    );
+}
+
+function getHistoryDetailEntries(key) {
+  return getSortedHistory().filter((item) => item.exercise === key);
+}
+
+function getHistorySeriesPriority(series) {
+  const label = String(series || "").toLowerCase();
+  if (label.includes("top")) return 0;
+  if (label.includes("serie 1")) return 1;
+  if (label.includes("back-off")) return 2;
+  if (label.includes("activation")) return 3;
+  return 4;
+}
+
+function getBestLoadEntry(entries) {
+  return entries
+    .filter((item) => isNumericLoad(item.load))
+    .sort((left, right) => (right.load || 0) - (left.load || 0) || right.reps - left.reps)[0] || null;
+}
+
+function getBestRepsEntry(entries) {
+  return entries
+    .slice()
+    .sort((left, right) => right.reps - left.reps || (right.load || 0) - (left.load || 0))[0] || null;
+}
+
+function getHistoryDetailSlotOptions(exercise) {
+  const slots = new Map();
+
+  getHistoryDetailEntries(exercise).forEach((item) => {
+    const current = slots.get(item.key) || {
+      key: item.key,
+      day: item.day,
+      series: item.series,
+      count: 0,
+      lastDate: item.date,
+    };
+
+    current.count += 1;
+    if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
+      current.lastDate = item.date;
+      current.day = item.day;
+    }
+
+    slots.set(item.key, current);
+  });
+
+  return Array.from(slots.values()).sort(
+    (left, right) =>
+      getHistorySeriesPriority(left.series) - getHistorySeriesPriority(right.series) ||
+      new Date(right.lastDate).getTime() - new Date(left.lastDate).getTime()
+  );
+}
+
+function getPreferredHistoryChartKey(exercise, preferredKey = "") {
+  const slotOptions = getHistoryDetailSlotOptions(exercise);
+  if (!slotOptions.length) return "";
+
+  if (preferredKey && slotOptions.some((item) => item.key === preferredKey)) {
+    return preferredKey;
+  }
+
+  return slotOptions
+    .slice()
+    .sort(
+      (left, right) =>
+        getHistorySeriesPriority(left.series) - getHistorySeriesPriority(right.series) ||
+        right.count - left.count ||
+        new Date(right.lastDate).getTime() - new Date(left.lastDate).getTime()
+    )[0]?.key || slotOptions[0].key;
+}
+
+function getHistoryDetailGroups(exercise) {
+  const groups = new Map();
+
+  getHistoryDetailEntries(exercise).forEach((item) => {
+    const current = groups.get(item.key) || {
+      key: item.key,
+      day: item.day,
+      series: item.series,
+      lastDate: item.date,
+      entries: [],
+    };
+
+    current.entries.push(item);
+    if (!current.lastDate || new Date(item.date).getTime() > new Date(current.lastDate).getTime()) {
+      current.lastDate = item.date;
+      current.day = item.day;
+    }
+
+    groups.set(item.key, current);
+  });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      bestLoadEntry: getBestLoadEntry(group.entries),
+      bestRepsEntry: getBestRepsEntry(group.entries),
+    }))
+    .sort(
+      (left, right) =>
+        getHistorySeriesPriority(left.series) - getHistorySeriesPriority(right.series) ||
+        new Date(right.lastDate).getTime() - new Date(left.lastDate).getTime()
+    );
 }
 
 function getCycleGoalLabel(goal) {
@@ -5509,6 +5705,14 @@ function bindEvents() {
         openHistoryEditor(Number(button.dataset.historyIndex));
       }
 
+      if (action === "open-history-detail") {
+        openHistoryDetail(button.dataset.historyKey || "");
+      }
+
+      if (action === "close-history-detail") {
+        closeHistoryDetail();
+      }
+
       if (action === "close-history-editor") {
         closeHistoryEditor();
       }
@@ -5579,6 +5783,15 @@ function bindEvents() {
   const chartSelect = document.getElementById("chart-select");
   if (chartSelect) {
     chartSelect.onchange = (event) => {
+      state.selectedChartKey = event.target.value;
+      saveState();
+      renderApp();
+    };
+  }
+
+  const historyDetailChartSelect = document.getElementById("history-detail-chart-select");
+  if (historyDetailChartSelect) {
+    historyDetailChartSelect.onchange = (event) => {
       state.selectedChartKey = event.target.value;
       saveState();
       renderApp();
@@ -6482,8 +6695,8 @@ function renderEmptyState(title, text, eyebrow = "A venir", accentDay = state.da
   `;
 }
 
-function renderChart() {
-  const chart = getChartData();
+function renderChart(preferredKey = "") {
+  const chart = getChartData(preferredKey);
 
   if (!chart.entries.length) {
     return `
@@ -6520,6 +6733,233 @@ function renderChart() {
   `;
 }
 
+function renderHistoryOverview() {
+  const cards = getHistoryOverviewCards();
+  const { heaviest, bestReps } = getGlobalRecords();
+
+  return `
+    <section class="history-list">
+      <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Suivi</div>
+            <h3 class="section-title dashboard-section-head__title">Meilleurs PR par exo</h3>
+          </div>
+          <div class="label">${cards.length} groupes</div>
+        </div>
+
+        <div class="records-summary">
+          <div class="metric metric--record">
+            <div class="label">Charge max</div>
+            <div class="metric__value">${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "-"}</div>
+            <div class="records-summary__meta">
+              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} - ${heaviest.reps} reps` : "Pas encore de PR"}
+            </div>
+          </div>
+          <div class="metric metric--record">
+            <div class="label">Reps max</div>
+            <div class="metric__value">${bestReps ? bestReps.reps : "-"}</div>
+            <div class="records-summary__meta">
+              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <div class="history-group-list">
+        ${cards
+          .map(
+            (card) => `
+              <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
+                <div class="history-group-card__top">
+                  <div class="history-card__identity">
+                    <div class="history-card__eyebrow">${card.day} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
+                    <div class="history-card__title">${card.exercise}</div>
+                  </div>
+                  <span class="pill pill--outline">${formatDate(card.lastDate)}</span>
+                </div>
+
+                <div class="history-group-card__stats">
+                  <span class="history-group-card__stat">
+                    <strong>${isNumericLoad(card.bestLoad) ? formatLoad(card.bestLoad, card.bestLoadLabel) : "-"}</strong>
+                    <em>PR charge</em>
+                  </span>
+                  <span class="history-group-card__stat">
+                    <strong>${card.bestReps}</strong>
+                    <em>PR reps</em>
+                  </span>
+                  <span class="history-group-card__stat">
+                    <strong>${card.count}</strong>
+                    <em>Logs</em>
+                  </span>
+                  <span class="history-group-card__stat">
+                    <strong>${card.dayCount}</strong>
+                    <em>Seances</em>
+                  </span>
+                </div>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderHistoryDetail() {
+  const exercise = state.historyDetailKey;
+  const entries = getHistoryDetailEntries(exercise);
+  if (!entries.length) {
+    return renderHistoryOverview();
+  }
+
+  const latest = entries[0];
+  const bestLoadEntry = getBestLoadEntry(entries);
+  const bestRepsEntry = getBestRepsEntry(entries);
+  const slotOptions = getHistoryDetailSlotOptions(exercise);
+  const detailGroups = getHistoryDetailGroups(exercise);
+  const chartKey = getPreferredHistoryChartKey(exercise, state.selectedChartKey);
+  const chart = getChartData(chartKey);
+  const sortedHistory = getSortedHistory();
+
+  return `
+    <section class="history-list">
+      <article class="surface surface-pad history-detail-hero" data-accent-day="${latest.day}">
+        <div class="history-detail-hero__top">
+          <button class="button button--ghost button--compact" data-action="close-history-detail">
+            Retour
+          </button>
+          <span class="pill pill--outline">${latest.day}</span>
+        </div>
+
+        <div class="stack-sm">
+          <div class="history-card__eyebrow">${latest.day} - ${slotOptions.length} slot${slotOptions.length > 1 ? "s" : ""}</div>
+          <h2 class="section-title">${latest.exercise}</h2>
+          <div class="muted">Vue groupee par exercice, puis detail par slot pour retrouver vite un PR.</div>
+        </div>
+
+        <div class="records-summary">
+          <div class="metric metric--record">
+            <div class="label">PR charge</div>
+            <div class="metric__value">
+              ${bestLoadEntry ? formatLoad(bestLoadEntry.load, bestLoadEntry.loadLabel) : "-"}
+            </div>
+            <div class="records-summary__meta">${entries.length} passage(s)</div>
+          </div>
+          <div class="metric metric--record">
+            <div class="label">PR reps</div>
+            <div class="metric__value">${bestRepsEntry ? bestRepsEntry.reps : "-"}</div>
+            <div class="records-summary__meta">${slotOptions.length} slot(s) actifs</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="surface surface-pad chart-shell" data-accent-day="${latest.day}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Progression</div>
+            <h3 class="section-title dashboard-section-head__title">Courbe de ${latest.exercise}</h3>
+          </div>
+          <div class="chart-shell__metric">${chart.entries.length} pts - ${chart.metric === "load" ? "charge" : "reps"}</div>
+        </div>
+
+        ${
+          slotOptions.length > 1
+            ? `
+              <select class="select" id="history-detail-chart-select" aria-label="Choisir un slot de progression">
+                ${slotOptions
+                  .map(
+                    (option) => `
+                      <option value="${option.key}" ${option.key === chartKey ? "selected" : ""}>
+                        ${option.series} - ${option.day}
+                      </option>
+                    `
+                  )
+                  .join("")}
+              </select>
+            `
+            : ""
+        }
+
+        <div class="chart-box">${renderChart(chartKey)}</div>
+      </article>
+
+      <div class="history-slot-list">
+        ${detailGroups
+          .map(
+            (group) => `
+              <article class="surface surface-pad history-slot-card" data-accent-day="${group.day}">
+                <div class="history-group-card__top">
+                  <div class="history-card__identity">
+                    <div class="history-card__eyebrow">${group.day}</div>
+                    <div class="history-card__title">${group.series}</div>
+                  </div>
+                  <span class="pill pill--outline">${group.entries.length} log${group.entries.length > 1 ? "s" : ""}</span>
+                </div>
+
+                <div class="history-group-card__stats">
+                  <span class="history-group-card__stat">
+                    <strong>${group.bestLoadEntry ? formatLoad(group.bestLoadEntry.load, group.bestLoadEntry.loadLabel) : "-"}</strong>
+                    <em>PR charge</em>
+                  </span>
+                  <span class="history-group-card__stat">
+                    <strong>${group.bestRepsEntry ? group.bestRepsEntry.reps : "-"}</strong>
+                    <em>PR reps</em>
+                  </span>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+
+      ${detailGroups
+        .map(
+          (group) => `
+            <section class="stack-sm">
+              <div class="row">
+                <div class="label">${group.series}</div>
+                <div class="label">${group.day}</div>
+              </div>
+
+              ${group.entries
+                .map(
+                  (item) => `
+                    <article class="surface surface-pad history-card" data-accent-day="${item.day}">
+                      <div class="row row-start">
+                        <div class="history-card__identity">
+                          <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
+                          <div class="history-card__title">${item.exercise}</div>
+                        </div>
+                        <div class="history-card__head-tools">
+                          <span class="pill pill--outline">${formatDate(item.date)}</span>
+                          <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${sortedHistory.findIndex((sortedItem) => sortedItem.key === item.key && sortedItem.date === item.date && sortedItem.series === item.series)}">
+                            Modifier
+                          </button>
+                        </div>
+                      </div>
+                      <div class="metric-grid">
+                        <div class="metric metric--history">
+                          <div class="label">Charge</div>
+                          <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
+                        </div>
+                        <div class="metric metric--history">
+                          <div class="label">Reps</div>
+                          <div class="metric__value">${item.reps}</div>
+                        </div>
+                      </div>
+                    </article>
+                  `
+                )
+                .join("")}
+            </section>
+          `
+        )
+        .join("")}
+    </section>
+  `;
+}
+
 function renderHistory() {
   if (!state.history.length) {
     return `
@@ -6530,44 +6970,11 @@ function renderHistory() {
     `;
   }
 
-  const sortedHistory = getSortedHistory().slice(0, 24);
+  if (state.historyDetailKey) {
+    return renderHistoryDetail();
+  }
 
-  return `
-    <section class="history-list">
-      ${renderRecordsSection()}
-      <h2 class="section-title">Historique</h2>
-      ${sortedHistory
-        .map(
-          (item, index) => `
-            <article class="surface surface-pad history-card" data-accent-day="${item.day}">
-              <div class="row row-start">
-                <div class="history-card__identity">
-                  <div class="history-card__eyebrow">${item.day} - ${item.series}</div>
-                  <div class="history-card__title">${item.exercise}</div>
-                </div>
-                <div class="history-card__head-tools">
-                  <span class="pill pill--outline">${formatDate(item.date)}</span>
-                  <button class="button button--ghost button--compact" data-action="open-history-editor" data-history-index="${index}">
-                    Modifier
-                  </button>
-                </div>
-              </div>
-              <div class="metric-grid">
-                <div class="metric metric--history">
-                  <div class="label">Charge</div>
-                  <div class="metric__value">${formatLoad(item.load, item.loadLabel)}</div>
-                </div>
-                <div class="metric metric--history">
-                  <div class="label">Reps</div>
-                  <div class="metric__value">${item.reps}</div>
-                </div>
-              </div>
-            </article>
-          `
-        )
-        .join("")}
-    </section>
-  `;
+  return renderHistoryOverview();
 }
 
 function renderApp() {

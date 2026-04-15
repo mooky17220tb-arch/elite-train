@@ -2330,6 +2330,66 @@ button {
   gap: 10px;
 }
 
+.history-group-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-slot-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-group-card {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.history-slot-card {
+  display: grid;
+  gap: 12px;
+}
+
+.history-group-card__top,
+.history-group-card__stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.history-group-card__stat {
+  display: grid;
+  gap: 4px;
+  min-width: 78px;
+}
+
+.history-group-card__stat strong {
+  color: white;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.history-group-card__stat em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.history-detail-hero {
+  display: grid;
+  gap: 14px;
+}
+
+.history-detail-hero__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .record-card {
   display: grid;
   gap: 8px;
