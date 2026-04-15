@@ -2883,8 +2883,71 @@ button {
   gap: 18px;
 }
 
+.settings-hub {
+  display: grid;
+  gap: 12px;
+}
+
 .settings-group {
   gap: 16px;
+}
+
+.settings-panel-card {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.settings-panel-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-panel-card__title {
+  color: white;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.settings-panel-card__meta {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.settings-panel-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-panel-card__chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-detail-shell {
+  gap: 14px;
+}
+
+.settings-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .history-card {

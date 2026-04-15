@@ -140,6 +140,7 @@ const state = {
   programEditorDay: "Push",
   programPlannerDays: 4,
   programTemplatePreviewId: "",
+  settingsSection: "",
   cycle: createDefaultCycle(),
   exerciseData: {},
   history: [],
@@ -2575,6 +2576,7 @@ function buildPersistedState() {
     programTemplateTitle: state.programTemplateTitle,
     programEditorDay: state.programEditorDay,
     programPlannerDays: state.programPlannerDays,
+    settingsSection: state.settingsSection,
     cycle: state.cycle,
     exerciseData: state.exerciseData,
     history: state.history,
@@ -2614,6 +2616,7 @@ function hydrateState(parsed = {}) {
   state.programPlannerDays = [3, 4, 5, 6].includes(Number(parsed.programPlannerDays))
     ? Number(parsed.programPlannerDays)
     : Math.min(6, Math.max(3, getProgramDays().length || 4));
+  state.settingsSection = typeof parsed.settingsSection === "string" ? parsed.settingsSection : "";
   const fallbackDay = getProgramDays()[0] || "Push";
   state.day = getProgramDays().includes(parsed.day) ? parsed.day : fallbackDay;
   state.programEditorDay = getProgramDays().includes(parsed.programEditorDay)
@@ -2860,6 +2863,7 @@ function clearAllData() {
   state.programTemplateTitle = "PPL + Upper";
   state.programEditorDay = "Push";
   state.programPlannerDays = 4;
+  state.settingsSection = "";
   state.cycle = createDefaultCycle();
   state.exerciseData = {};
   state.history = [];
@@ -5434,7 +5438,225 @@ function renderStorageConfidenceSection() {
   `;
 }
 
+function renderSettingsInstallSection() {
+  return `
+    <article class="surface surface-pad stack-md settings-group">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">App iPhone</div>
+          <h3 class="section-title dashboard-section-head__title">Installation</h3>
+        </div>
+        <div class="label">PWA</div>
+      </div>
+      <div class="install-hint">
+        Pour l'avoir sur iPhone :
+        <br />
+        1. Heberge ce dossier en HTTPS.
+        <br />
+        2. Ouvre l'URL dans Safari.
+        <br />
+        3. Partager -> Ajouter a l'ecran d'accueil.
+      </div>
+      <div class="install-hint">
+        Les donnees sont stockees localement sur l'appareil via le navigateur.
+      </div>
+    </article>
+  `;
+}
+
+function renderSettingsDataSection() {
+  return `
+    <section class="stack-md">
+      ${renderStorageConfidenceSection()}
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Donnees</div>
+            <h3 class="section-title dashboard-section-head__title">Backup et nettoyage</h3>
+          </div>
+          <div class="label">JSON</div>
+        </div>
+        <div class="muted">
+          Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
+        </div>
+        <div class="backup-actions">
+          <button class="button button--ghost" data-action="export-backup">
+            Exporter mes donnees
+          </button>
+          <button class="button button--primary" data-action="import-backup">
+            Importer un backup
+          </button>
+        </div>
+        <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
+        <button class="button button--danger" data-action="clear-data">
+          Reinitialiser toutes les donnees
+        </button>
+      </article>
+    </section>
+  `;
+}
+
+function getSettingsSections() {
+  const cycle = getCycleSnapshot();
+  const blocks = getProgramExerciseBlocks(state.programEditorDay);
+  const backupLabel = state.storageMeta.backupAvailable ? "Backup actif" : "Pas de backup";
+  const soundLabel = state.restSoundEnabled ? "Son ON" : "Son OFF";
+  const vibrationLabel = state.restVibrationEnabled ? "Vibreur ON" : "Vibreur OFF";
+
+  return [
+    {
+      id: "app",
+      label: "App iPhone",
+      title: "Installation",
+      meta: "Ajout ecran d'accueil et stockage local",
+      stats: ["PWA", "Safari"],
+      accentDay: state.day,
+      content: renderSettingsInstallSection(),
+    },
+    {
+      id: "cycle",
+      label: "Bloc en cours",
+      title: `${cycle.goalLabel} · S${cycle.week}/${cycle.length}`,
+      meta: `${cycle.current.phase} - ${cycle.current.focus}`,
+      stats: [cycle.current.phase, cycle.current.target],
+      accentDay: state.day,
+      content: renderCycleSettings(),
+    },
+    {
+      id: "planner",
+      label: "Assistant programme",
+      title: getActiveProgramDisplay(),
+      meta: `${getProgramDays().length} bloc(s) actifs`,
+      stats: [`${state.programPlannerDays} jours`, state.programTemplateId ? "Template" : "Perso"],
+      accentDay: getProgramDays()[0] || state.day,
+      content: renderProgramPlanner(),
+    },
+    {
+      id: "editor",
+      label: "Edition rapide",
+      title: state.programEditorDay,
+      meta: `${blocks.length} exercice(s) groupes`,
+      stats: ["Series", "Repos"],
+      accentDay: state.programEditorDay,
+      content: renderProgramEditor(),
+    },
+    {
+      id: "alerts",
+      label: "Alertes",
+      title: "Repos",
+      meta: `${soundLabel} · ${vibrationLabel}`,
+      stats: [soundLabel, vibrationLabel],
+      accentDay: state.day,
+      content: renderRestSettings(),
+    },
+    {
+      id: "data",
+      label: "Donnees",
+      title: backupLabel,
+      meta: state.storageMeta.saveError || "Export, import et reinitialisation",
+      stats: [backupLabel, state.storageMeta.recoveredFromBackup ? "Recup OK" : "Local"],
+      accentDay: state.day,
+      content: renderSettingsDataSection(),
+    },
+  ];
+}
+
+function getActiveSettingsSection() {
+  return getSettingsSections().find((section) => section.id === state.settingsSection) || null;
+}
+
+function openSettingsSection(sectionId) {
+  state.settingsSection = sectionId;
+  saveState();
+  renderApp();
+}
+
+function closeSettingsSection() {
+  state.settingsSection = "";
+  saveState();
+  renderApp();
+}
+
+function renderSettingsHub() {
+  const sections = getSettingsSections();
+
+  return `
+    <section class="stack-md settings-shell">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">App iPhone</div>
+            <h2 class="section-title dashboard-section-head__title">Reglages</h2>
+          </div>
+          <div class="label">${sections.length} blocs</div>
+        </div>
+        <div class="muted">
+          Tout est groupe en cartes: touche un bloc pour ouvrir son detail sans faire defiler tout le menu.
+        </div>
+      </article>
+
+      <div class="settings-hub">
+        ${sections
+          .map(
+            (section) => `
+              <button class="surface surface-pad settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}">
+                <div class="settings-panel-card__top">
+                  <div>
+                    <div class="label">${section.label}</div>
+                    <div class="settings-panel-card__title">${section.title}</div>
+                  </div>
+                  <span class="pill pill--outline">Ouvrir</span>
+                </div>
+                <div class="settings-panel-card__meta">${section.meta}</div>
+                <div class="settings-panel-card__chips">
+                  ${section.stats.map((stat) => `<span class="settings-panel-card__chip">${stat}</span>`).join("")}
+                </div>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderSettingsDetail() {
+  const section = getActiveSettingsSection();
+  if (!section) {
+    return renderSettingsHub();
+  }
+
+  return `
+    <section class="stack-md settings-shell">
+      <article class="surface surface-pad stack-md settings-group settings-detail-shell" data-accent-day="${section.accentDay}">
+        <div class="settings-detail-header">
+          <button class="button button--ghost button--compact" data-action="close-settings-section">
+            Retour
+          </button>
+          <span class="pill pill--outline">${section.label}</span>
+        </div>
+        <div class="stack-sm">
+          <div class="label">Reglages</div>
+          <h2 class="section-title dashboard-section-head__title">${section.title}</h2>
+          <div class="muted">${section.meta}</div>
+        </div>
+      </article>
+
+      ${section.content}
+    </section>
+  `;
+}
+
 function renderSettings() {
+  if (state.settingsSection) {
+    return renderSettingsDetail();
+  }
+
+  return renderSettingsHub();
+}
+
+function renderLegacySettings() {
   return `
     <section class="stack-md settings-shell">
       <article class="surface surface-pad stack-md settings-group">
@@ -5653,6 +5875,14 @@ function bindEvents() {
 
       if (action === "test-rest-alert") {
         testRestAlert();
+      }
+
+      if (action === "open-settings-section") {
+        openSettingsSection(button.dataset.settingsSection || "");
+      }
+
+      if (action === "close-settings-section") {
+        closeSettingsSection();
       }
 
       if (action === "dismiss-rest-alert") {
