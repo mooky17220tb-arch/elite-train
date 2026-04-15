@@ -5511,6 +5511,7 @@ function getSettingsSections() {
       title: "Installation",
       meta: "Ajout ecran d'accueil et stockage local",
       stats: ["PWA", "Safari"],
+      mark: "CFG",
       accentDay: state.day,
       content: renderSettingsInstallSection(),
     },
@@ -5520,6 +5521,7 @@ function getSettingsSections() {
       title: `${cycle.goalLabel} · S${cycle.week}/${cycle.length}`,
       meta: `${cycle.current.phase} - ${cycle.current.focus}`,
       stats: [cycle.current.phase, cycle.current.target],
+      mark: "CYC",
       accentDay: state.day,
       content: renderCycleSettings(),
     },
@@ -5529,6 +5531,7 @@ function getSettingsSections() {
       title: getActiveProgramDisplay(),
       meta: `${getProgramDays().length} bloc(s) actifs`,
       stats: [`${state.programPlannerDays} jours`, state.programTemplateId ? "Template" : "Perso"],
+      mark: "SPL",
       accentDay: getProgramDays()[0] || state.day,
       content: renderProgramPlanner(),
     },
@@ -5538,6 +5541,7 @@ function getSettingsSections() {
       title: state.programEditorDay,
       meta: `${blocks.length} exercice(s) groupes`,
       stats: ["Series", "Repos"],
+      mark: "EDT",
       accentDay: state.programEditorDay,
       content: renderProgramEditor(),
     },
@@ -5547,6 +5551,7 @@ function getSettingsSections() {
       title: "Repos",
       meta: `${soundLabel} · ${vibrationLabel}`,
       stats: [soundLabel, vibrationLabel],
+      mark: "ALT",
       accentDay: state.day,
       content: renderRestSettings(),
     },
@@ -5556,6 +5561,7 @@ function getSettingsSections() {
       title: backupLabel,
       meta: state.storageMeta.saveError || "Export, import et reinitialisation",
       stats: [backupLabel, state.storageMeta.recoveredFromBackup ? "Recup OK" : "Local"],
+      mark: "DAT",
       accentDay: state.day,
       content: renderSettingsDataSection(),
     },
@@ -5600,18 +5606,9 @@ function renderSettingsHub() {
         ${sections
           .map(
             (section) => `
-              <button class="surface surface-pad settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}">
-                <div class="settings-panel-card__top">
-                  <div>
-                    <div class="label">${section.label}</div>
-                    <div class="settings-panel-card__title">${section.title}</div>
-                  </div>
-                  <span class="pill pill--outline">Ouvrir</span>
-                </div>
-                <div class="settings-panel-card__meta">${section.meta}</div>
-                <div class="settings-panel-card__chips">
-                  ${section.stats.map((stat) => `<span class="settings-panel-card__chip">${stat}</span>`).join("")}
-                </div>
+              <button class="surface surface-pad settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}" data-settings-mark="${section.mark}">
+                <span class="settings-panel-card__gear" aria-hidden="true">⚙</span>
+                <div class="settings-panel-card__title">${section.title}</div>
               </button>
             `
           )

@@ -2893,50 +2893,72 @@ button {
 }
 
 .settings-panel-card {
-  display: grid;
-  gap: 12px;
+  position: relative;
+  min-height: 128px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  isolation: isolate;
   text-align: left;
+  padding: 18px 18px 20px;
 }
 
-.settings-panel-card__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.settings-panel-card::before,
+.settings-panel-card::after {
+  content: "";
+  position: absolute;
+  inset: auto;
+  pointer-events: none;
+}
+
+.settings-panel-card::before {
+  top: -18%;
+  right: -8%;
+  width: 138px;
+  height: 138px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 68%);
+  opacity: 0.48;
+  filter: blur(4px);
+  z-index: 0;
+}
+
+.settings-panel-card::after {
+  top: 14px;
+  right: 18px;
+  content: attr(data-settings-mark);
+  color: rgba(255, 255, 255, 0.08);
+  font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", sans-serif;
+  font-size: 54px;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  z-index: 0;
+}
+
+.settings-panel-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .settings-panel-card__title {
   color: white;
-  font-size: 18px;
+  max-width: 72%;
+  font-size: 24px;
   font-weight: 900;
-  line-height: 1.05;
+  line-height: 0.96;
+  letter-spacing: -0.05em;
 }
 
-.settings-panel-card__meta {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.settings-panel-card__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.settings-panel-card__chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.settings-panel-card__gear {
+  position: absolute;
+  right: 18px;
+  bottom: 10px;
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 38px;
+  line-height: 1;
+  transform: rotate(-12deg);
+  z-index: 1;
 }
 
 .settings-detail-shell {
