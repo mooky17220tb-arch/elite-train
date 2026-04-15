@@ -5606,8 +5606,12 @@ function renderSettingsHub() {
         ${sections
           .map(
             (section) => `
-              <button class="surface surface-pad settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}" data-settings-mark="${section.mark}">
-                <div class="settings-panel-card__title">${section.label}</div>
+              <button class="settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}" data-theme-day="${section.accentDay}" data-settings-mark="${section.mark}">
+                <div>
+                  <div class="settings-panel-card__eyebrow">Reglages</div>
+                  <div class="settings-panel-card__title">${section.label}</div>
+                </div>
+                <div class="settings-panel-card__arrow">></div>
               </button>
             `
           )

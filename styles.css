@@ -2894,54 +2894,53 @@ button {
 
 .settings-panel-card {
   position: relative;
-  min-height: 128px;
+  overflow: hidden;
+  width: 100%;
+  min-height: 176px;
   display: flex;
   align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: rgba(9, 12, 11, 0.96);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.26);
   overflow: hidden;
   isolation: isolate;
   text-align: left;
-  padding: 18px 18px 20px;
+  padding: 18px;
 }
 
 .settings-panel-card::before,
 .settings-panel-card::after {
-  content: "";
   position: absolute;
-  inset: auto;
+  inset: 0;
   pointer-events: none;
 }
 
 .settings-panel-card::before {
-  inset: 0;
-  background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.14), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
-  opacity: 0.72;
+  content: "";
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.02);
+  opacity: 0.96;
   z-index: 0;
 }
 
 .settings-panel-card[data-accent-day="Push"]::before {
-  background:
-    radial-gradient(circle at top right, rgba(255, 107, 107, 0.22), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  background-image: url("./assets/push-card.svg");
 }
 
 .settings-panel-card[data-accent-day="Pull"]::before {
-  background:
-    radial-gradient(circle at top right, rgba(107, 184, 255, 0.22), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  background-image: url("./assets/pull-card.svg");
 }
 
 .settings-panel-card[data-accent-day="Legs"]::before {
-  background:
-    radial-gradient(circle at top right, rgba(255, 178, 107, 0.24), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  background-image: url("./assets/legs-card.svg");
 }
 
 .settings-panel-card[data-accent-day="Upper"]::before {
-  background:
-    radial-gradient(circle at top right, rgba(124, 227, 180, 0.22), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  background-image: url("./assets/upper-card.svg");
 }
 
 .settings-panel-card[data-accent-day="Full"]::before,
@@ -2949,22 +2948,14 @@ button {
 .settings-panel-card[data-accent-day="Arms"]::before,
 .settings-panel-card[data-accent-day="ChestBack"]::before,
 .settings-panel-card[data-accent-day="ShouldersArms"]::before {
-  background:
-    radial-gradient(circle at top right, rgba(22, 196, 127, 0.2), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+  background-image: url("./assets/upper-card.svg");
 }
 
 .settings-panel-card::after {
-  top: auto;
-  right: 16px;
-  bottom: 10px;
-  content: attr(data-settings-mark);
-  color: rgba(255, 255, 255, 0.09);
-  font-family: "Avenir Next Condensed", "Arial Narrow", "Trebuchet MS", sans-serif;
-  font-size: 42px;
-  font-weight: 900;
-  letter-spacing: -0.08em;
-  line-height: 0.9;
+  content: "";
+  background:
+    linear-gradient(115deg, rgba(2, 4, 3, 0.08) 0%, rgba(2, 4, 3, 0) 30%),
+    linear-gradient(180deg, rgba(2, 4, 3, 0.14) 0%, rgba(2, 4, 3, 0.68) 62%, rgba(2, 4, 3, 0.92) 100%);
   z-index: 0;
 }
 
@@ -2973,13 +2964,48 @@ button {
   z-index: 1;
 }
 
-.settings-panel-card__title {
-  max-width: 72%;
-  color: white;
-  font-size: 26px;
+.settings-panel-card > div:first-child {
+  display: grid;
+  gap: 6px;
+  max-width: 250px;
+}
+
+.settings-panel-card__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 2px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(6, 9, 8, 0.54);
+  backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 10px;
   font-weight: 900;
-  line-height: 0.94;
-  letter-spacing: -0.05em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.settings-panel-card__title {
+  color: white;
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -0.06em;
+}
+
+.settings-panel-card__arrow {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: rgba(6, 9, 8, 0.5);
+  backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 22px;
+  font-weight: 900;
 }
 
 .settings-detail-shell {
