@@ -2927,28 +2927,28 @@ button {
   z-index: 0;
 }
 
-.settings-panel-card[data-accent-day="Push"]::before {
-  background-image: url("./assets/push-card.svg");
+.settings-panel-card[data-settings-section="app"]::before {
+  background-image: url("./assets/settings-app-card.svg");
 }
 
-.settings-panel-card[data-accent-day="Pull"]::before {
-  background-image: url("./assets/pull-card.svg");
+.settings-panel-card[data-settings-section="cycle"]::before {
+  background-image: url("./assets/settings-cycle-card.svg");
 }
 
-.settings-panel-card[data-accent-day="Legs"]::before {
-  background-image: url("./assets/legs-card.svg");
+.settings-panel-card[data-settings-section="planner"]::before {
+  background-image: url("./assets/settings-program-card.svg");
 }
 
-.settings-panel-card[data-accent-day="Upper"]::before {
-  background-image: url("./assets/upper-card.svg");
+.settings-panel-card[data-settings-section="editor"]::before {
+  background-image: url("./assets/settings-editor-card.svg");
 }
 
-.settings-panel-card[data-accent-day="Full"]::before,
-.settings-panel-card[data-accent-day="Lower"]::before,
-.settings-panel-card[data-accent-day="Arms"]::before,
-.settings-panel-card[data-accent-day="ChestBack"]::before,
-.settings-panel-card[data-accent-day="ShouldersArms"]::before {
-  background-image: url("./assets/upper-card.svg");
+.settings-panel-card[data-settings-section="alerts"]::before {
+  background-image: url("./assets/settings-alerts-card.svg");
+}
+
+.settings-panel-card[data-settings-section="data"]::before {
+  background-image: url("./assets/settings-data-card.svg");
 }
 
 .settings-panel-card::after {

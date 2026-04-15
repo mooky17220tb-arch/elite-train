@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="82" x2="1436" y2="854" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111F1B"/>
+      <stop offset=".6" stop-color="#08110E"/>
+      <stop offset="1" stop-color="#040605"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1188 184) rotate(90) scale(336 356)">
+      <stop stop-color="#8EECCD" stop-opacity=".4"/>
+      <stop offset="1" stop-color="#8EECCD" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(442 274) rotate(90) scale(286 298)">
+      <stop stop-color="#FFC36B" stop-opacity=".24"/>
+      <stop offset="1" stop-color="#FFC36B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="900" rx="48" fill="url(#bg)"/>
+  <rect x="64" y="64" width="1472" height="772" rx="36" stroke="rgba(255,255,255,.08)"/>
+  <circle cx="1188" cy="184" r="324" fill="url(#glowA)"/>
+  <circle cx="442" cy="274" r="288" fill="url(#glowB)"/>
+  <g opacity=".16" stroke="#A4F0D1" stroke-width="2">
+    <path d="M100 190C254 220 404 266 618 388"/>
+    <path d="M110 760C318 712 476 650 694 510"/>
+    <path d="M1248 720C1372 628 1462 530 1518 398"/>
+  </g>
+  <g transform="translate(0 2)">
+    <circle cx="800" cy="450" r="216" stroke="#123026" stroke-width="90"/>
+    <circle cx="800" cy="450" r="216" stroke="#29D48F" stroke-width="90" stroke-linecap="round" stroke-dasharray="910 1360" transform="rotate(-88 800 450)"/>
+    <circle cx="800" cy="450" r="136" fill="#0D1512"/>
+    <circle cx="800" cy="450" r="86" fill="#153728"/>
+    <path d="M898 314L980 264L1044 330" stroke="#8AEECA" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M916 332L902 412" stroke="#8AEECA" stroke-width="24" stroke-linecap="round"/>
+    <path d="M670 588L608 644L548 578" stroke="#FFC678" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M652 572L670 494" stroke="#FFC678" stroke-width="20" stroke-linecap="round"/>
+    <path d="M784 360H816" stroke="#D9FFF0" stroke-width="18" stroke-linecap="round"/>
+    <path d="M784 424H872" stroke="#D9FFF0" stroke-width="18" stroke-linecap="round"/>
+    <path d="M784 488H848" stroke="#D9FFF0" stroke-width="18" stroke-linecap="round"/>
+    <path d="M784 552H828" stroke="#D9FFF0" stroke-width="18" stroke-linecap="round"/>
+  </g>
+</svg>
