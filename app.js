@@ -130,6 +130,49 @@ const PROGRAM_ENTRY_PRESETS = {
   ],
 };
 
+const PROGRAM_PLANNER_GOALS = {
+  classic: {
+    id: "classic",
+    title: "Classique",
+    description: "Tous les splits deja presents dans l'app",
+  },
+  "weight-loss": {
+    id: "weight-loss",
+    title: "Perte de poids",
+    description: "Depenser plus tout en gardant une base muscu solide",
+  },
+  toning: {
+    id: "toning",
+    title: "Tonification",
+    description: "Silhouette plus ferme et plus equilibree",
+  },
+  "muscle-gain": {
+    id: "muscle-gain",
+    title: "Prise de muscle",
+    description: "Construire du volume et progresser proprement",
+  },
+  wellbeing: {
+    id: "wellbeing",
+    title: "Bien-etre + marche",
+    description: "Bouger mieux, recuperer et garder le rythme",
+  },
+};
+
+const PROGRAM_PLANNER_CONSTRAINTS = {
+  standard: {
+    id: "standard",
+    title: "Standard",
+    description: "Programme classique, sans adaptation articulaire",
+    shortLabel: "Standard",
+  },
+  "knee-friendly": {
+    id: "knee-friendly",
+    title: "Genou sensible",
+    description: "Exercices plus stables, impact reduit, marche privilegiee",
+    shortLabel: "Genou sensible",
+  },
+};
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -139,6 +182,8 @@ const state = {
   programTemplateTitle: "PPL + Upper",
   programEditorDay: "Push",
   programPlannerDays: 4,
+  programPlannerGoal: "classic",
+  programPlannerConstraint: "standard",
   programTemplatePreviewId: "",
   settingsSection: "",
   cycle: createDefaultCycle(),
@@ -1348,7 +1393,277 @@ function buildShouldersArmsPrimeB() {
   ];
 }
 
-function getProgramPlannerOptions(days = 4) {
+function buildObjectiveFullA() {
+  return [
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 14),
+    ...createStraightSets("Hip thrust", "barbell", 3, 8, 12),
+    ...createStraightSets("Tirage vertical", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 15),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15),
+  ];
+}
+
+function buildObjectiveFullB() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Fentes arriere", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12),
+    ...createStraightSets("Developpe incline machine", "machine", 3, 10, 12),
+    ...createStraightSets("Elevations laterales", "isolation", 2, 15, 20),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 12, 15),
+  ];
+}
+
+function buildObjectiveFullC() {
+  return [
+    ...createStraightSets("Goblet squat a box", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Abduction machine", "isolation", 2, 15, 20),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildObjectiveLowerA() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 4, 8, 12),
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 14),
+    ...createStraightSets("Bulgarian split squat", "dumbbell", 3, 8, 10),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 15),
+    ...createStraightSets("Mollets", "isolation", 3, 15, 20),
+  ];
+}
+
+function buildObjectiveUpperA() {
+  return [
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 12),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 8, 12),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 15, 20),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12),
+  ];
+}
+
+function buildObjectiveLowerB() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Fentes arriere", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Leg extension", "machine", 2, 12, 15),
+    ...createStraightSets("Abduction machine", "isolation", 3, 15, 20),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 15),
+  ];
+}
+
+function buildObjectiveUpperB() {
+  return [
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12),
+    ...createStraightSets("Developpe incline machine", "machine", 3, 8, 12),
+    ...createStraightSets("Rowing haltere", "dumbbell", 3, 8, 12),
+    ...createStraightSets("Oiseau", "isolation", 2, 15, 20),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15),
+    ...createStraightSets("Extension triceps corde", "isolation", 2, 10, 12),
+  ];
+}
+
+function buildObjectiveGlutesFinish() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 4, 8, 12),
+    ...createStraightSets("Abduction machine", "isolation", 3, 15, 20),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 15),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildKneeFriendlyFullA() {
+  return [
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 14),
+    ...createStraightSets("Hip thrust", "barbell", 3, 8, 12),
+    ...createStraightSets("Tirage vertical", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 15),
+  ];
+}
+
+function buildKneeFriendlyFullB() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Split squat assiste", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12),
+    ...createStraightSets("Developpe incline machine", "machine", 3, 10, 12),
+    ...createStraightSets("Abduction machine", "isolation", 3, 15, 20),
+  ];
+}
+
+function buildKneeFriendlyFullC() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12),
+    ...createStraightSets("Step-up bas", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 15),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildKneeFriendlyLowerA() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 4, 8, 12),
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 14),
+    ...createStraightSets("Split squat assiste", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 15),
+    ...createStraightSets("Abduction machine", "isolation", 3, 15, 20),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildKneeFriendlyLowerB() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12),
+    ...createStraightSets("Step-up bas", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Goblet squat a box", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 15),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildMuscleFullA() {
+  return [
+    ...createStraightSets("Presse a cuisses", "machine", 4, 8, 12),
+    ...createStraightSets("Hip thrust", "barbell", 3, 8, 10),
+    ...createStraightSets("Tirage vertical", "machine", 3, 8, 12),
+    ...createStraightSets("Developpe incline machine", "machine", 3, 8, 12),
+    ...createStraightSets("Curl incline", "dumbbell", 2, 10, 12),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 10, 12),
+  ];
+}
+
+function buildMuscleFullB() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Fentes arriere", "dumbbell", 3, 8, 10),
+    ...createStraightSets("Rowing poulie", "machine", 3, 8, 12),
+    ...createStraightSets("Chest press", "machine", 3, 8, 12),
+    ...createStraightSets("Elevations laterales", "isolation", 3, 12, 20),
+    ...createStraightSets("Extension triceps corde", "isolation", 2, 10, 12),
+  ];
+}
+
+function buildMuscleFullC() {
+  return [
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 10, 15),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 8, 12),
+    ...createStraightSets("Developpe epaules", "dumbbell", 3, 8, 10),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 12, 15),
+  ];
+}
+
+function buildWellbeingFullA() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12),
+    ...createStraightSets("Tirage vertical", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 2, 12, 15),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildWellbeingFullB() {
+  return [
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 12),
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12),
+    ...createStraightSets("Developpe incline machine", "machine", 3, 10, 12),
+    ...createStraightSets("Elevations laterales", "isolation", 2, 15, 20),
+    ...createStraightSets("Abduction machine", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildWellbeingFullC() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Tirage horizontal", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 12, 15),
+  ];
+}
+
+function buildWellbeingUpperA() {
+  return [
+    ...createStraightSets("Tirage vertical", "machine", 3, 10, 12),
+    ...createStraightSets("Chest press", "machine", 3, 10, 12),
+    ...createStraightSets("Elevations laterales", "isolation", 2, 15, 20),
+    ...createStraightSets("Curl poulie", "isolation", 2, 12, 15),
+  ];
+}
+
+function buildWellbeingUpperB() {
+  return [
+    ...createStraightSets("Rowing poulie", "machine", 3, 10, 12),
+    ...createStraightSets("Developpe incline machine", "machine", 3, 10, 12),
+    ...createStraightSets("Oiseau", "isolation", 2, 15, 20),
+    ...createStraightSets("Triceps poulie", "isolation", 2, 12, 15),
+  ];
+}
+
+function buildWellbeingLowerA() {
+  return [
+    ...createStraightSets("Hip thrust", "barbell", 3, 10, 12),
+    ...createStraightSets("Presse a cuisses", "machine", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 15),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+    ...createStraightSets("Abduction machine", "isolation", 2, 15, 20),
+  ];
+}
+
+function buildWellbeingLowerB() {
+  return [
+    ...createStraightSets("Romanian deadlift", "barbell", 3, 8, 10),
+    ...createStraightSets("Goblet squat a box", "dumbbell", 3, 10, 12),
+    ...createStraightSets("Leg curl", "machine", 3, 12, 15),
+    ...createStraightSets("Mollets", "isolation", 2, 15, 20),
+    ...createStraightSets("Abduction machine", "isolation", 2, 15, 20),
+  ];
+}
+
+function getProgramPlannerGoalMeta(goal = state.programPlannerGoal) {
+  return PROGRAM_PLANNER_GOALS[goal] || PROGRAM_PLANNER_GOALS.classic;
+}
+
+function getProgramPlannerConstraintMeta(constraint = state.programPlannerConstraint) {
+  return PROGRAM_PLANNER_CONSTRAINTS[constraint] || PROGRAM_PLANNER_CONSTRAINTS.standard;
+}
+
+function isClassicProgramPlannerGoal(goal = state.programPlannerGoal) {
+  return goal === "classic";
+}
+
+function getProgramPlannerAvailableDays(goal = state.programPlannerGoal) {
+  return isClassicProgramPlannerGoal(goal) ? [3, 4, 5, 6] : [3, 4, 5];
+}
+
+function getRecommendedProgramPlannerDays(goal = state.programPlannerGoal) {
+  if (goal === "wellbeing") return 3;
+  return 4;
+}
+
+function buildPlannerTemplate(id, title, split, why, days, extra = {}) {
+  return {
+    id,
+    title,
+    split,
+    why,
+    days,
+    ...extra,
+  };
+}
+
+function getClassicProgramPlannerOptions(days = 4) {
   return {
     3: [
       {
@@ -1445,6 +1760,300 @@ function getProgramPlannerOptions(days = 4) {
   }[days] || [];
 }
 
+function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", constraint = "standard") {
+  const isKneeFriendly = constraint === "knee-friendly";
+  const classicOptions = getClassicProgramPlannerOptions(days);
+
+  const pickClassic = (index) => classicOptions[index] || classicOptions[0];
+  const suffix = isKneeFriendly ? "knee" : "standard";
+  const constraintNote = isKneeFriendly
+    ? "Version genou sensible : exercices plus stables, impact reduit et marche tapis privilegiee."
+    : "Ajoute 10 a 25 min de marche tapis sur 2 a 4 seances si l'objectif le demande.";
+
+  const options = {
+    "weight-loss": {
+      3: [
+        buildPlannerTemplate(
+          `weight-loss-3-${suffix}`,
+          "Full Body + tapis",
+          "Recommande",
+          "Le plus simple pour depenser plus sans perdre une vraie base muscu.",
+          ["Full A", "Full B", "Full C"],
+          { goal, constraint, note: constraintNote }
+        ),
+        buildPlannerTemplate(
+          `toning-3-${suffix}`,
+          "Lower / Upper / Lower",
+          "Alternative",
+          "Plus structure si tu veux deja un peu plus de focus bas du corps.",
+          ["Lower 1", "Upper", "Lower 2"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+      4: [
+        buildPlannerTemplate(
+          `weight-loss-4-${suffix}`,
+          "Lower / Upper + tapis",
+          "Recommande",
+          "Tres bon compromis entre depense, recuperation et regularite.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2"],
+          { goal, constraint, note: constraintNote }
+        ),
+        buildPlannerTemplate(
+          `toning-4-${suffix}`,
+          "Lower / Upper / Lower / Upper",
+          "Alternative",
+          "Plus tonique, avec un peu plus de structure haut / bas.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+      5: [
+        buildPlannerTemplate(
+          `weight-loss-5-${suffix}`,
+          "4 lifts + plus de depense",
+          "Recommande",
+          "Plus de frequence sans tomber dans un split trop bodybuild.",
+          ["Lower 1", "Upper 1", "Full A", "Lower 2", "Upper 2"],
+          { goal, constraint, note: constraintNote }
+        ),
+        buildPlannerTemplate(
+          `toning-5-${suffix}`,
+          "Lower / Upper + Glutes",
+          "Alternative",
+          "Tres bien si tu veux un rendu plus tonique avec un bas du corps present.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2", "Glutes"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+    },
+    toning: {
+      3: [
+        buildPlannerTemplate(
+          `toning-3-${suffix}`,
+          "Lower / Upper / Lower",
+          "Recommande",
+          "Le plus propre pour raffermir la silhouette sans faire des seances trop longues.",
+          ["Lower 1", "Upper", "Lower 2"],
+          { goal, constraint, note: constraintNote }
+        ),
+        buildPlannerTemplate(
+          `weight-loss-3-${suffix}`,
+          "Full Body + tapis",
+          "Alternative",
+          "Plus simple si tu veux quelque chose de direct et facile a tenir.",
+          ["Full A", "Full B", "Full C"],
+          { goal: "weight-loss", constraint, note: constraintNote }
+        ),
+        pickClassic(1),
+      ],
+      4: [
+        buildPlannerTemplate(
+          `toning-4-${suffix}`,
+          "Lower / Upper / Lower / Upper",
+          "Recommande",
+          "La structure la plus polyvalente pour tonifier et equilibrer le physique.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2"],
+          { goal, constraint, note: constraintNote }
+        ),
+        buildPlannerTemplate(
+          `weight-loss-4-${suffix}`,
+          "Lower / Upper + tapis",
+          "Alternative",
+          "Un peu plus orientee depense si tu veux garder du cardio en soutien.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2"],
+          { goal: "weight-loss", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+      5: [
+        buildPlannerTemplate(
+          `toning-5-${suffix}`,
+          "Lower / Upper + Glutes",
+          "Recommande",
+          "Super si tu veux plus de frequence bas du corps sans casser l'equilibre.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2", "Glutes"],
+          { goal, constraint, note: constraintNote }
+        ),
+        buildPlannerTemplate(
+          `weight-loss-5-${suffix}`,
+          "4 lifts + plus de depense",
+          "Alternative",
+          "Plus direct si tu veux davantage bouger sur la semaine.",
+          ["Lower 1", "Upper 1", "Full A", "Lower 2", "Upper 2"],
+          { goal: "weight-loss", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+    },
+    "muscle-gain": {
+      3: [
+        buildPlannerTemplate(
+          `muscle-gain-3-${suffix}`,
+          "Full Body hypertrophie",
+          "Recommande",
+          "Le meilleur format si tu veux progresser sur 3 jours sans perdre de frequence.",
+          ["Full A", "Full B", "Full C"],
+          { goal, constraint, note: "Cardio leger seulement si tu recuperes bien." }
+        ),
+        buildPlannerTemplate(
+          `toning-3-${suffix}`,
+          "Lower / Upper / Lower",
+          "Alternative",
+          "Une version plus douce si tu veux garder une dominante silhouette.",
+          ["Lower 1", "Upper", "Lower 2"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+      4: [
+        buildPlannerTemplate(
+          `muscle-gain-4-${suffix}`,
+          "Upper / Lower hypertrophie",
+          "Recommande",
+          "Le format le plus solide pour monter en volume sur 4 jours.",
+          ["Upper A", "Lower A", "Upper B", "Lower B"],
+          { goal, constraint, note: "Cardio leger en soutien seulement." }
+        ),
+        buildPlannerTemplate(
+          `toning-4-${suffix}`,
+          "Lower / Upper / Lower / Upper",
+          "Alternative",
+          "Un peu plus light si tu veux rester entre volume et forme generale.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(2),
+      ],
+      5: [
+        buildPlannerTemplate(
+          `muscle-gain-5-${suffix}`,
+          "PPL + Upper + Arms",
+          "Recommande",
+          "Tres bon volume hebdo si tu recuperes bien et veux progresser franchement.",
+          ["Push", "Pull", "Legs", "Upper", "Arms"],
+          { goal, constraint, note: "Garde le cardio court et facile pour ne pas casser la recup." }
+        ),
+        buildPlannerTemplate(
+          `toning-5-${suffix}`,
+          "Lower / Upper + Glutes",
+          "Alternative",
+          "Alternative plus douce si tu veux garder un peu moins de fatigue globale.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2", "Glutes"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(2),
+      ],
+    },
+    wellbeing: {
+      3: [
+        buildPlannerTemplate(
+          `wellbeing-3-${suffix}`,
+          "Full Body doux",
+          "Recommande",
+          "Le plus simple pour bouger mieux, sans pression et avec une bonne recuperation.",
+          ["Full A", "Full B", "Full C"],
+          { goal, constraint, note: "Ajoute 15 a 30 min de marche tapis a ton rythme." }
+        ),
+        buildPlannerTemplate(
+          `weight-loss-3-${suffix}`,
+          "Full Body + tapis",
+          "Alternative",
+          "Si tu veux un peu plus de depense tout en gardant quelque chose de simple.",
+          ["Full A", "Full B", "Full C"],
+          { goal: "weight-loss", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+      4: [
+        buildPlannerTemplate(
+          `wellbeing-4-${suffix}`,
+          "Upper / Lower douceur",
+          "Recommande",
+          "Plus de rythme sur la semaine, mais toujours avec des seances tres tenables.",
+          ["Upper A", "Lower A", "Full A", "Full B"],
+          { goal, constraint, note: "Marche tapis douce recommande entre les seances ou en fin de bloc." }
+        ),
+        buildPlannerTemplate(
+          `toning-4-${suffix}`,
+          "Lower / Upper / Lower / Upper",
+          "Alternative",
+          "Si tu veux deja quelque chose d'un peu plus structure sans aller trop loin.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(1),
+      ],
+      5: [
+        buildPlannerTemplate(
+          `wellbeing-5-${suffix}`,
+          "Rythme doux 5 jours",
+          "Recommande",
+          "Frequence haute, fatigue basse, parfait si tu aimes bouger souvent.",
+          ["Upper A", "Lower A", "Full A", "Upper B", "Lower B"],
+          { goal, constraint, note: "Marche tapis douce possible sur les jours ou tu te sens bien." }
+        ),
+        buildPlannerTemplate(
+          `toning-5-${suffix}`,
+          "Lower / Upper + Glutes",
+          "Alternative",
+          "Si tu veux un rendu un peu plus tonique tout en restant raisonnable.",
+          ["Lower 1", "Upper 1", "Lower 2", "Upper 2", "Glutes"],
+          { goal: "toning", constraint, note: constraintNote }
+        ),
+        pickClassic(0),
+      ],
+    },
+  };
+
+  return options[goal]?.[days] || [];
+}
+
+function getProgramPlannerOptions(
+  days = 4,
+  goal = state.programPlannerGoal,
+  constraint = state.programPlannerConstraint
+) {
+  if (isClassicProgramPlannerGoal(goal)) {
+    return getClassicProgramPlannerOptions(days);
+  }
+
+  return getObjectiveProgramPlannerOptions(days, goal, constraint);
+}
+
+function getAllProgramPlannerOptions() {
+  const map = new Map();
+
+  [3, 4, 5, 6].forEach((days) => {
+    getClassicProgramPlannerOptions(days).forEach((template) => {
+      if (!map.has(template.id)) map.set(template.id, template);
+    });
+  });
+
+  ["weight-loss", "toning", "muscle-gain", "wellbeing"].forEach((goal) => {
+    ["standard", "knee-friendly"].forEach((constraint) => {
+      [3, 4, 5].forEach((days) => {
+        getObjectiveProgramPlannerOptions(days, goal, constraint).forEach((template) => {
+          if (!map.has(template.id)) map.set(template.id, template);
+        });
+      });
+    });
+  });
+
+  return Array.from(map.values());
+}
+
+function getObjectiveGoalFromTemplateId(templateId = "") {
+  if (templateId.startsWith("weight-loss-")) return "weight-loss";
+  if (templateId.startsWith("toning-")) return "toning";
+  if (templateId.startsWith("muscle-gain-")) return "muscle-gain";
+  if (templateId.startsWith("wellbeing-")) return "wellbeing";
+  return "";
+}
+
 function createProgramTemplate(templateId) {
   const templates = {
     "full-body-3": {
@@ -1525,19 +2134,175 @@ function createProgramTemplate(templateId) {
       "Upper C": buildUpperPrimeC(),
       "Lower C": buildLowerPrimeC(),
     },
+    "weight-loss-3-standard": {
+      "Full A": buildObjectiveFullA(),
+      "Full B": buildObjectiveFullB(),
+      "Full C": buildObjectiveFullC(),
+    },
+    "weight-loss-3-knee": {
+      "Full A": buildKneeFriendlyFullA(),
+      "Full B": buildKneeFriendlyFullB(),
+      "Full C": buildKneeFriendlyFullC(),
+    },
+    "weight-loss-4-standard": {
+      "Lower 1": buildObjectiveLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Lower 2": buildObjectiveLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+    },
+    "weight-loss-4-knee": {
+      "Lower 1": buildKneeFriendlyLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Lower 2": buildKneeFriendlyLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+    },
+    "weight-loss-5-standard": {
+      "Lower 1": buildObjectiveLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Full A": buildObjectiveFullA(),
+      "Lower 2": buildObjectiveLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+    },
+    "weight-loss-5-knee": {
+      "Lower 1": buildKneeFriendlyLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Full A": buildKneeFriendlyFullA(),
+      "Lower 2": buildKneeFriendlyLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+    },
+    "toning-3-standard": {
+      "Lower 1": buildObjectiveLowerA(),
+      Upper: buildObjectiveUpperA(),
+      "Lower 2": buildObjectiveLowerB(),
+    },
+    "toning-3-knee": {
+      "Lower 1": buildKneeFriendlyLowerA(),
+      Upper: buildObjectiveUpperA(),
+      "Lower 2": buildKneeFriendlyLowerB(),
+    },
+    "toning-4-standard": {
+      "Lower 1": buildObjectiveLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Lower 2": buildObjectiveLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+    },
+    "toning-4-knee": {
+      "Lower 1": buildKneeFriendlyLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Lower 2": buildKneeFriendlyLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+    },
+    "toning-5-standard": {
+      "Lower 1": buildObjectiveLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Lower 2": buildObjectiveLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+      Glutes: buildObjectiveGlutesFinish(),
+    },
+    "toning-5-knee": {
+      "Lower 1": buildKneeFriendlyLowerA(),
+      "Upper 1": buildObjectiveUpperA(),
+      "Lower 2": buildKneeFriendlyLowerB(),
+      "Upper 2": buildObjectiveUpperB(),
+      Glutes: buildObjectiveGlutesFinish(),
+    },
+    "muscle-gain-3-standard": {
+      "Full A": buildMuscleFullA(),
+      "Full B": buildMuscleFullB(),
+      "Full C": buildMuscleFullC(),
+    },
+    "muscle-gain-3-knee": {
+      "Full A": buildKneeFriendlyFullA(),
+      "Full B": buildKneeFriendlyFullB(),
+      "Full C": buildKneeFriendlyFullC(),
+    },
+    "muscle-gain-4-standard": {
+      "Upper A": buildUpperPrimeA(),
+      "Lower A": buildLowerPrimeA(),
+      "Upper B": buildUpperPrimeB(),
+      "Lower B": buildLowerPrimeB(),
+    },
+    "muscle-gain-4-knee": {
+      "Upper A": buildUpperPrimeA(),
+      "Lower A": buildKneeFriendlyLowerA(),
+      "Upper B": buildUpperPrimeB(),
+      "Lower B": buildKneeFriendlyLowerB(),
+    },
+    "muscle-gain-5-standard": {
+      Push: buildPushPrimeA(),
+      Pull: buildPullPrimeA(),
+      Legs: buildLegsPrimeA(),
+      Upper: buildUpperPrimeA(),
+      Arms: buildArmsPrimeDay(),
+    },
+    "muscle-gain-5-knee": {
+      Push: buildPushPrimeA(),
+      Pull: buildPullPrimeA(),
+      Legs: buildKneeFriendlyLowerA(),
+      Upper: buildUpperPrimeA(),
+      Arms: buildArmsPrimeDay(),
+    },
+    "wellbeing-3-standard": {
+      "Full A": buildWellbeingFullA(),
+      "Full B": buildWellbeingFullB(),
+      "Full C": buildWellbeingFullC(),
+    },
+    "wellbeing-3-knee": {
+      "Full A": buildKneeFriendlyFullA(),
+      "Full B": buildKneeFriendlyFullB(),
+      "Full C": buildKneeFriendlyFullC(),
+    },
+    "wellbeing-4-standard": {
+      "Upper A": buildWellbeingUpperA(),
+      "Lower A": buildWellbeingLowerA(),
+      "Full A": buildWellbeingFullA(),
+      "Full B": buildWellbeingFullB(),
+    },
+    "wellbeing-4-knee": {
+      "Upper A": buildWellbeingUpperA(),
+      "Lower A": buildKneeFriendlyLowerA(),
+      "Full A": buildKneeFriendlyFullA(),
+      "Full B": buildKneeFriendlyFullB(),
+    },
+    "wellbeing-5-standard": {
+      "Upper A": buildWellbeingUpperA(),
+      "Lower A": buildWellbeingLowerA(),
+      "Full A": buildWellbeingFullA(),
+      "Upper B": buildWellbeingUpperB(),
+      "Lower B": buildWellbeingLowerB(),
+    },
+    "wellbeing-5-knee": {
+      "Upper A": buildWellbeingUpperA(),
+      "Lower A": buildKneeFriendlyLowerA(),
+      "Full A": buildKneeFriendlyFullA(),
+      "Upper B": buildWellbeingUpperB(),
+      "Lower B": buildKneeFriendlyLowerB(),
+    },
   };
 
   return finalizeTemplateProgram(templates[templateId] || createProgramCopy());
 }
 
 function getProgramTemplateById(templateId) {
-  const allOptions = [3, 4, 5, 6].flatMap((days) => getProgramPlannerOptions(days));
+  const objectiveGoal = getObjectiveGoalFromTemplateId(templateId);
+
+  if (objectiveGoal) {
+    const matchedDays = Number(String(templateId).match(/-(3|4|5)-/)?.[1] || 0);
+    const matchedConstraint = templateId.endsWith("-knee") ? "knee-friendly" : "standard";
+    return (
+      getObjectiveProgramPlannerOptions(matchedDays, objectiveGoal, matchedConstraint).find(
+        (template) => template.id === templateId
+      ) || null
+    );
+  }
+
+  const allOptions = getAllProgramPlannerOptions();
   return allOptions.find((template) => template.id === templateId) || null;
 }
 
 function inferProgramTemplateMeta(program = {}) {
   const programDays = getProgramDayKeys(program);
-  const allOptions = [3, 4, 5, 6].flatMap((days) => getProgramPlannerOptions(days));
+  const allOptions = getAllProgramPlannerOptions();
   const matchedTemplate = allOptions.find(
     (template) =>
       template.days.length === programDays.length &&
@@ -2418,6 +3183,8 @@ function renderProgramTemplatePreviewOverlay() {
   const hasWorkoutInProgress =
     state.pendingSession.length > 0 || state.timer.active || state.workoutFinished;
   const accentDay = getDayTheme(template.days[0]).accentDay;
+  const goalMeta = template.goal ? getProgramPlannerGoalMeta(template.goal) : null;
+  const constraintMeta = template.constraint ? getProgramPlannerConstraintMeta(template.constraint) : null;
 
   return `
     <div class="sheet-overlay">
@@ -2434,8 +3201,18 @@ function renderProgramTemplatePreviewOverlay() {
 
         <div class="sheet-card__body template-preview">
           <div class="template-preview__intro">
-            <div class="template-preview__eyebrow">${template.split} - ${template.days.length} jours</div>
+            <div class="template-preview__eyebrow">
+              ${[
+                template.split,
+                goalMeta?.title || "",
+                constraintMeta?.shortLabel || "",
+                `${template.days.length} jours`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
             <div class="template-preview__why">${template.why}</div>
+            ${template.note ? `<div class="template-preview__note">${template.note}</div>` : ""}
           </div>
 
           ${
@@ -2576,6 +3353,8 @@ function buildPersistedState() {
     programTemplateTitle: state.programTemplateTitle,
     programEditorDay: state.programEditorDay,
     programPlannerDays: state.programPlannerDays,
+    programPlannerGoal: state.programPlannerGoal,
+    programPlannerConstraint: state.programPlannerConstraint,
     settingsSection: state.settingsSection,
     cycle: state.cycle,
     exerciseData: state.exerciseData,
@@ -2613,9 +3392,21 @@ function hydrateState(parsed = {}) {
   state.exerciseData = parsed.exerciseData || {};
   state.history = parsed.history || [];
   state.cycle = sanitizeCycle(parsed.cycle);
+  state.programPlannerGoal = PROGRAM_PLANNER_GOALS[parsed.programPlannerGoal]
+    ? parsed.programPlannerGoal
+    : "classic";
+  state.programPlannerConstraint = PROGRAM_PLANNER_CONSTRAINTS[parsed.programPlannerConstraint]
+    ? parsed.programPlannerConstraint
+    : "standard";
   state.programPlannerDays = [3, 4, 5, 6].includes(Number(parsed.programPlannerDays))
     ? Number(parsed.programPlannerDays)
     : Math.min(6, Math.max(3, getProgramDays().length || 4));
+  if (!getProgramPlannerAvailableDays(state.programPlannerGoal).includes(state.programPlannerDays)) {
+    state.programPlannerDays = getRecommendedProgramPlannerDays(state.programPlannerGoal);
+  }
+  if (isClassicProgramPlannerGoal(state.programPlannerGoal)) {
+    state.programPlannerConstraint = "standard";
+  }
   state.settingsSection = typeof parsed.settingsSection === "string" ? parsed.settingsSection : "";
   const fallbackDay = getProgramDays()[0] || "Push";
   state.day = getProgramDays().includes(parsed.day) ? parsed.day : fallbackDay;
@@ -2863,6 +3654,8 @@ function clearAllData() {
   state.programTemplateTitle = "PPL + Upper";
   state.programEditorDay = "Push";
   state.programPlannerDays = 4;
+  state.programPlannerGoal = "classic";
+  state.programPlannerConstraint = "standard";
   state.settingsSection = "";
   state.cycle = createDefaultCycle();
   state.exerciseData = {};
@@ -3287,6 +4080,8 @@ function resetProgram() {
   state.programEditorDay = state.day;
   state.programEntryEditor = null;
   state.programPlannerDays = 4;
+  state.programPlannerGoal = "classic";
+  state.programPlannerConstraint = "standard";
   resetWorkoutState();
   ensureSelectedChartKeyIsValid();
   saveState();
@@ -3294,8 +4089,34 @@ function resetProgram() {
 }
 
 function setProgramPlannerDays(days) {
-  if (![3, 4, 5, 6].includes(Number(days))) return;
+  if (!getProgramPlannerAvailableDays().includes(Number(days))) return;
   state.programPlannerDays = Number(days);
+  state.programTemplatePreviewId = "";
+  saveState();
+  renderApp();
+}
+
+function setProgramPlannerGoal(goal) {
+  if (!PROGRAM_PLANNER_GOALS[goal]) return;
+  state.programPlannerGoal = goal;
+  if (isClassicProgramPlannerGoal(goal)) {
+    state.programPlannerConstraint = "standard";
+  }
+  if (!getProgramPlannerAvailableDays(goal).includes(state.programPlannerDays)) {
+    state.programPlannerDays = getRecommendedProgramPlannerDays(goal);
+  }
+  state.programTemplatePreviewId = "";
+  saveState();
+  renderApp();
+}
+
+function setProgramPlannerConstraint(constraint) {
+  if (!PROGRAM_PLANNER_CONSTRAINTS[constraint]) return;
+  if (isClassicProgramPlannerGoal()) {
+    state.programPlannerConstraint = "standard";
+  } else {
+    state.programPlannerConstraint = constraint;
+  }
   state.programTemplatePreviewId = "";
   saveState();
   renderApp();
@@ -3329,6 +4150,11 @@ function applyProgramTemplate(templateId) {
   state.programTemplateId = template.id;
   state.programTemplateTitle = template.title;
   state.programPlannerDays = template.days.length;
+  state.programPlannerGoal = template.goal || "classic";
+  state.programPlannerConstraint =
+    template.constraint && !isClassicProgramPlannerGoal(template.goal)
+      ? template.constraint
+      : "standard";
   state.programTemplatePreviewId = "";
   state.programEntryEditor = null;
   state.day = Object.keys(state.program)[0] || "Push";
@@ -5265,25 +6091,55 @@ function renderProgramEditor() {
 }
 
 function renderProgramPlanner() {
-  const selectedDays = [3, 4, 5, 6].includes(state.programPlannerDays) ? state.programPlannerDays : 4;
-  const templates = getProgramPlannerOptions(selectedDays);
+  const selectedGoal = getProgramPlannerGoalMeta();
+  const selectedConstraint = getProgramPlannerConstraintMeta();
+  const availableDays = getProgramPlannerAvailableDays(selectedGoal.id);
+  const selectedDays = availableDays.includes(state.programPlannerDays)
+    ? state.programPlannerDays
+    : getRecommendedProgramPlannerDays(selectedGoal.id);
+  const templates = getProgramPlannerOptions(
+    selectedDays,
+    selectedGoal.id,
+    state.programPlannerConstraint
+  );
+  const plannerHint = isClassicProgramPlannerGoal(selectedGoal.id)
+    ? "Choisis ton nombre de jours, puis on te propose le split le plus logique avec deux alternatives deja pretes."
+    : "Choisis l'objectif, puis le nombre de jours et enfin l'option genou si besoin. On te propose un recommande clair et deux alternatives.";
 
   return `
     <article class="surface surface-pad stack-md program-planner">
       <div class="dashboard-section-head">
         <div>
-          <div class="label">Choix du split</div>
+          <div class="label">Choix du programme</div>
           <h3 class="section-title dashboard-section-head__title">Assistant programme</h3>
         </div>
         <div class="label">${getProgramDays().length} blocs actifs</div>
       </div>
 
+      <div class="planner-goal-grid">
+        ${Object.values(PROGRAM_PLANNER_GOALS)
+          .map(
+            (goal) => `
+              <button
+                class="planner-goal-card ${selectedGoal.id === goal.id ? "is-active" : ""}"
+                data-action="set-program-planner-goal"
+                data-program-goal="${goal.id}"
+              >
+                <span class="planner-goal-card__eyebrow">Objectif</span>
+                <span class="planner-goal-card__title">${goal.title}</span>
+                <span class="planner-goal-card__meta">${goal.description}</span>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
       <div class="program-hint">
-        Choisis ton nombre de jours, puis on te propose le split le plus logique avec deux alternatives deja pretes.
+        ${plannerHint}
       </div>
 
       <div class="planner-days-tabs">
-        ${[3, 4, 5, 6]
+        ${availableDays
           .map(
             (days) => `
               <button class="program-day-tab ${selectedDays === days ? "is-active" : ""}" data-action="set-program-planner-days" data-program-days="${days}">
@@ -5294,15 +6150,49 @@ function renderProgramPlanner() {
           .join("")}
       </div>
 
+      ${
+        isClassicProgramPlannerGoal(selectedGoal.id)
+          ? ""
+          : `
+            <div class="planner-constraint-grid">
+              ${Object.values(PROGRAM_PLANNER_CONSTRAINTS)
+                .map(
+                  (constraint) => `
+                    <button
+                      class="planner-constraint-card ${selectedConstraint.id === constraint.id ? "is-active" : ""}"
+                      data-action="set-program-planner-constraint"
+                      data-program-constraint="${constraint.id}"
+                    >
+                      <span class="planner-constraint-card__title">${constraint.title}</span>
+                      <span class="planner-constraint-card__meta">${constraint.description}</span>
+                    </button>
+                  `
+                )
+                .join("")}
+            </div>
+          `
+      }
+
       <div class="template-list">
         ${templates
           .map((template) => `
             <article class="surface surface--soft surface-pad template-card" data-accent-day="${getDayTheme(template.days[0]).accentDay}">
               <div class="template-card__head">
                 <div class="stack-sm">
-                  <div class="template-card__eyebrow">${template.split}</div>
+                  <div class="template-card__eyebrow">
+                    ${[
+                      template.split,
+                      template.goal ? getProgramPlannerGoalMeta(template.goal).title : "",
+                      template.constraint && template.constraint !== "standard"
+                        ? getProgramPlannerConstraintMeta(template.constraint).shortLabel
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
                   <div class="template-card__title">${template.title}</div>
                   <div class="template-card__meta">${template.why}</div>
+                  ${template.note ? `<div class="template-card__note">${template.note}</div>` : ""}
                 </div>
                 <span class="pill ${template.split === "Recommande" ? "" : "pill--outline"}">${template.days.length}J</span>
               </div>
@@ -5858,6 +6748,14 @@ function bindEvents() {
 
       if (action === "set-program-planner-days") {
         setProgramPlannerDays(button.dataset.programDays);
+      }
+
+      if (action === "set-program-planner-goal") {
+        setProgramPlannerGoal(button.dataset.programGoal);
+      }
+
+      if (action === "set-program-planner-constraint") {
+        setProgramPlannerConstraint(button.dataset.programConstraint);
       }
 
       if (action === "apply-program-template") {
