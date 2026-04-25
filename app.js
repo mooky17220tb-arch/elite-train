@@ -811,11 +811,38 @@ function vibrateRestAlert() {
   navigator.vibrate([180, 70, 180]);
 }
 
-function normalizeProgramEntry(entry, fallback = {}) {
-  const minReps = sanitizePositiveInteger(entry?.minReps, fallback.minReps ?? 10, 1);
+// Exact rep targets make the progression logic too binary, so we widen them into small working ranges.
+function normalizeRepRange(minRepsValue, maxRepsValue, kind = "isolation", series = "") {
+  const minReps = sanitizePositiveInteger(minRepsValue, 10, 1);
   const maxReps = Math.max(
     minReps,
-    sanitizePositiveInteger(entry?.maxReps, fallback.maxReps ?? Math.max(minReps, 12), minReps)
+    sanitizePositiveInteger(maxRepsValue ?? minReps, minReps, minReps)
+  );
+
+  if (maxReps > minReps) {
+    return { minReps, maxReps };
+  }
+
+  const seriesLabel = sanitizePlainText(series, "").toLowerCase();
+  const rangeWidth =
+    kind === "isolation" || seriesLabel.includes("activation") ? 3 : 2;
+
+  return {
+    minReps,
+    maxReps: minReps + rangeWidth,
+  };
+}
+
+function normalizeProgramEntry(entry, fallback = {}) {
+  const kind = ["barbell", "machine", "dumbbell", "isolation"].includes(entry?.kind)
+    ? entry.kind
+    : fallback.kind || "isolation";
+  const series = sanitizePlainText(entry?.series, fallback.series || "Serie 1");
+  const { minReps, maxReps } = normalizeRepRange(
+    entry?.minReps ?? fallback.minReps ?? 10,
+    entry?.maxReps ?? fallback.maxReps ?? entry?.minReps ?? fallback.minReps ?? 10,
+    kind,
+    series
   );
   const defaultLoad = sanitizeLoadNumber(entry?.defaultLoad, fallback.defaultLoad ?? null);
   const loadLabel = sanitizePlainText(
@@ -825,10 +852,8 @@ function normalizeProgramEntry(entry, fallback = {}) {
 
   return {
     exercise: sanitizePlainText(entry?.exercise, fallback.exercise || "Nouvel exercice"),
-    kind: ["barbell", "machine", "dumbbell", "isolation"].includes(entry?.kind)
-      ? entry.kind
-      : fallback.kind || "isolation",
-    series: sanitizePlainText(entry?.series, fallback.series || "Serie 1"),
+    kind,
+    series,
     targetLabel: formatTargetLabelFromRange(minReps, maxReps),
     minReps,
     maxReps,
@@ -856,12 +881,19 @@ function sanitizeProgram(program) {
 }
 
 function createTemplateEntry(exercise, kind, series, minReps, maxReps, defaultLoad = null, loadLabel = "") {
+  const normalizedKind = ["barbell", "machine", "dumbbell", "isolation"].includes(kind)
+    ? kind
+    : "isolation";
+  const normalizedSeries = sanitizePlainText(series, "Serie 1");
+  const normalizedExercise = sanitizePlainText(exercise, "Nouvel exercice");
+  const normalizedRange = normalizeRepRange(minReps, maxReps, normalizedKind, normalizedSeries);
+
   return {
-    exercise,
-    kind,
-    series,
-    minReps,
-    maxReps,
+    exercise: normalizedExercise,
+    kind: normalizedKind,
+    series: normalizedSeries,
+    minReps: normalizedRange.minReps,
+    maxReps: normalizedRange.maxReps,
     defaultLoad,
     loadLabel: loadLabel || (isNumericLoad(defaultLoad) ? `${defaultLoad} kg` : "Charge libre"),
   };
