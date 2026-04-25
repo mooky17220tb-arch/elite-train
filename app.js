@@ -1,6 +1,6 @@
 ﻿const STORAGE_KEY = "elite-train-iphone-v1";
 const STORAGE_BACKUP_KEY = `${STORAGE_KEY}-backup`;
-const STORAGE_SCHEMA_VERSION = 2;
+const STORAGE_SCHEMA_VERSION = 3;
 const CURRENT_REST_PROFILE_VERSION = 2;
 
 const PROGRAM = {
@@ -574,6 +574,10 @@ function sanitizeTimestamp(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function sanitizeExerciseKind(value, fallback = "isolation") {
+  return ["barbell", "machine", "dumbbell", "isolation"].includes(value) ? value : fallback;
+}
+
 function sanitizeLoadNumber(value, fallback = null) {
   if (value === "" || value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -588,8 +592,95 @@ function sanitizePlainText(value, fallback) {
   return text || fallback;
 }
 
+function sanitizeIsoDate(value, fallback = "") {
+  if (typeof value !== "string" || !value) return fallback;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
+}
+
+function sanitizeTimerState(timer = {}) {
+  const seconds = sanitizePositiveInteger(timer?.seconds, 0, 0);
+  const active = Boolean(timer?.active) && seconds > 0;
+  return {
+    seconds,
+    active,
+  };
+}
+
 function formatTargetLabelFromRange(minReps, maxReps) {
   return minReps === maxReps ? `${minReps}` : `${minReps}-${maxReps}`;
+}
+
+function sanitizeHistoryEntry(entry = {}) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const day = sanitizePlainText(entry.day, "Seance");
+  const exercise = sanitizePlainText(entry.exercise, "Exercice");
+  const series = sanitizePlainText(entry.series, "Serie 1");
+  const kind = sanitizeExerciseKind(entry.kind, "isolation");
+  const { minReps, maxReps } = normalizeRepRange(
+    entry.minReps,
+    entry.maxReps,
+    kind,
+    series
+  );
+  const reps = sanitizePositiveInteger(entry.reps, minReps, 1);
+  const rest = sanitizePositiveInteger(entry.rest, 0, 0);
+  const load = sanitizeLoadNumber(entry.load, null);
+  const defaultLoadLabel = isNumericLoad(load) ? `${load} kg` : "Charge libre";
+  const loadLabel = sanitizePlainText(entry.loadLabel, defaultLoadLabel);
+  const date = sanitizeIsoDate(entry.date, new Date().toISOString());
+  const rpeRaw = Number(entry.rpe);
+  const rpe = Number.isFinite(rpeRaw) ? Math.max(6, Math.min(10, Math.round(rpeRaw * 10) / 10)) : 8;
+
+  return {
+    key: sanitizePlainText(entry.key, buildExerciseKey(day, exercise, series)),
+    day,
+    exercise,
+    series,
+    kind,
+    minReps,
+    maxReps,
+    target: formatTargetLabelFromRange(minReps, maxReps),
+    load,
+    loadLabel,
+    reps,
+    rpe,
+    rest,
+    date,
+  };
+}
+
+function sanitizeHistoryEntries(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => sanitizeHistoryEntry(entry))
+    .filter(Boolean);
+}
+
+function sanitizePendingSessionEntries(entries = []) {
+  return sanitizeHistoryEntries(entries);
+}
+
+function sanitizeExerciseDataMap(exerciseData = {}) {
+  if (!exerciseData || typeof exerciseData !== "object") return {};
+
+  return Object.entries(exerciseData).reduce((accumulator, [key, value]) => {
+    if (typeof key !== "string" || !key.trim() || !value || typeof value !== "object") {
+      return accumulator;
+    }
+
+    const load = sanitizeLoadNumber(value.load, null);
+    accumulator[key] = {
+      load,
+      loadLabel: sanitizePlainText(
+        value.loadLabel,
+        isNumericLoad(load) ? `${load} kg` : "Charge libre"
+      ),
+      deload: Boolean(value.deload),
+    };
+    return accumulator;
+  }, {});
 }
 
 function getRestAlertCopy() {
@@ -3375,25 +3466,37 @@ function getChartData(preferredKey = "") {
 }
 
 function buildPersistedState() {
+  const sanitizedProgram = sanitizeProgram(state.program);
+  const sanitizedCycle = sanitizeCycle(state.cycle);
+  const sanitizedTimer = sanitizeTimerState(state.timer);
+  const sanitizedPendingSession = sanitizePendingSessionEntries(state.pendingSession);
+  const sanitizedHistory = sanitizeHistoryEntries(state.history);
+  const sanitizedExerciseData = sanitizeExerciseDataMap(state.exerciseData);
+  const availableDays = getProgramDayKeys(sanitizedProgram);
+  const currentDay = availableDays.includes(state.day) ? state.day : availableDays[0] || "Push";
+  const programEditorDay = availableDays.includes(state.programEditorDay)
+    ? state.programEditorDay
+    : currentDay;
+
   return {
     schemaVersion: STORAGE_SCHEMA_VERSION,
     restProfileVersion: CURRENT_REST_PROFILE_VERSION,
     savedAt: new Date().toISOString(),
     screen: state.screen,
-    program: state.program,
+    program: sanitizedProgram,
     programTemplateId: state.programTemplateId,
     programTemplateTitle: state.programTemplateTitle,
-    programEditorDay: state.programEditorDay,
+    programEditorDay,
     programPlannerDays: state.programPlannerDays,
     programPlannerGoal: state.programPlannerGoal,
     programPlannerConstraint: state.programPlannerConstraint,
     settingsSection: state.settingsSection,
-    cycle: state.cycle,
-    exerciseData: state.exerciseData,
-    history: state.history,
-    day: state.day,
+    cycle: sanitizedCycle,
+    exerciseData: sanitizedExerciseData,
+    history: sanitizedHistory,
+    day: currentDay,
     currentIndex: state.currentIndex,
-    timer: state.timer,
+    timer: sanitizedTimer,
     restAlertVisible: state.restAlertVisible,
     restSoundEnabled: state.restSoundEnabled,
     restVibrationEnabled: state.restVibrationEnabled,
@@ -3405,7 +3508,7 @@ function buildPersistedState() {
     pendingAdvance: state.pendingAdvance,
     timerEndsAt: state.timerEndsAt,
     workoutStartedAt: state.workoutStartedAt,
-    pendingSession: state.pendingSession,
+    pendingSession: sanitizedPendingSession,
     selectedChartKey: state.selectedChartKey,
     historyDetailKey: state.historyDetailKey,
     installHintDismissed: state.installHintDismissed,
@@ -3421,8 +3524,8 @@ function hydrateState(parsed = {}) {
     typeof parsed.programTemplateId === "string" ? parsed.programTemplateId : inferredMeta.id;
   state.programTemplateTitle = sanitizePlainText(parsed.programTemplateTitle, inferredMeta.title);
   state.screen = parsed.screen || "dashboard";
-  state.exerciseData = parsed.exerciseData || {};
-  state.history = parsed.history || [];
+  state.exerciseData = sanitizeExerciseDataMap(parsed.exerciseData);
+  state.history = sanitizeHistoryEntries(parsed.history);
   state.cycle = sanitizeCycle(parsed.cycle);
   state.programPlannerGoal = PROGRAM_PLANNER_GOALS[parsed.programPlannerGoal]
     ? parsed.programPlannerGoal
@@ -3449,7 +3552,7 @@ function hydrateState(parsed = {}) {
     parsed.currentIndex || 0,
     Math.max(0, (state.program[state.day] || []).length - 1)
   );
-  state.timer = parsed.timer || { seconds: 0, active: false };
+  state.timer = sanitizeTimerState(parsed.timer);
   state.restAlertVisible = Boolean(parsed.restAlertVisible);
   state.restSoundEnabled = parsed.restSoundEnabled ?? true;
   state.restVibrationEnabled = parsed.restVibrationEnabled ?? true;
@@ -3461,7 +3564,7 @@ function hydrateState(parsed = {}) {
   state.pendingAdvance = sanitizePendingAdvance(parsed.pendingAdvance);
   state.timerEndsAt = sanitizeTimestamp(parsed.timerEndsAt);
   state.workoutStartedAt = typeof parsed.workoutStartedAt === "string" ? parsed.workoutStartedAt : "";
-  state.pendingSession = parsed.pendingSession || [];
+  state.pendingSession = sanitizePendingSessionEntries(parsed.pendingSession);
   state.selectedChartKey = parsed.selectedChartKey || "";
   state.historyDetailKey = parsed.historyDetailKey || "";
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
@@ -3496,18 +3599,44 @@ function hydrateState(parsed = {}) {
 }
 
 function saveState() {
+  const payload = buildPersistedState();
+  const serialized = JSON.stringify(payload);
+  let mainSaved = false;
+  let backupSaved = false;
+
   try {
-    const payload = buildPersistedState();
-    const serialized = JSON.stringify(payload);
     localStorage.setItem(STORAGE_KEY, serialized);
-    localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
-    state.storageMeta.lastSavedAt = payload.savedAt;
-    state.storageMeta.backupAvailable = true;
-    state.storageMeta.saveError = "";
+    mainSaved = true;
   } catch (error) {
-    console.error("Erreur sauvegarde localStorage", error);
-    state.storageMeta.saveError = "Sauvegarde locale incomplete";
+    console.error("Erreur sauvegarde locale principale", error);
   }
+
+  try {
+    localStorage.setItem(STORAGE_BACKUP_KEY, serialized);
+    backupSaved = true;
+  } catch (error) {
+    console.error("Erreur sauvegarde backup local", error);
+  }
+
+  state.storageMeta.lastSavedAt = payload.savedAt;
+  state.storageMeta.backupAvailable = backupSaved || Boolean(localStorage.getItem(STORAGE_BACKUP_KEY));
+
+  if (mainSaved && backupSaved) {
+    state.storageMeta.saveError = "";
+    return;
+  }
+
+  if (mainSaved) {
+    state.storageMeta.saveError = "Backup local indisponible";
+    return;
+  }
+
+  if (backupSaved) {
+    state.storageMeta.saveError = "Sauvegarde principale indisponible";
+    return;
+  }
+
+  state.storageMeta.saveError = "Sauvegarde locale incomplete";
 }
 
 function restoreState() {
@@ -5374,7 +5503,26 @@ function getStagnationInsight(key) {
   };
 }
 
-function getFatigueProfile() {
+function getHoursSinceLatestSession(day = "") {
+  const entries = day
+    ? getSortedHistory().filter((item) => item.day === day)
+    : getSortedHistory();
+  const latestEntry = entries[0];
+  if (!latestEntry) return null;
+
+  const latestTime = new Date(latestEntry.date).getTime();
+  if (!Number.isFinite(latestTime)) return null;
+
+  return Math.max(0, (Date.now() - latestTime) / (1000 * 60 * 60));
+}
+
+function formatRecoveryGap(hours) {
+  if (!Number.isFinite(hours)) return "pas encore de recul";
+  if (hours < 24) return `${Math.max(1, Math.round(hours))} h`;
+  return `${Math.max(1, Math.round(hours / 24))} j`;
+}
+
+function getFatigueProfile(day = "") {
   if (!state.history.length) {
     return {
       score: 0,
@@ -5385,6 +5533,8 @@ function getFatigueProfile() {
       recentSets: 0,
       reduceSignals: 0,
       streak: 0,
+      lastWorkoutHours: null,
+      sameDayHours: null,
     };
   }
 
@@ -5395,36 +5545,47 @@ function getFatigueProfile() {
     (entry) => getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe).type === "reduce"
   ).length;
   const streak = getRecentTrainingStreak(7);
+  const lastWorkoutHours = getHoursSinceLatestSession();
+  const sameDayHours = day ? getHoursSinceLatestSession(day) : null;
 
   let score = 0;
-  if (weeklySessions >= 4) score += 1;
-  if (recentSets >= 18) score += 1;
-  if (reduceSignals >= 2) score += 1;
+  if (weeklySessions >= 5) score += 2;
+  else if (weeklySessions >= 4) score += 1;
+  if (recentSets >= 24) score += 2;
+  else if (recentSets >= 18) score += 1;
+  if (reduceSignals >= 3) score += 2;
+  else if (reduceSignals >= 2) score += 1;
   if (streak >= 3) score += 1;
+  if (Number.isFinite(lastWorkoutHours) && lastWorkoutHours < 24) score += 1;
+  if (Number.isFinite(sameDayHours) && sameDayHours < 72) score += 1;
 
-  if (score >= 4) {
+  if (score >= 6) {
     return {
       score,
       label: "Deload",
       tone: "reduce",
-      detail: "Volume charge et plusieurs signaux bas cette semaine",
+      detail: "Volume charge, marge basse et recup courte sur les derniers jours",
       weeklySessions,
       recentSets,
       reduceSignals,
       streak,
+      lastWorkoutHours,
+      sameDayHours,
     };
   }
 
-  if (score >= 2) {
+  if (score >= 3) {
     return {
       score,
       label: "A surveiller",
       tone: "hold",
-      detail: "Garde un peu de marge sur les gros mouvements",
+      detail: "Garde de la marge sur les gros mouvements et surveille la recup",
       weeklySessions,
       recentSets,
       reduceSignals,
       streak,
+      lastWorkoutHours,
+      sameDayHours,
     };
   }
 
@@ -5437,6 +5598,104 @@ function getFatigueProfile() {
     recentSets,
     reduceSignals,
     streak,
+    lastWorkoutHours,
+    sameDayHours,
+  };
+}
+
+function getRecoveryProfile(day, fatigue = getFatigueProfile(day)) {
+  if (!state.history.length) {
+    return {
+      score: 0,
+      label: "Depart",
+      tone: "hold",
+      value: "A lancer",
+      meta: "2 a 3 seances suffisent pour lire ta recup",
+    };
+  }
+
+  const lastWorkoutGap = formatRecoveryGap(fatigue.lastWorkoutHours);
+  const sameDayGap = Number.isFinite(fatigue.sameDayHours)
+    ? formatRecoveryGap(fatigue.sameDayHours)
+    : "nouveau bloc";
+
+  if (Number.isFinite(fatigue.lastWorkoutHours) && fatigue.lastWorkoutHours < 18) {
+    return {
+      score: 2,
+      label: "Courte",
+      tone: "reduce",
+      value: "Courte",
+      meta: `Derniere seance il y a ${lastWorkoutGap} · ${day} revu il y a ${sameDayGap}`,
+    };
+  }
+
+  if (
+    (Number.isFinite(fatigue.lastWorkoutHours) && fatigue.lastWorkoutHours < 36) ||
+    (Number.isFinite(fatigue.sameDayHours) && fatigue.sameDayHours < 72)
+  ) {
+    return {
+      score: 1,
+      label: "Moyenne",
+      tone: "hold",
+      value: "Correcte",
+      meta: `Derniere seance il y a ${lastWorkoutGap} · ${day} revu il y a ${sameDayGap}`,
+    };
+  }
+
+  return {
+    score: 0,
+    label: "Bonne",
+    tone: "progress",
+    value: "Bonne",
+    meta: `Derniere seance il y a ${lastWorkoutGap} · ${day} revu il y a ${sameDayGap}`,
+  };
+}
+
+function getDeloadRecommendation(day, cycle, fatigue, recovery, stagnation, focusAdvice) {
+  if (cycle.current.tone === "reduce") {
+    return {
+      tone: "reduce",
+      value: "Planifie",
+      meta: cycle.current.prescription,
+      recommended: true,
+      action: "Deload",
+      signal: cycle.current.phase,
+      note: `${cycle.current.phase} sur ton bloc ${cycle.goalLabel.toLowerCase()}. ${cycle.current.prescription}`,
+    };
+  }
+
+  if (fatigue.score >= 6 || (fatigue.reduceSignals >= 2 && recovery.score >= 1)) {
+    return {
+      tone: "reduce",
+      value: "Suggere",
+      meta: `Alleger ${day} de 1 a 2 series et garder 2 reps de marge`,
+      recommended: true,
+      action: "Deload",
+      signal: "Fatigue",
+      note: `Le volume recent et la recup indiquent qu'un deload leger sur ${day} serait utile pour repartir propre.`,
+    };
+  }
+
+  if (stagnation?.stalled && focusAdvice?.type === "reduce") {
+    return {
+      tone: "hold",
+      value: "Leger",
+      meta: "Une seance plus facile peut suffire avant de relancer",
+      recommended: false,
+      action: "Baisser",
+      signal: "Sous cible",
+      note: `Le mouvement focus est sous pression. Fais une seance plus facile ou retire un peu de volume avant de remonter.`,
+    };
+  }
+
+  return {
+    tone: "progress",
+    value: "RAS",
+    meta: "Continue le bloc si la technique reste propre",
+    recommended: false,
+    action: "",
+    signal: "",
+    note: "",
   };
 }
 
@@ -5445,19 +5704,21 @@ function getCoachSnapshot() {
   const day = resume?.day || getNextTrainingDay();
   const cycle = getCycleSnapshot();
   const focusEntry = pickCoachFocusEntry(day);
-  const fatigue = getFatigueProfile();
+  const fatigue = getFatigueProfile(day);
+  const recovery = getRecoveryProfile(day, fatigue);
   const stagnation = focusEntry ? getStagnationInsight(focusEntry.key) : null;
   const focusAdvice = focusEntry
     ? getAdvice(focusEntry.reps, focusEntry.minReps, focusEntry.maxReps, focusEntry.rpe ?? 8)
     : null;
   const averageRest = getDayAverageRest(day);
+  const deloadCall = getDeloadRecommendation(day, cycle, fatigue, recovery, stagnation, focusAdvice);
   const volumeCall =
-    cycle.current.tone === "reduce" || fatigue.score >= 4
+    deloadCall.recommended
       ? {
           value: "Alleger",
           meta: "Retire 1 a 2 series sur les mouvements qui piquent",
         }
-      : fatigue.score >= 2
+      : fatigue.score >= 3
       ? {
           value: "Stable",
           meta: `${fatigue.recentSets} series sur 7 jours, garde ce volume`,
@@ -5467,12 +5728,12 @@ function getCoachSnapshot() {
           meta: `${fatigue.recentSets} series sur 7 jours, volume plein autorise`,
         };
   const intensityCall =
-    cycle.current.tone === "reduce" || fatigue.score >= 4
+    deloadCall.recommended
       ? {
           value: "Technique",
           meta: "Reste a 1-2 reps de marge sur les gros exos",
         }
-      : focusAdvice?.type === "progress" && fatigue.score <= 1
+      : focusAdvice?.type === "progress" && fatigue.score <= 1 && recovery.score === 0
       ? {
           value: "Offensif",
           meta: "Tu peux pousser les top sets si la forme reste propre",
@@ -5487,14 +5748,14 @@ function getCoachSnapshot() {
           meta: cycle.current.prescription,
         };
   const recoveryCall =
-    fatigue.score >= 2
+    recovery.score >= 1
       ? {
-          value: `${averageRest}s`,
-          meta: "Prends tes repos pleins sur les mouvements cles",
+          value: recovery.value,
+          meta: `${recovery.meta} · vise ${averageRest}s de repos`,
         }
       : {
-          value: `${averageRest}s`,
-          meta: "Relance des que la qualite reste propre",
+          value: recovery.value,
+          meta: `${recovery.meta} · ${averageRest}s de repos moyen`,
         };
 
   let tone = "hold";
@@ -5502,16 +5763,11 @@ function getCoachSnapshot() {
   let signal = focusEntry ? "Routine" : "Reference";
   let note = `Prochaine ${day}: construis une reference propre et reguliere.`;
 
-  if (cycle.current.tone === "reduce") {
-    tone = "reduce";
-    action = "Deload";
-    signal = cycle.current.phase;
-    note = `${cycle.current.phase} sur ton bloc ${cycle.goalLabel.toLowerCase()}. ${cycle.current.prescription}`;
-  } else if (fatigue.label === "Deload") {
-    tone = "reduce";
-    action = "Deload";
-    signal = "Fatigue";
-    note = `Le volume recent est charge. Sur ${day}, baisse d'un palier ou retire 1 a 2 series pour repartir propre.`;
+  if (deloadCall.recommended) {
+    tone = deloadCall.tone;
+    action = deloadCall.action || "Deload";
+    signal = deloadCall.signal || "Fatigue";
+    note = deloadCall.note || note;
   } else if (focusEntry && focusAdvice?.type === "reduce") {
     tone = "reduce";
     action = "Baisser";
@@ -5548,11 +5804,13 @@ function getCoachSnapshot() {
     signal,
     note,
     cycleLabel: `S${cycle.week}/${cycle.length} Â· ${cycle.current.phase}`,
-    scoreText: `${fatigue.score}/4`,
+    scoreText: `${fatigue.score}/9`,
     streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
     intensityCall,
     volumeCall,
     recoveryCall,
+    recoveryLabel: recovery.label,
+    deloadCall,
   };
 }
 
@@ -7428,6 +7686,11 @@ function renderCoachSection() {
           <span>${coach.recoveryCall.meta}</span>
         </div>
         <div class="coach-pulse">
+          <span class="label">Deload</span>
+          <strong>${coach.deloadCall.value}</strong>
+          <span>${coach.deloadCall.meta}</span>
+        </div>
+        <div class="coach-pulse">
           <span class="label">Bloc</span>
           <strong>${coach.cycleLabel}</strong>
           <span>${coach.focusMeta}</span>
@@ -7436,6 +7699,7 @@ function renderCoachSection() {
 
       <div class="coach-tags">
         <span class="coach-tag">Fatigue ${coach.readiness}</span>
+        <span class="coach-tag">Recup ${coach.recoveryLabel}</span>
         <span class="coach-tag">Lecture ${coach.signal}</span>
         <span class="coach-tag">Bloc ${coach.day}</span>
       </div>
