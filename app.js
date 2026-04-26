@@ -4381,6 +4381,23 @@ function startWorkoutDay(day) {
   renderApp();
 }
 
+function scrollWorkoutViewToTop() {
+  const repsInput = document.getElementById("reps-input");
+  if (repsInput) {
+    repsInput.blur();
+  }
+
+  const scrollToTop = () => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    root.scrollTop = 0;
+  };
+
+  scrollToTop();
+  window.setTimeout(scrollToTop, 140);
+}
+
 function handleValidation() {
   const active = getActiveExercise();
   const reps = parseInt(state.repsInput, 10);
@@ -4430,6 +4447,7 @@ function handleValidation() {
 
   saveState();
   renderApp();
+  scrollWorkoutViewToTop();
 }
 
 function finalizeWorkout() {
@@ -8434,6 +8452,7 @@ function bindEvents() {
     };
     repsInput.onkeydown = (event) => {
       if (event.key === "Enter") {
+        event.preventDefault();
         handleValidation();
       }
     };
@@ -9284,8 +9303,6 @@ function renderWorkout() {
 
         ${renderLastSetActions()}
       </div>
-
-      ${renderLastPerformancePreviewCard()}
     </section>
   `;
 }
