@@ -3916,7 +3916,7 @@ function hydrateState(parsed = {}) {
   state.programTemplateId =
     typeof parsed.programTemplateId === "string" ? parsed.programTemplateId : inferredMeta.id;
   state.programTemplateTitle = sanitizePlainText(parsed.programTemplateTitle, inferredMeta.title);
-  state.screen = parsed.screen || "dashboard";
+  state.screen = "dashboard";
   state.exerciseData = sanitizeExerciseDataMap(parsed.exerciseData);
   state.history = sanitizeHistoryEntries(parsed.history);
   state.cardioSessions = sanitizeCardioEntries(parsed.cardioSessions);
@@ -5062,19 +5062,56 @@ function getDayKey(date) {
   return `${year}-${month}-${day}`;
 }
 
-function getWeeklyPlanner(days = 7) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const counts = new Map();
+function getStartOfWeek(date = new Date()) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  const day = value.getDay();
+  const delta = day === 0 ? -6 : 1 - day;
+  value.setDate(value.getDate() + delta);
+  return value;
+}
+
+function getWeeklySessionTarget() {
+  return Math.max(3, getProgramDays().length || 4);
+}
+
+function getWeeklyCardioTarget() {
+  const goal = state.programPlannerGoal;
+  if (goal === "weight-loss" || goal === "wellbeing") return 150;
+  if (goal === "toning") return 90;
+  if (goal === "muscle-gain") return 45;
+  return 45;
+}
+
+function getWeeklyPlanner() {
+  const weekStart = getStartOfWeek();
+  const todayKey = getDayKey(new Date());
+  const workoutCounts = new Map();
+  const workoutSeen = new Set();
+  const cardioCounts = new Map();
+  const cardioMinutes = new Map();
 
   state.history.forEach((item) => {
-    counts.set(getDayKey(item.date), (counts.get(getDayKey(item.date)) || 0) + 1);
+    const key = getDayKey(item.date);
+    const sessionKey = `${key}__${item.day}`;
+    if (workoutSeen.has(sessionKey)) return;
+    workoutSeen.add(sessionKey);
+    workoutCounts.set(key, (workoutCounts.get(key) || 0) + 1);
   });
 
-  return Array.from({ length: days }, (_, index) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() - (days - 1 - index));
+  state.cardioSessions.forEach((item) => {
+    const key = getDayKey(item.date);
+    cardioCounts.set(key, (cardioCounts.get(key) || 0) + 1);
+    cardioMinutes.set(key, (cardioMinutes.get(key) || 0) + item.duration);
+  });
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
     const key = getDayKey(date);
+    const workoutCount = workoutCounts.get(key) || 0;
+    const cardioCount = cardioCounts.get(key) || 0;
+    const minutes = cardioMinutes.get(key) || 0;
 
     return {
       key,
@@ -5083,10 +5120,57 @@ function getWeeklyPlanner(days = 7) {
         day: "2-digit",
         month: "2-digit",
       }),
-      count: counts.get(key) || 0,
-      isToday: index === days - 1,
+      workoutCount,
+      cardioCount,
+      cardioMinutes: minutes,
+      count: workoutCount,
+      isToday: key === todayKey,
+      isFuture: key > todayKey,
+      isDone: workoutCount > 0 || minutes > 0,
     };
   });
+}
+
+function getWeeklyPlanStatus() {
+  const planner = getWeeklyPlanner();
+  const workoutDone = planner.reduce((total, day) => total + day.workoutCount, 0);
+  const cardioMinutes = planner.reduce((total, day) => total + day.cardioMinutes, 0);
+  const sessionTarget = getWeeklySessionTarget();
+  const cardioTarget = getWeeklyCardioTarget();
+  const remainingSessions = Math.max(0, sessionTarget - workoutDone);
+  const remainingCardio = Math.max(0, cardioTarget - cardioMinutes);
+  const nextTrainingDay = getNextTrainingDay();
+  const today = planner.find((day) => day.isToday) || null;
+
+  let todayFocus = `Prochaine seance : ${nextTrainingDay}`;
+  if (today?.workoutCount > 0 && today?.cardioMinutes > 0) {
+    todayFocus = "Aujourd'hui cochee : muscu + cardio";
+  } else if (today?.workoutCount > 0) {
+    todayFocus =
+      remainingCardio > 0
+        ? `Aujourd'hui muscu faite · cardio utile : ${remainingCardio} min restants`
+        : "Aujourd'hui muscu faite";
+  } else if (today?.cardioMinutes > 0) {
+    todayFocus =
+      remainingSessions > 0
+        ? `Aujourd'hui cardio fait · reste ${remainingSessions} seance(s)`
+        : "Aujourd'hui cardio coche";
+  } else if (remainingSessions > 0) {
+    todayFocus = `A faire : ${nextTrainingDay} · ${remainingSessions} seance(s) restantes`;
+  } else if (remainingCardio > 0) {
+    todayFocus = `A faire : ${remainingCardio} min de cardio cette semaine`;
+  }
+
+  return {
+    planner,
+    workoutDone,
+    cardioMinutes,
+    sessionTarget,
+    cardioTarget,
+    remainingSessions,
+    remainingCardio,
+    todayFocus,
+  };
 }
 
 function getGlobalRecords() {
@@ -8362,7 +8446,8 @@ function renderResumeCard() {
 }
 
 function renderWeeklyPlanner() {
-  const planner = getWeeklyPlanner();
+  const weeklyPlan = getWeeklyPlanStatus();
+  const planner = weeklyPlan.planner;
   const resume = getSmartResumeData();
   const accentDay = resume?.day || getNextTrainingDay();
   const theme = getDayTheme(accentDay);
@@ -8374,16 +8459,41 @@ function renderWeeklyPlanner() {
           <div class="label">Planning</div>
           <h3 class="section-title dashboard-section-head__title">Semaine en cours</h3>
         </div>
-        <div class="label">${getWeeklySessionCount()} seance(s)</div>
+        <div class="label">${weeklyPlan.workoutDone}/${weeklyPlan.sessionTarget} seance(s)</div>
+      </div>
+
+      <div class="planner-summary">
+        <div class="planner-summary__card">
+          <div class="label">Muscu</div>
+          <div class="planner-summary__value">${weeklyPlan.workoutDone}/${weeklyPlan.sessionTarget}</div>
+          <div class="planner-summary__meta">
+            ${weeklyPlan.remainingSessions ? `${weeklyPlan.remainingSessions} restante${weeklyPlan.remainingSessions > 1 ? "s" : ""}` : "Objectif valide"}
+          </div>
+        </div>
+        <div class="planner-summary__card">
+          <div class="label">Cardio</div>
+          <div class="planner-summary__value">${weeklyPlan.cardioMinutes}</div>
+          <div class="planner-summary__meta">
+            ${weeklyPlan.cardioTarget} min cible
+          </div>
+        </div>
+        <div class="planner-summary__card">
+          <div class="label">Focus</div>
+          <div class="planner-summary__value planner-summary__value--text">${getNextTrainingDay()}</div>
+          <div class="planner-summary__meta">
+            ${weeklyPlan.remainingCardio ? `${weeklyPlan.remainingCardio} min cardio restants` : "Cardio dans le rythme"}
+          </div>
+        </div>
       </div>
 
       <div class="planner-grid">
         ${planner
           .map(
             (day) => `
-              <div class="planner-day ${day.count ? "is-done" : ""} ${day.isToday ? "is-today" : ""}">
+              <div class="planner-day ${day.isDone ? "is-done" : ""} ${day.isToday ? "is-today" : ""} ${day.isFuture ? "is-future" : ""}">
                 <div class="planner-day__label">${day.label}</div>
-                <div class="planner-day__count">${day.count || "-"}</div>
+                <div class="planner-day__count">${day.workoutCount || "-"}</div>
+                <div class="planner-day__sub">C ${day.cardioMinutes ? `${day.cardioMinutes}m` : "-"}</div>
                 <div class="planner-day__date">${day.dateLabel}</div>
               </div>
             `
@@ -8393,7 +8503,7 @@ function renderWeeklyPlanner() {
 
       <div class="planner-note">
         <span class="planner-note__pill">${hasWorkoutInProgress() ? "A finir" : theme.badge}</span>
-        <span>${resume?.title || `Prochaine ${getNextTrainingDay()}`}</span>
+        <span>${weeklyPlan.todayFocus}</span>
       </div>
     </article>
   `;
