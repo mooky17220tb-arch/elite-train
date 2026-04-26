@@ -171,6 +171,18 @@ const PROGRAM_PLANNER_CONSTRAINTS = {
     description: "Exercices plus stables, impact reduit, marche privilegiee",
     shortLabel: "Genou sensible",
   },
+  "shoulder-friendly": {
+    id: "shoulder-friendly",
+    title: "Epaule sensible",
+    description: "Presses guidees, prises neutres et overhead lourd retire",
+    shortLabel: "Epaule sensible",
+  },
+  "back-friendly": {
+    id: "back-friendly",
+    title: "Bas du dos sensible",
+    description: "Moins de charge sur le tronc, plus d'appuis stables",
+    shortLabel: "Dos sensible",
+  },
 };
 
 const CARDIO_TYPES = {
@@ -1988,6 +2000,38 @@ function getRecommendedProgramPlannerDays(goal = state.programPlannerGoal) {
   return 4;
 }
 
+function getProgramPlannerConstraintVariant(constraint = "standard") {
+  const variants = {
+    standard: {
+      suffix: "standard",
+      note: "Ajoute 10 a 25 min de marche tapis sur 2 a 4 seances si l'objectif le demande.",
+    },
+    "knee-friendly": {
+      suffix: "knee",
+      note: "Version genou sensible : exercices plus stables, impact reduit et marche tapis privilegiee.",
+    },
+    "shoulder-friendly": {
+      suffix: "shoulder",
+      note: "Version epaule sensible : accent sur les tirages stables, les prises neutres et les presses mieux guidees.",
+    },
+    "back-friendly": {
+      suffix: "back",
+      note: "Version bas du dos sensible : moins de charge sur le tronc, plus d'appuis stables et de travail guide.",
+    },
+  };
+
+  return variants[constraint] || variants.standard;
+}
+
+function mergeProgramPlannerNotes(baseNote = "", constraint = "standard") {
+  const { note } = getProgramPlannerConstraintVariant(constraint);
+  if (constraint === "standard") {
+    return sanitizePlainText(baseNote, note);
+  }
+
+  return [sanitizePlainText(baseNote, ""), note].filter(Boolean).join(" ");
+}
+
 function buildPlannerTemplate(id, title, split, why, days, extra = {}) {
   return {
     id,
@@ -2097,14 +2141,9 @@ function getClassicProgramPlannerOptions(days = 4) {
 }
 
 function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", constraint = "standard") {
-  const isKneeFriendly = constraint === "knee-friendly";
   const classicOptions = getClassicProgramPlannerOptions(days);
-
   const pickClassic = (index) => classicOptions[index] || classicOptions[0];
-  const suffix = isKneeFriendly ? "knee" : "standard";
-  const constraintNote = isKneeFriendly
-    ? "Version genou sensible : exercices plus stables, impact reduit et marche tapis privilegiee."
-    : "Ajoute 10 a 25 min de marche tapis sur 2 a 4 seances si l'objectif le demande.";
+  const { suffix, note: constraintNote } = getProgramPlannerConstraintVariant(constraint);
 
   const options = {
     "weight-loss": {
@@ -2233,7 +2272,11 @@ function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", const
           "Recommande",
           "Le meilleur format si tu veux progresser sur 3 jours sans perdre de frequence.",
           ["Full A", "Full B", "Full C"],
-          { goal, constraint, note: "Cardio leger seulement si tu recuperes bien." }
+          {
+            goal,
+            constraint,
+            note: mergeProgramPlannerNotes("Cardio leger seulement si tu recuperes bien.", constraint),
+          }
         ),
         buildPlannerTemplate(
           `toning-3-${suffix}`,
@@ -2252,7 +2295,11 @@ function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", const
           "Recommande",
           "Le format le plus solide pour monter en volume sur 4 jours.",
           ["Upper A", "Lower A", "Upper B", "Lower B"],
-          { goal, constraint, note: "Cardio leger en soutien seulement." }
+          {
+            goal,
+            constraint,
+            note: mergeProgramPlannerNotes("Cardio leger en soutien seulement.", constraint),
+          }
         ),
         buildPlannerTemplate(
           `toning-4-${suffix}`,
@@ -2271,7 +2318,14 @@ function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", const
           "Recommande",
           "Tres bon volume hebdo si tu recuperes bien et veux progresser franchement.",
           ["Push", "Pull", "Legs", "Upper", "Arms"],
-          { goal, constraint, note: "Garde le cardio court et facile pour ne pas casser la recup." }
+          {
+            goal,
+            constraint,
+            note: mergeProgramPlannerNotes(
+              "Garde le cardio court et facile pour ne pas casser la recup.",
+              constraint
+            ),
+          }
         ),
         buildPlannerTemplate(
           `toning-5-${suffix}`,
@@ -2292,7 +2346,11 @@ function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", const
           "Recommande",
           "Le plus simple pour bouger mieux, sans pression et avec une bonne recuperation.",
           ["Full A", "Full B", "Full C"],
-          { goal, constraint, note: "Ajoute 15 a 30 min de marche tapis a ton rythme." }
+          {
+            goal,
+            constraint,
+            note: mergeProgramPlannerNotes("Ajoute 15 a 30 min de marche tapis a ton rythme.", constraint),
+          }
         ),
         buildPlannerTemplate(
           `weight-loss-3-${suffix}`,
@@ -2311,7 +2369,14 @@ function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", const
           "Recommande",
           "Plus de rythme sur la semaine, mais toujours avec des seances tres tenables.",
           ["Upper A", "Lower A", "Full A", "Full B"],
-          { goal, constraint, note: "Marche tapis douce recommande entre les seances ou en fin de bloc." }
+          {
+            goal,
+            constraint,
+            note: mergeProgramPlannerNotes(
+              "Marche tapis douce recommande entre les seances ou en fin de bloc.",
+              constraint
+            ),
+          }
         ),
         buildPlannerTemplate(
           `toning-4-${suffix}`,
@@ -2330,7 +2395,14 @@ function getObjectiveProgramPlannerOptions(days = 4, goal = "weight-loss", const
           "Recommande",
           "Frequence haute, fatigue basse, parfait si tu aimes bouger souvent.",
           ["Upper A", "Lower A", "Full A", "Upper B", "Lower B"],
-          { goal, constraint, note: "Marche tapis douce possible sur les jours ou tu te sens bien." }
+          {
+            goal,
+            constraint,
+            note: mergeProgramPlannerNotes(
+              "Marche tapis douce possible sur les jours ou tu te sens bien.",
+              constraint
+            ),
+          }
         ),
         buildPlannerTemplate(
           `toning-5-${suffix}`,
@@ -2370,7 +2442,7 @@ function getAllProgramPlannerOptions() {
   });
 
   ["weight-loss", "toning", "muscle-gain", "wellbeing"].forEach((goal) => {
-    ["standard", "knee-friendly"].forEach((constraint) => {
+    Object.keys(PROGRAM_PLANNER_CONSTRAINTS).forEach((constraint) => {
       [3, 4, 5].forEach((days) => {
         getObjectiveProgramPlannerOptions(days, goal, constraint).forEach((template) => {
           if (!map.has(template.id)) map.set(template.id, template);
@@ -2388,6 +2460,167 @@ function getObjectiveGoalFromTemplateId(templateId = "") {
   if (templateId.startsWith("muscle-gain-")) return "muscle-gain";
   if (templateId.startsWith("wellbeing-")) return "wellbeing";
   return "";
+}
+
+function getProgramPlannerConstraintFromTemplateId(templateId = "") {
+  const suffix = String(templateId).match(/-(standard|knee|shoulder|back)$/)?.[1];
+
+  switch (suffix) {
+    case "knee":
+      return "knee-friendly";
+    case "shoulder":
+      return "shoulder-friendly";
+    case "back":
+      return "back-friendly";
+    case "standard":
+      return "standard";
+    default:
+      return "";
+  }
+}
+
+function cloneTemplateProgram(program = {}) {
+  return Object.fromEntries(
+    Object.entries(program).map(([day, entries]) => [
+      day,
+      Array.isArray(entries) ? entries.map((entry) => ({ ...entry })) : [],
+    ])
+  );
+}
+
+function createTemplateEntryReplacement(entry, replacement = {}) {
+  return createTemplateEntry(
+    replacement.exercise || entry.exercise,
+    replacement.kind || entry.kind,
+    entry.series,
+    replacement.minReps ?? entry.minReps,
+    replacement.maxReps ?? entry.maxReps,
+    Object.prototype.hasOwnProperty.call(replacement, "defaultLoad")
+      ? replacement.defaultLoad
+      : entry.defaultLoad,
+    Object.prototype.hasOwnProperty.call(replacement, "loadLabel")
+      ? replacement.loadLabel
+      : entry.loadLabel
+  );
+}
+
+function applyExerciseReplacementMap(entries = [], replacementMap = {}) {
+  return entries.map((entry) => {
+    const replacement = replacementMap[entry.exercise];
+    return replacement ? createTemplateEntryReplacement(entry, replacement) : { ...entry };
+  });
+}
+
+function applyShoulderFriendlyEntries(entries = []) {
+  const replacements = {
+    "Developpe couche": { exercise: "Chest press", kind: "machine" },
+    "Incline halteres": {
+      exercise: "Landmine press",
+      kind: "barbell",
+      defaultLoad: 20,
+      loadLabel: "20 kg",
+    },
+    "Developpe epaules": {
+      exercise: "Landmine press",
+      kind: "barbell",
+      defaultLoad: 20,
+      loadLabel: "20 kg",
+    },
+    "Tirage vertical": { exercise: "Tirage vertical prise neutre", kind: "machine" },
+    "Ecarte poulie": {
+      exercise: "Face pull",
+      kind: "isolation",
+      minReps: 12,
+      maxReps: 15,
+      defaultLoad: null,
+      loadLabel: "modere",
+    },
+    "Pullover poulie": {
+      exercise: "Face pull",
+      kind: "isolation",
+      minReps: 12,
+      maxReps: 15,
+      defaultLoad: null,
+      loadLabel: "modere",
+    },
+    "Rowing haltere": { exercise: "Rowing chest support", kind: "machine" },
+    "Curl incline": {
+      exercise: "Curl poulie",
+      kind: "isolation",
+      minReps: 10,
+      maxReps: 15,
+      defaultLoad: null,
+      loadLabel: "modere",
+    },
+    "Extension triceps haltere": {
+      exercise: "Triceps poulie",
+      kind: "isolation",
+      minReps: 10,
+      maxReps: 15,
+      defaultLoad: null,
+      loadLabel: "modere",
+    },
+  };
+
+  return applyExerciseReplacementMap(entries, replacements);
+}
+
+function applyBackFriendlyEntries(entries = []) {
+  const replacements = {
+    "Romanian deadlift": { exercise: "Hip thrust", kind: "barbell", minReps: 8, maxReps: 12 },
+    "Souleve de terre roumain": { exercise: "Hip thrust", kind: "barbell", minReps: 8, maxReps: 12 },
+    "Squat halteres": { exercise: "Presse a cuisses", kind: "machine", minReps: 10, maxReps: 14 },
+    Fentes: {
+      exercise: "Split squat assiste",
+      kind: "dumbbell",
+      minReps: 10,
+      maxReps: 12,
+      defaultLoad: null,
+      loadLabel: "leger a modere",
+    },
+    "Fentes arriere": {
+      exercise: "Split squat assiste",
+      kind: "dumbbell",
+      minReps: 10,
+      maxReps: 12,
+      defaultLoad: null,
+      loadLabel: "leger a modere",
+    },
+    "Bulgarian split squat": {
+      exercise: "Split squat assiste",
+      kind: "dumbbell",
+      minReps: 8,
+      maxReps: 12,
+      defaultLoad: null,
+      loadLabel: "leger a modere",
+    },
+    "Rowing haltere": { exercise: "Rowing chest support", kind: "machine" },
+    "Developpe epaules": { exercise: "Chest press", kind: "machine", minReps: 8, maxReps: 12 },
+  };
+
+  return applyExerciseReplacementMap(entries, replacements);
+}
+
+function applyPlannerConstraintToTemplateProgram(program = {}, constraint = "standard") {
+  const clonedProgram = cloneTemplateProgram(program);
+
+  if (constraint === "shoulder-friendly") {
+    return finalizeTemplateProgram(
+      Object.fromEntries(
+        Object.entries(clonedProgram).map(([day, entries]) => [day, applyShoulderFriendlyEntries(entries)])
+      )
+    );
+  }
+
+  if (constraint === "back-friendly") {
+    return finalizeTemplateProgram(
+      Object.fromEntries(
+        Object.entries(clonedProgram).map(([day, entries]) => [day, applyBackFriendlyEntries(entries)])
+      )
+    );
+  }
+
+  return finalizeTemplateProgram(clonedProgram);
 }
 
 function createProgramTemplate(templateId) {
@@ -2616,7 +2849,26 @@ function createProgramTemplate(templateId) {
     },
   };
 
-  return finalizeTemplateProgram(templates[templateId] || createProgramCopy());
+  const directTemplate = templates[templateId];
+  if (directTemplate) {
+    return finalizeTemplateProgram(directTemplate);
+  }
+
+  const objectiveGoal = getObjectiveGoalFromTemplateId(templateId);
+  const matchedConstraint = getProgramPlannerConstraintFromTemplateId(templateId);
+
+  if (
+    objectiveGoal &&
+    ["shoulder-friendly", "back-friendly"].includes(matchedConstraint)
+  ) {
+    const suffix = getProgramPlannerConstraintVariant(matchedConstraint).suffix;
+    const baseTemplate = templates[String(templateId).replace(`-${suffix}`, "-standard")];
+    if (baseTemplate) {
+      return applyPlannerConstraintToTemplateProgram(baseTemplate, matchedConstraint);
+    }
+  }
+
+  return finalizeTemplateProgram(createProgramCopy());
 }
 
 function getProgramTemplateById(templateId) {
@@ -2624,7 +2876,7 @@ function getProgramTemplateById(templateId) {
 
   if (objectiveGoal) {
     const matchedDays = Number(String(templateId).match(/-(3|4|5)-/)?.[1] || 0);
-    const matchedConstraint = templateId.endsWith("-knee") ? "knee-friendly" : "standard";
+    const matchedConstraint = getProgramPlannerConstraintFromTemplateId(templateId) || "standard";
     return (
       getObjectiveProgramPlannerOptions(matchedDays, objectiveGoal, matchedConstraint).find(
         (template) => template.id === templateId
@@ -6918,7 +7170,7 @@ function renderProgramPlanner() {
   );
   const plannerHint = isClassicProgramPlannerGoal(selectedGoal.id)
     ? "Choisis ton nombre de jours, puis on te propose le split le plus logique avec deux alternatives deja pretes."
-    : "Choisis l'objectif, puis le nombre de jours et enfin l'option genou si besoin. On te propose un recommande clair et deux alternatives.";
+    : "Choisis l'objectif, puis le nombre de jours et enfin l'option articulaire si besoin. On te propose un recommande clair et deux alternatives.";
 
   return `
     <article class="surface surface-pad stack-md program-planner">
