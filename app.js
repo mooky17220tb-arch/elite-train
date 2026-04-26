@@ -1,6 +1,6 @@
 ﻿const STORAGE_KEY = "elite-train-iphone-v1";
 const STORAGE_BACKUP_KEY = `${STORAGE_KEY}-backup`;
-const STORAGE_SCHEMA_VERSION = 3;
+const STORAGE_SCHEMA_VERSION = 4;
 const CURRENT_REST_PROFILE_VERSION = 2;
 
 const PROGRAM = {
@@ -173,6 +173,34 @@ const PROGRAM_PLANNER_CONSTRAINTS = {
   },
 };
 
+const CARDIO_TYPES = {
+  "walk-treadmill": {
+    id: "walk-treadmill",
+    title: "Marche tapis",
+    shortLabel: "Tapis",
+  },
+  "incline-walk": {
+    id: "incline-walk",
+    title: "Marche inclinee",
+    shortLabel: "Incline",
+  },
+  bike: {
+    id: "bike",
+    title: "Velo",
+    shortLabel: "Velo",
+  },
+  elliptical: {
+    id: "elliptical",
+    title: "Elliptique",
+    shortLabel: "Elliptique",
+  },
+  other: {
+    id: "other",
+    title: "Cardio libre",
+    shortLabel: "Libre",
+  },
+};
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -189,6 +217,12 @@ const state = {
   cycle: createDefaultCycle(),
   exerciseData: {},
   history: [],
+  cardioSessions: [],
+  bodyMetrics: [],
+  sessionReviews: [],
+  cardioDraft: createDefaultCardioDraft(),
+  bodyDraft: createDefaultBodyDraft(),
+  workoutReviewDraft: createDefaultWorkoutReviewDraft(),
   timer: { seconds: 0, active: false },
   restAlertVisible: false,
   restSoundEnabled: true,
@@ -242,6 +276,58 @@ function createDefaultCycle() {
     length: 6,
     week: 1,
     startedAt: new Date().toISOString(),
+  };
+}
+
+function getTodayDateInput() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function sanitizeDateInputValue(value, fallback = getTodayDateInput()) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
+  const [year, month, day] = value.split("-").map((part) => Number(part));
+  const parsed = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).getTime();
+  return Number.isFinite(parsed) ? value : fallback;
+}
+
+function dateInputValueToIso(value, fallback = new Date().toISOString()) {
+  const normalized = sanitizeDateInputValue(value, "");
+  if (!normalized) return fallback;
+  const [year, month, day] = normalized.split("-").map((part) => Number(part));
+  return new Date(Date.UTC(year, month - 1, day, 12, 0, 0)).toISOString();
+}
+
+function isoToDateInput(value, fallback = getTodayDateInput()) {
+  const iso = sanitizeIsoDate(value, "");
+  return iso ? iso.slice(0, 10) : fallback;
+}
+
+function createDefaultCardioDraft() {
+  return {
+    type: "walk-treadmill",
+    duration: "",
+    speed: "",
+    incline: "",
+    note: "",
+    date: getTodayDateInput(),
+  };
+}
+
+function createDefaultBodyDraft() {
+  return {
+    weight: "",
+    waist: "",
+    arms: "",
+    thighs: "",
+    date: getTodayDateInput(),
+  };
+}
+
+function createDefaultWorkoutReviewDraft() {
+  return {
+    energy: "3",
+    pain: "0",
+    note: "",
   };
 }
 
@@ -585,6 +671,18 @@ function sanitizeLoadNumber(value, fallback = null) {
   return Math.max(0, Math.round(parsed * 100) / 100);
 }
 
+function sanitizeDecimalNumber(
+  value,
+  fallback = null,
+  minimum = 0,
+  maximum = Number.POSITIVE_INFINITY
+) {
+  if (value === "" || value === null || value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.round(parsed * 10) / 10));
+}
+
 function sanitizePlainText(value, fallback) {
   const text = String(value ?? "")
     .replace(/[<>"]/g, "")
@@ -681,6 +779,121 @@ function sanitizeExerciseDataMap(exerciseData = {}) {
     };
     return accumulator;
   }, {});
+}
+
+function sanitizeCardioDraft(draft = {}) {
+  return {
+    type: CARDIO_TYPES[draft.type] ? draft.type : "walk-treadmill",
+    duration: String(draft.duration ?? "").trim(),
+    speed: String(draft.speed ?? "").trim(),
+    incline: String(draft.incline ?? "").trim(),
+    note: sanitizePlainText(draft.note, ""),
+    date: sanitizeDateInputValue(draft.date, getTodayDateInput()),
+  };
+}
+
+function sanitizeCardioEntry(entry = {}) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const type = CARDIO_TYPES[entry.type] ? entry.type : "walk-treadmill";
+  const duration = sanitizePositiveInteger(entry.duration, 0, 0);
+  if (duration <= 0) return null;
+
+  return {
+    type,
+    duration,
+    speed: sanitizeDecimalNumber(entry.speed, null, 0, 25),
+    incline: sanitizeDecimalNumber(entry.incline, null, 0, 25),
+    note: sanitizePlainText(entry.note, ""),
+    date: sanitizeIsoDate(entry.date, new Date().toISOString()),
+  };
+}
+
+function sanitizeCardioEntries(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => sanitizeCardioEntry(entry))
+    .filter(Boolean);
+}
+
+function sanitizeBodyDraft(draft = {}) {
+  return {
+    weight: String(draft.weight ?? "").trim(),
+    waist: String(draft.waist ?? "").trim(),
+    arms: String(draft.arms ?? "").trim(),
+    thighs: String(draft.thighs ?? "").trim(),
+    date: sanitizeDateInputValue(draft.date, getTodayDateInput()),
+  };
+}
+
+function sanitizeBodyMetricEntry(entry = {}) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const weight = sanitizeDecimalNumber(entry.weight, null, 20, 400);
+  const waist = sanitizeDecimalNumber(entry.waist, null, 20, 300);
+  const arms = sanitizeDecimalNumber(entry.arms, null, 10, 100);
+  const thighs = sanitizeDecimalNumber(entry.thighs, null, 20, 120);
+
+  if (
+    weight === null &&
+    waist === null &&
+    arms === null &&
+    thighs === null
+  ) {
+    return null;
+  }
+
+  return {
+    weight,
+    waist,
+    arms,
+    thighs,
+    date: sanitizeIsoDate(entry.date, new Date().toISOString()),
+  };
+}
+
+function sanitizeBodyMetricEntries(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => sanitizeBodyMetricEntry(entry))
+    .filter(Boolean);
+}
+
+function sanitizeWorkoutReviewDraft(draft = {}) {
+  const energy = sanitizePositiveInteger(draft.energy, 3, 1);
+  const pain = sanitizePositiveInteger(draft.pain, 0, 0);
+
+  return {
+    energy: `${Math.min(5, energy)}`,
+    pain: `${Math.min(3, pain)}`,
+    note: sanitizePlainText(draft.note, ""),
+  };
+}
+
+function sanitizeSessionReviewEntry(entry = {}) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const day = sanitizePlainText(entry.day, "Seance");
+  const energy = Math.min(5, sanitizePositiveInteger(entry.energy, 3, 1));
+  const pain = Math.min(3, sanitizePositiveInteger(entry.pain, 0, 0));
+
+  return {
+    day,
+    date: sanitizeIsoDate(entry.date, new Date().toISOString()),
+    durationMinutes: sanitizePositiveInteger(entry.durationMinutes, 0, 0),
+    setCount: sanitizePositiveInteger(entry.setCount, 0, 0),
+    exerciseCount: sanitizePositiveInteger(entry.exerciseCount, 0, 0),
+    energy,
+    pain,
+    note: sanitizePlainText(entry.note, ""),
+  };
+}
+
+function sanitizeSessionReviewEntries(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => sanitizeSessionReviewEntry(entry))
+    .filter(Boolean);
 }
 
 function getRestAlertCopy() {
@@ -3064,20 +3277,23 @@ function getLastPendingEntry() {
   return state.pendingSession[state.pendingSession.length - 1] || null;
 }
 
-function getWorkoutDurationLabel() {
+function getWorkoutDurationMinutes() {
   const startValue = state.workoutStartedAt || state.pendingSession[0]?.date;
-  if (!startValue) return "0 min";
+  if (!startValue) return 0;
 
   const startTime = new Date(startValue).getTime();
   const endSource = state.pendingSession[state.pendingSession.length - 1]?.date || new Date().toISOString();
   const endTime = new Date(endSource).getTime();
 
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
-    return "0 min";
+    return 0;
   }
 
-  const totalMinutes = Math.max(1, Math.round((endTime - startTime) / 60000));
-  return `${totalMinutes} min`;
+  return Math.max(1, Math.round((endTime - startTime) / 60000));
+}
+
+function getWorkoutDurationLabel() {
+  return `${getWorkoutDurationMinutes()} min`;
 }
 
 function getWorkoutCompletionSummary() {
@@ -3428,6 +3644,174 @@ function getHistoryKeys() {
   return [...map.values()];
 }
 
+function getCardioTypeMeta(type) {
+  return CARDIO_TYPES[type] || CARDIO_TYPES["walk-treadmill"];
+}
+
+function getSortedCardioSessions() {
+  return state.cardioSessions
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+}
+
+function getRecentCardioSessions(days = 7) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  return getSortedCardioSessions().filter((entry) => {
+    const time = new Date(entry.date).getTime();
+    return Number.isFinite(time) && now - time <= range;
+  });
+}
+
+function getWeeklyCardioMinutes(days = 7) {
+  return getRecentCardioSessions(days).reduce((total, entry) => total + entry.duration, 0);
+}
+
+function getLatestBodyMetric() {
+  return state.bodyMetrics
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())[0] || null;
+}
+
+function getPreviousBodyMetric() {
+  const metrics = state.bodyMetrics
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+  return metrics[1] || null;
+}
+
+function getRecentSessionReviews(days = 21) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  return state.sessionReviews
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+    .filter((entry) => {
+      const time = new Date(entry.date).getTime();
+      return Number.isFinite(time) && now - time <= range;
+    });
+}
+
+function getLatestSessionReview() {
+  return getRecentSessionReviews(3650)[0] || null;
+}
+
+function formatOptionalMetric(value, unit = "", fallback = "-") {
+  if (!Number.isFinite(value)) return fallback;
+  return `${formatCompactNumber(value)}${unit}`;
+}
+
+function formatMetricDelta(current, previous, unit = "") {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return "Pas assez de recul";
+  const delta = Math.round((current - previous) * 10) / 10;
+  if (delta === 0) return "Stable";
+  return `${delta > 0 ? "+" : ""}${formatCompactNumber(delta)}${unit}`;
+}
+
+function getCardioEntryMeta(entry) {
+  if (!entry) return "";
+  const parts = [];
+  if (Number.isFinite(entry.speed)) parts.push(`${formatCompactNumber(entry.speed)} km/h`);
+  if (Number.isFinite(entry.incline)) parts.push(`${formatCompactNumber(entry.incline)}%`);
+  return parts.join(" · ");
+}
+
+function getReviewTone(review) {
+  if (!review) return "hold";
+  if (review.pain >= 2 || review.energy <= 2) return "reduce";
+  if (review.energy >= 4 && review.pain === 0) return "progress";
+  return "hold";
+}
+
+function updateCardioDraft(field, value) {
+  state.cardioDraft = sanitizeCardioDraft({
+    ...state.cardioDraft,
+    [field]: value,
+  });
+  saveState();
+}
+
+function updateBodyDraft(field, value) {
+  state.bodyDraft = sanitizeBodyDraft({
+    ...state.bodyDraft,
+    [field]: value,
+  });
+  saveState();
+}
+
+function updateWorkoutReviewDraft(field, value) {
+  state.workoutReviewDraft = sanitizeWorkoutReviewDraft({
+    ...state.workoutReviewDraft,
+    [field]: value,
+  });
+  saveState();
+}
+
+function saveCardioSession() {
+  const entry = sanitizeCardioEntry({
+    ...state.cardioDraft,
+    date: dateInputValueToIso(state.cardioDraft.date),
+  });
+
+  if (!entry) {
+    window.alert("Renseigne au moins la duree de la seance cardio.");
+    return;
+  }
+
+  state.cardioSessions = [entry, ...state.cardioSessions]
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+  state.cardioDraft = createDefaultCardioDraft();
+  saveState();
+  renderApp();
+}
+
+function clearCardioDraft() {
+  state.cardioDraft = createDefaultCardioDraft();
+  saveState();
+  renderApp();
+}
+
+function saveBodyMetric() {
+  const entry = sanitizeBodyMetricEntry({
+    ...state.bodyDraft,
+    date: dateInputValueToIso(state.bodyDraft.date),
+  });
+
+  if (!entry) {
+    window.alert("Ajoute au moins une mesure avant d'enregistrer.");
+    return;
+  }
+
+  state.bodyMetrics = [entry, ...state.bodyMetrics]
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+  state.bodyDraft = createDefaultBodyDraft();
+  saveState();
+  renderApp();
+}
+
+function clearBodyDraft() {
+  state.bodyDraft = createDefaultBodyDraft();
+  saveState();
+  renderApp();
+}
+
+function buildCurrentSessionReview(summary = getWorkoutCompletionSummary()) {
+  if (!summary || !state.pendingSession.length) return null;
+
+  return sanitizeSessionReviewEntry({
+    day: state.day,
+    date: state.pendingSession[state.pendingSession.length - 1]?.date || new Date().toISOString(),
+    durationMinutes: getWorkoutDurationMinutes(),
+    setCount: summary.setCount,
+    exerciseCount: summary.exerciseCount,
+    energy: state.workoutReviewDraft.energy,
+    pain: state.workoutReviewDraft.pain,
+    note: state.workoutReviewDraft.note,
+  });
+}
+
 function getChartKey(preferredKey = "") {
   return preferredKey || state.selectedChartKey || getHistoryKeys()[0]?.key || getExerciseKey();
 }
@@ -3472,6 +3856,9 @@ function buildPersistedState() {
   const sanitizedPendingSession = sanitizePendingSessionEntries(state.pendingSession);
   const sanitizedHistory = sanitizeHistoryEntries(state.history);
   const sanitizedExerciseData = sanitizeExerciseDataMap(state.exerciseData);
+  const sanitizedCardioSessions = sanitizeCardioEntries(state.cardioSessions);
+  const sanitizedBodyMetrics = sanitizeBodyMetricEntries(state.bodyMetrics);
+  const sanitizedSessionReviews = sanitizeSessionReviewEntries(state.sessionReviews);
   const availableDays = getProgramDayKeys(sanitizedProgram);
   const currentDay = availableDays.includes(state.day) ? state.day : availableDays[0] || "Push";
   const programEditorDay = availableDays.includes(state.programEditorDay)
@@ -3494,6 +3881,12 @@ function buildPersistedState() {
     cycle: sanitizedCycle,
     exerciseData: sanitizedExerciseData,
     history: sanitizedHistory,
+    cardioSessions: sanitizedCardioSessions,
+    bodyMetrics: sanitizedBodyMetrics,
+    sessionReviews: sanitizedSessionReviews,
+    cardioDraft: sanitizeCardioDraft(state.cardioDraft),
+    bodyDraft: sanitizeBodyDraft(state.bodyDraft),
+    workoutReviewDraft: sanitizeWorkoutReviewDraft(state.workoutReviewDraft),
     day: currentDay,
     currentIndex: state.currentIndex,
     timer: sanitizedTimer,
@@ -3526,6 +3919,12 @@ function hydrateState(parsed = {}) {
   state.screen = parsed.screen || "dashboard";
   state.exerciseData = sanitizeExerciseDataMap(parsed.exerciseData);
   state.history = sanitizeHistoryEntries(parsed.history);
+  state.cardioSessions = sanitizeCardioEntries(parsed.cardioSessions);
+  state.bodyMetrics = sanitizeBodyMetricEntries(parsed.bodyMetrics);
+  state.sessionReviews = sanitizeSessionReviewEntries(parsed.sessionReviews);
+  state.cardioDraft = sanitizeCardioDraft(parsed.cardioDraft);
+  state.bodyDraft = sanitizeBodyDraft(parsed.bodyDraft);
+  state.workoutReviewDraft = sanitizeWorkoutReviewDraft(parsed.workoutReviewDraft);
   state.cycle = sanitizeCycle(parsed.cycle);
   state.programPlannerGoal = PROGRAM_PLANNER_GOALS[parsed.programPlannerGoal]
     ? parsed.programPlannerGoal
@@ -3709,6 +4108,7 @@ function resetWorkoutState() {
   state.currentIndex = 0;
   state.repsInput = "";
   state.rpe = 8;
+  state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
   state.showPlates = false;
   state.timer = { seconds: 0, active: false };
   state.timerEndsAt = 0;
@@ -3784,24 +4184,31 @@ function finalizeWorkout() {
   if (!state.pendingSession.length) {
     state.workoutFinished = false;
     state.workoutStartedAt = "";
+    state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
     state.screen = "dashboard";
     renderApp();
     return;
   }
 
   const nextExerciseData = { ...state.exerciseData };
+  const summary = getWorkoutCompletionSummary();
+  const reviewEntry = buildCurrentSessionReview(summary);
 
   state.pendingSession.forEach((entry) => {
     nextExerciseData[entry.key] = getNextLoadSettingsFromEntry(entry);
   });
 
   state.history = [...state.pendingSession.slice().reverse(), ...state.history];
+  if (reviewEntry) {
+    state.sessionReviews = [reviewEntry, ...state.sessionReviews];
+  }
   state.exerciseData = nextExerciseData;
   state.selectedChartKey = state.pendingSession[state.pendingSession.length - 1]?.key || "";
   state.pendingSession = [];
   state.workoutFinished = false;
   state.timerEndsAt = 0;
   state.workoutStartedAt = "";
+  state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
   state.screen = "dashboard";
   saveState();
   renderApp();
@@ -3821,6 +4228,12 @@ function clearAllData() {
   state.cycle = createDefaultCycle();
   state.exerciseData = {};
   state.history = [];
+  state.cardioSessions = [];
+  state.bodyMetrics = [];
+  state.sessionReviews = [];
+  state.cardioDraft = createDefaultCardioDraft();
+  state.bodyDraft = createDefaultBodyDraft();
+  state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
   state.pendingSession = [];
   state.selectedChartKey = "";
   state.historyDetailKey = "";
@@ -5535,15 +5948,20 @@ function getFatigueProfile(day = "") {
       streak: 0,
       lastWorkoutHours: null,
       sameDayHours: null,
+      lowEnergySignals: 0,
+      painSignals: 0,
     };
   }
 
   const recentEntries = getSortedHistory().slice(0, 12);
+  const recentReviews = getRecentSessionReviews(21);
   const weeklySessions = getWeeklySessionCount(7);
   const recentSets = getRecentSets(7);
   const reduceSignals = recentEntries.filter(
     (entry) => getAdvice(entry.reps, entry.minReps, entry.maxReps, entry.rpe).type === "reduce"
   ).length;
+  const lowEnergySignals = recentReviews.filter((entry) => entry.energy <= 2).length;
+  const painSignals = recentReviews.filter((entry) => entry.pain >= 2).length;
   const streak = getRecentTrainingStreak(7);
   const lastWorkoutHours = getHoursSinceLatestSession();
   const sameDayHours = day ? getHoursSinceLatestSession(day) : null;
@@ -5555,22 +5973,34 @@ function getFatigueProfile(day = "") {
   else if (recentSets >= 18) score += 1;
   if (reduceSignals >= 3) score += 2;
   else if (reduceSignals >= 2) score += 1;
+  if (lowEnergySignals >= 2) score += 1;
+  if (painSignals >= 2) score += 2;
+  else if (painSignals >= 1) score += 1;
   if (streak >= 3) score += 1;
   if (Number.isFinite(lastWorkoutHours) && lastWorkoutHours < 24) score += 1;
   if (Number.isFinite(sameDayHours) && sameDayHours < 72) score += 1;
+
+  const reviewSignalText =
+    painSignals >= 2
+      ? " avec douleur recurrente"
+      : lowEnergySignals >= 2
+      ? " avec energie basse recente"
+      : "";
 
   if (score >= 6) {
     return {
       score,
       label: "Deload",
       tone: "reduce",
-      detail: "Volume charge, marge basse et recup courte sur les derniers jours",
+      detail: `Volume charge, marge basse et recup courte sur les derniers jours${reviewSignalText}`,
       weeklySessions,
       recentSets,
       reduceSignals,
       streak,
       lastWorkoutHours,
       sameDayHours,
+      lowEnergySignals,
+      painSignals,
     };
   }
 
@@ -5579,13 +6009,15 @@ function getFatigueProfile(day = "") {
       score,
       label: "A surveiller",
       tone: "hold",
-      detail: "Garde de la marge sur les gros mouvements et surveille la recup",
+      detail: `Garde de la marge sur les gros mouvements et surveille la recup${reviewSignalText}`,
       weeklySessions,
       recentSets,
       reduceSignals,
       streak,
       lastWorkoutHours,
       sameDayHours,
+      lowEnergySignals,
+      painSignals,
     };
   }
 
@@ -5600,6 +6032,8 @@ function getFatigueProfile(day = "") {
     streak,
     lastWorkoutHours,
     sameDayHours,
+    lowEnergySignals,
+    painSignals,
   };
 }
 
@@ -5668,11 +6102,17 @@ function getDeloadRecommendation(day, cycle, fatigue, recovery, stagnation, focu
     return {
       tone: "reduce",
       value: "Suggere",
-      meta: `Alleger ${day} de 1 a 2 series et garder 2 reps de marge`,
+      meta:
+        fatigue.painSignals >= 1
+          ? `Alleger ${day}, calmer le genou / les douleurs et garder 2 reps de marge`
+          : `Alleger ${day} de 1 a 2 series et garder 2 reps de marge`,
       recommended: true,
       action: "Deload",
       signal: "Fatigue",
-      note: `Le volume recent et la recup indiquent qu'un deload leger sur ${day} serait utile pour repartir propre.`,
+      note:
+        fatigue.painSignals >= 1
+          ? `Les derniers ressentis montrent de la douleur ou de la gene. Deload leger sur ${day} et execution plus propre avant de repartir.`
+          : `Le volume recent et la recup indiquent qu'un deload leger sur ${day} serait utile pour repartir propre.`,
     };
   }
 
@@ -6644,6 +7084,251 @@ function renderSettingsInstallSection() {
   `;
 }
 
+function renderCardioSettingsSection() {
+  const recent = getSortedCardioSessions().slice(0, 3);
+  const weeklyMinutes = getWeeklyCardioMinutes();
+  const latest = recent[0];
+
+  return `
+    <section class="stack-md">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Cardio / tapis</div>
+            <h3 class="section-title dashboard-section-head__title">Suivi cardio</h3>
+          </div>
+          <div class="label">${state.cardioSessions.length} log${state.cardioSessions.length > 1 ? "s" : ""}</div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="label">7 jours</div>
+            <div class="metric__value">${weeklyMinutes} min</div>
+          </div>
+          <div class="metric">
+            <div class="label">Derniere</div>
+            <div class="metric__value">${latest ? formatDate(latest.date) : "-"}</div>
+          </div>
+        </div>
+
+        <div class="muted">Logge une marche tapis ou un cardio simple pour suivre la frequence, la vitesse et l'inclinaison.</div>
+      </article>
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Nouvelle entree</div>
+            <h3 class="section-title dashboard-section-head__title">Ajouter un cardio</h3>
+          </div>
+          <div class="label">Tracking</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="cardio-type-select">Type</label>
+            <select id="cardio-type-select" class="select select--editor">
+              ${Object.values(CARDIO_TYPES)
+                .map(
+                  (item) => `
+                    <option value="${item.id}" ${item.id === state.cardioDraft.type ? "selected" : ""}>
+                      ${item.title}
+                    </option>
+                  `
+                )
+                .join("")}
+            </select>
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="cardio-date-input">Date</label>
+            <input id="cardio-date-input" class="input input--editor" type="date" value="${state.cardioDraft.date}" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="cardio-duration-input">Duree (min)</label>
+            <input id="cardio-duration-input" class="input input--editor" type="number" min="1" value="${state.cardioDraft.duration}" placeholder="30" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="cardio-speed-input">Vitesse</label>
+            <input id="cardio-speed-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.cardioDraft.speed}" placeholder="4.8" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="cardio-incline-input">Inclinaison %</label>
+            <input id="cardio-incline-input" class="input input--editor" type="number" min="0" step="0.5" value="${state.cardioDraft.incline}" placeholder="6" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="cardio-note-input">Note rapide</label>
+            <textarea id="cardio-note-input" class="textarea textarea--editor" rows="3" placeholder="Ex: facile, souffle OK, genou nickel">${state.cardioDraft.note}</textarea>
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--ghost" data-action="clear-cardio-draft">Vider</button>
+          <button class="button button--primary" data-action="save-cardio-session">Enregistrer le cardio</button>
+        </div>
+      </article>
+
+      ${
+        recent.length
+          ? `
+            <article class="surface surface-pad stack-md settings-group">
+              <div class="dashboard-section-head">
+                <div>
+                  <div class="label">Recent</div>
+                  <h3 class="section-title dashboard-section-head__title">Dernieres seances cardio</h3>
+                </div>
+                <div class="label">${recent.length} recente${recent.length > 1 ? "s" : ""}</div>
+              </div>
+
+              <div class="pending-list">
+                ${recent
+                  .map((entry) => {
+                    const meta = getCardioEntryMeta(entry);
+                    return `
+                      <div class="pending-item">
+                        <div>
+                          <div class="pending-item__title">${getCardioTypeMeta(entry.type).title}</div>
+                          <div class="pending-item__meta">${formatDate(entry.date)}${meta ? ` · ${meta}` : ""}${entry.note ? ` · ${shortenLabel(entry.note, 34)}` : ""}</div>
+                        </div>
+                        <div class="pending-item__score">${entry.duration} min</div>
+                      </div>
+                    `;
+                  })
+                  .join("")}
+              </div>
+            </article>
+          `
+          : ""
+      }
+    </section>
+  `;
+}
+
+function renderBodyMetricsSection() {
+  const latest = getLatestBodyMetric();
+  const previous = getPreviousBodyMetric();
+  const recent = state.bodyMetrics
+    .slice()
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+    .slice(0, 3);
+
+  return `
+    <section class="stack-md">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Physique</div>
+            <h3 class="section-title dashboard-section-head__title">Poids et mensurations</h3>
+          </div>
+          <div class="label">${state.bodyMetrics.length} entree${state.bodyMetrics.length > 1 ? "s" : ""}</div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="label">Poids</div>
+            <div class="metric__value">${formatOptionalMetric(latest?.weight, " kg")}</div>
+          </div>
+          <div class="metric">
+            <div class="label">Taille</div>
+            <div class="metric__value">${formatOptionalMetric(latest?.waist, " cm")}</div>
+          </div>
+        </div>
+
+        <div class="muted">
+          ${
+            latest
+              ? `Derniere mesure le ${formatDate(latest.date)} · Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}`
+              : "Ajoute ton poids, ton tour de taille et tes mensurations pour suivre la vraie progression."
+          }
+        </div>
+      </article>
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Nouvelle entree</div>
+            <h3 class="section-title dashboard-section-head__title">Ajouter une mesure</h3>
+          </div>
+          <div class="label">Corps</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-date-input">Date</label>
+            <input id="body-date-input" class="input input--editor" type="date" value="${state.bodyDraft.date}" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="body-weight-input">Poids</label>
+            <input id="body-weight-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.weight}" placeholder="78.4" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-waist-input">Taille (cm)</label>
+            <input id="body-waist-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.waist}" placeholder="84" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="body-arms-input">Bras (cm)</label>
+            <input id="body-arms-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.arms}" placeholder="38" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-thighs-input">Cuisses (cm)</label>
+            <input id="body-thighs-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.thighs}" placeholder="58" />
+          </div>
+          <div class="field-wrap">
+            <label class="label">Resume</label>
+            <div class="install-hint">Tu peux ne rentrer qu'une seule mesure. Le but est de garder quelque chose de simple a tenir dans le temps.</div>
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--ghost" data-action="clear-body-draft">Vider</button>
+          <button class="button button--primary" data-action="save-body-metric">Enregistrer la mesure</button>
+        </div>
+      </article>
+
+      ${
+        recent.length
+          ? `
+            <article class="surface surface-pad stack-md settings-group">
+              <div class="dashboard-section-head">
+                <div>
+                  <div class="label">Recent</div>
+                  <h3 class="section-title dashboard-section-head__title">Dernieres mesures</h3>
+                </div>
+                <div class="label">${recent.length} recent${recent.length > 1 ? "es" : "e"}</div>
+              </div>
+
+              <div class="pending-list">
+                ${recent
+                  .map(
+                    (entry) => `
+                      <div class="pending-item">
+                        <div>
+                          <div class="pending-item__title">${formatDate(entry.date)}</div>
+                          <div class="pending-item__meta">Poids ${formatOptionalMetric(entry.weight, " kg")} · Taille ${formatOptionalMetric(entry.waist, " cm")} · Bras ${formatOptionalMetric(entry.arms, " cm")} · Cuisses ${formatOptionalMetric(entry.thighs, " cm")}</div>
+                        </div>
+                      </div>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </article>
+          `
+          : ""
+      }
+    </section>
+  `;
+}
+
 function renderSettingsDataSection() {
   return `
     <section class="stack-md">
@@ -6683,6 +7368,8 @@ function getSettingsSections() {
   const backupLabel = state.storageMeta.backupAvailable ? "Backup actif" : "Pas de backup";
   const soundLabel = state.restSoundEnabled ? "Son ON" : "Son OFF";
   const vibrationLabel = state.restVibrationEnabled ? "Vibreur ON" : "Vibreur OFF";
+  const weeklyCardioMinutes = getWeeklyCardioMinutes();
+  const latestBodyMetric = getLatestBodyMetric();
 
   return [
     {
@@ -6739,6 +7426,28 @@ function getSettingsSections() {
       mark: "REST",
       accentDay: state.day,
       content: renderRestSettings(),
+    },
+    {
+      id: "cardio",
+      label: "Cardio / tapis",
+      title: weeklyCardioMinutes ? `${weeklyCardioMinutes} min / 7j` : "Aucun cardio logge",
+      summary: "Marche, duree, vitesse et inclinaison",
+      meta: state.cardioSessions.length ? `${state.cardioSessions.length} seance(s) cardio en memoire` : "Ajoute tes vraies seances cardio",
+      stats: [`${weeklyCardioMinutes} min`, `${state.cardioSessions.length} seance${state.cardioSessions.length > 1 ? "s" : ""}`],
+      mark: "CARDIO",
+      accentDay: "Legs",
+      content: renderCardioSettingsSection(),
+    },
+    {
+      id: "body",
+      label: "Physique",
+      title: latestBodyMetric?.weight ? `${formatOptionalMetric(latestBodyMetric.weight, " kg")}` : "Aucune mesure",
+      summary: "Poids, taille et mensurations",
+      meta: latestBodyMetric ? `Derniere mesure le ${formatDate(latestBodyMetric.date)}` : "Ajoute du poids et quelques mensurations simples",
+      stats: [formatOptionalMetric(latestBodyMetric?.weight, " kg"), formatOptionalMetric(latestBodyMetric?.waist, " cm")],
+      mark: "BODY",
+      accentDay: "Upper",
+      content: renderBodyMetricsSection(),
     },
     {
       id: "data",
@@ -7072,6 +7781,22 @@ function bindEvents() {
         testRestAlert();
       }
 
+      if (action === "save-cardio-session") {
+        saveCardioSession();
+      }
+
+      if (action === "clear-cardio-draft") {
+        clearCardioDraft();
+      }
+
+      if (action === "save-body-metric") {
+        saveBodyMetric();
+      }
+
+      if (action === "clear-body-draft") {
+        clearBodyDraft();
+      }
+
       if (action === "open-settings-section") {
         openSettingsSection(button.dataset.settingsSection || "");
       }
@@ -7287,6 +8012,83 @@ function bindEvents() {
     };
   }
 
+  const cardioTypeSelect = document.getElementById("cardio-type-select");
+  if (cardioTypeSelect) {
+    cardioTypeSelect.onchange = (event) => {
+      updateCardioDraft("type", event.target.value);
+    };
+  }
+
+  const cardioDateInput = document.getElementById("cardio-date-input");
+  if (cardioDateInput) {
+    cardioDateInput.oninput = (event) => {
+      updateCardioDraft("date", event.target.value);
+    };
+  }
+
+  const cardioDurationInput = document.getElementById("cardio-duration-input");
+  if (cardioDurationInput) {
+    cardioDurationInput.oninput = (event) => {
+      updateCardioDraft("duration", event.target.value);
+    };
+  }
+
+  const cardioSpeedInput = document.getElementById("cardio-speed-input");
+  if (cardioSpeedInput) {
+    cardioSpeedInput.oninput = (event) => {
+      updateCardioDraft("speed", event.target.value);
+    };
+  }
+
+  const cardioInclineInput = document.getElementById("cardio-incline-input");
+  if (cardioInclineInput) {
+    cardioInclineInput.oninput = (event) => {
+      updateCardioDraft("incline", event.target.value);
+    };
+  }
+
+  const cardioNoteInput = document.getElementById("cardio-note-input");
+  if (cardioNoteInput) {
+    cardioNoteInput.oninput = (event) => {
+      updateCardioDraft("note", event.target.value);
+    };
+  }
+
+  const bodyDateInput = document.getElementById("body-date-input");
+  if (bodyDateInput) {
+    bodyDateInput.oninput = (event) => {
+      updateBodyDraft("date", event.target.value);
+    };
+  }
+
+  const bodyWeightInput = document.getElementById("body-weight-input");
+  if (bodyWeightInput) {
+    bodyWeightInput.oninput = (event) => {
+      updateBodyDraft("weight", event.target.value);
+    };
+  }
+
+  const bodyWaistInput = document.getElementById("body-waist-input");
+  if (bodyWaistInput) {
+    bodyWaistInput.oninput = (event) => {
+      updateBodyDraft("waist", event.target.value);
+    };
+  }
+
+  const bodyArmsInput = document.getElementById("body-arms-input");
+  if (bodyArmsInput) {
+    bodyArmsInput.oninput = (event) => {
+      updateBodyDraft("arms", event.target.value);
+    };
+  }
+
+  const bodyThighsInput = document.getElementById("body-thighs-input");
+  if (bodyThighsInput) {
+    bodyThighsInput.oninput = (event) => {
+      updateBodyDraft("thighs", event.target.value);
+    };
+  }
+
   const repsInput = document.getElementById("reps-input");
   if (repsInput) {
     repsInput.oninput = (event) => {
@@ -7307,6 +8109,27 @@ function bindEvents() {
       state.rpe = Number(event.target.value);
       saveState();
       renderApp();
+    };
+  }
+
+  const workoutReviewEnergy = document.getElementById("workout-review-energy");
+  if (workoutReviewEnergy) {
+    workoutReviewEnergy.onchange = (event) => {
+      updateWorkoutReviewDraft("energy", event.target.value);
+    };
+  }
+
+  const workoutReviewPain = document.getElementById("workout-review-pain");
+  if (workoutReviewPain) {
+    workoutReviewPain.onchange = (event) => {
+      updateWorkoutReviewDraft("pain", event.target.value);
+    };
+  }
+
+  const workoutReviewNote = document.getElementById("workout-review-note");
+  if (workoutReviewNote) {
+    workoutReviewNote.oninput = (event) => {
+      updateWorkoutReviewDraft("note", event.target.value);
     };
   }
 
@@ -7776,6 +8599,7 @@ function renderPremiumDashboard() {
       ${renderWeeklyPlanner()}
       ${renderCycleSection()}
       ${renderCoachSection()}
+      ${renderLifestyleDashboardSection()}
 
       <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}">
         <div class="dashboard-section-head">
@@ -7862,6 +8686,48 @@ function renderWeightView(settings, active, last, isFocusMode = false) {
           : ""
       }
     </div>
+  `;
+}
+
+function renderWorkoutReviewPanel() {
+  return `
+    <article class="surface surface-pad stack-md session-review-shell">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Ressenti</div>
+          <h3 class="section-title dashboard-section-head__title">Note ta seance</h3>
+        </div>
+        <div class="label">Coach</div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field-wrap">
+          <label class="label" for="workout-review-energy">Energie</label>
+          <select id="workout-review-energy" class="select select--editor">
+            <option value="1" ${state.workoutReviewDraft.energy === "1" ? "selected" : ""}>1 · Vide</option>
+            <option value="2" ${state.workoutReviewDraft.energy === "2" ? "selected" : ""}>2 · Bas</option>
+            <option value="3" ${state.workoutReviewDraft.energy === "3" ? "selected" : ""}>3 · Correct</option>
+            <option value="4" ${state.workoutReviewDraft.energy === "4" ? "selected" : ""}>4 · Bon</option>
+            <option value="5" ${state.workoutReviewDraft.energy === "5" ? "selected" : ""}>5 · Gros jus</option>
+          </select>
+        </div>
+
+        <div class="field-wrap">
+          <label class="label" for="workout-review-pain">Douleur / gene</label>
+          <select id="workout-review-pain" class="select select--editor">
+            <option value="0" ${state.workoutReviewDraft.pain === "0" ? "selected" : ""}>0 · RAS</option>
+            <option value="1" ${state.workoutReviewDraft.pain === "1" ? "selected" : ""}>1 · Legere</option>
+            <option value="2" ${state.workoutReviewDraft.pain === "2" ? "selected" : ""}>2 · A surveiller</option>
+            <option value="3" ${state.workoutReviewDraft.pain === "3" ? "selected" : ""}>3 · Forte</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-wrap">
+        <label class="label" for="workout-review-note">Note rapide</label>
+        <textarea id="workout-review-note" class="textarea textarea--editor" rows="3" placeholder="Ex: super pecs, souffle moyen, genou nickel, fatigue en fin de bloc">${state.workoutReviewDraft.note}</textarea>
+      </div>
+    </article>
   `;
 }
 
@@ -7954,6 +8820,8 @@ function renderWorkoutCompletionScreen() {
               `
             : ""
         }
+
+        ${renderWorkoutReviewPanel()}
 
         <div class="stack-sm session-finish__actions">
           <button class="button button--primary" data-action="finalize-workout">
@@ -8205,12 +9073,195 @@ function renderChart(preferredKey = "") {
   `;
 }
 
+function renderLifestyleDashboardSection() {
+  if (!state.cardioSessions.length && !state.bodyMetrics.length && !state.sessionReviews.length) {
+    return "";
+  }
+
+  const weeklyCardioMinutes = getWeeklyCardioMinutes();
+  const latestBody = getLatestBodyMetric();
+  const latestReview = getLatestSessionReview();
+
+  return `
+    <article class="surface surface-pad stack-md" data-accent-day="${state.day}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Hors salle</div>
+          <h3 class="section-title dashboard-section-head__title">Cardio, physique et ressenti</h3>
+        </div>
+        <div class="label">Lifestyle</div>
+      </div>
+
+      <div class="dashboard-hero__stats">
+        <div class="dashboard-hero__stat">
+          <span class="dashboard-hero__stat-value">${weeklyCardioMinutes}</span>
+          <span class="dashboard-hero__stat-label">Cardio 7j</span>
+        </div>
+        <div class="dashboard-hero__stat">
+          <span class="dashboard-hero__stat-value">${latestBody?.weight ? formatCompactNumber(latestBody.weight) : "-"}</span>
+          <span class="dashboard-hero__stat-label">${latestBody?.weight ? "Poids kg" : "Poids"}</span>
+        </div>
+        <div class="dashboard-hero__stat">
+          <span class="dashboard-hero__stat-value">${latestReview ? `${latestReview.energy}/5` : "-"}</span>
+          <span class="dashboard-hero__stat-label">${latestReview ? `Gene ${latestReview.pain}/3` : "Ressenti"}</span>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderCardioOverviewSection() {
+  if (!state.cardioSessions.length) return "";
+
+  const recent = getSortedCardioSessions().slice(0, 3);
+  const weeklyMinutes = getWeeklyCardioMinutes();
+
+  return `
+    <article class="surface surface-pad stack-md" data-accent-day="Legs">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Cardio / tapis</div>
+          <h3 class="section-title dashboard-section-head__title">Cardio recent</h3>
+        </div>
+        <div class="label">${weeklyMinutes} min / 7j</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="label">7 jours</div>
+          <div class="metric__value">${weeklyMinutes} min</div>
+        </div>
+        <div class="metric">
+          <div class="label">Total</div>
+          <div class="metric__value">${state.cardioSessions.length}</div>
+        </div>
+      </div>
+
+      <div class="pending-list">
+        ${recent
+          .map((entry) => {
+            const meta = getCardioEntryMeta(entry);
+            return `
+              <div class="pending-item">
+                <div>
+                  <div class="pending-item__title">${getCardioTypeMeta(entry.type).title}</div>
+                  <div class="pending-item__meta">${formatDate(entry.date)}${meta ? ` · ${meta}` : ""}${entry.note ? ` · ${shortenLabel(entry.note, 40)}` : ""}</div>
+                </div>
+                <div class="pending-item__score">${entry.duration} min</div>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderBodyMetricsOverviewSection() {
+  const latest = getLatestBodyMetric();
+  if (!latest) return "";
+
+  const previous = getPreviousBodyMetric();
+
+  return `
+    <article class="surface surface-pad stack-md" data-accent-day="Upper">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Physique</div>
+          <h3 class="section-title dashboard-section-head__title">Derniere mesure</h3>
+        </div>
+        <div class="label">${formatDate(latest.date)}</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="label">Poids</div>
+          <div class="metric__value">${formatOptionalMetric(latest.weight, " kg")}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Taille</div>
+          <div class="metric__value">${formatOptionalMetric(latest.waist, " cm")}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Bras</div>
+          <div class="metric__value">${formatOptionalMetric(latest.arms, " cm")}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Cuisses</div>
+          <div class="metric__value">${formatOptionalMetric(latest.thighs, " cm")}</div>
+        </div>
+      </div>
+
+      <div class="muted">
+        Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}
+      </div>
+    </article>
+  `;
+}
+
+function renderSessionReviewsOverviewSection() {
+  if (!state.sessionReviews.length) return "";
+
+  const recent = getRecentSessionReviews(30).slice(0, 3);
+  const avgEnergy = recent.length
+    ? Math.round((recent.reduce((total, entry) => total + entry.energy, 0) / recent.length) * 10) / 10
+    : null;
+  const avgPain = recent.length
+    ? Math.round((recent.reduce((total, entry) => total + entry.pain, 0) / recent.length) * 10) / 10
+    : null;
+
+  return `
+    <article class="surface surface-pad stack-md" data-accent-day="${state.day}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Ressenti</div>
+          <h3 class="section-title dashboard-section-head__title">Retour de seance</h3>
+        </div>
+        <div class="label">${recent.length} recent${recent.length > 1 ? "s" : ""}</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="label">Energie moy.</div>
+          <div class="metric__value">${avgEnergy ? `${formatCompactNumber(avgEnergy)}/5` : "-"}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Gene moy.</div>
+          <div class="metric__value">${avgPain !== null ? `${formatCompactNumber(avgPain)}/3` : "-"}</div>
+        </div>
+      </div>
+
+      <div class="pending-list">
+        ${recent
+          .map(
+            (entry) => `
+              <div class="pending-item">
+                <div>
+                  <div class="pending-item__title">${entry.day} · ${formatDate(entry.date)}</div>
+                  <div class="pending-item__meta">${entry.exerciseCount} exos · ${entry.setCount} series · ${entry.durationMinutes} min${entry.note ? ` · ${shortenLabel(entry.note, 42)}` : ""}</div>
+                </div>
+                <div class="pending-item__score">
+                  <span class="pill ${getReviewTone(entry) === "progress" ? "" : getReviewTone(entry) === "reduce" ? "pill--amber" : "pill--outline"}">E${entry.energy} · D${entry.pain}</span>
+                </div>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
 function renderHistoryOverview() {
   const cards = getHistoryOverviewCards();
   const { heaviest, bestReps } = getGlobalRecords();
 
   return `
     <section class="history-list">
+      ${renderCardioOverviewSection()}
+      ${renderBodyMetricsOverviewSection()}
+      ${renderSessionReviewsOverviewSection()}
+
       <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
         <div class="dashboard-section-head">
           <div>
@@ -8451,7 +9502,9 @@ function renderHistory() {
   if (!state.history.length) {
     return `
       <section class="stack-md">
-        ${renderRecordsSection()}
+        ${renderCardioOverviewSection()}
+        ${renderBodyMetricsOverviewSection()}
+        ${renderSessionReviewsOverviewSection()}
         ${renderEmptyState("Aucun log pour l'instant", "Ta premiere seance fera apparaitre ici ton suivi detaille, tes charges et tes meilleurs passages.", "Suivi", state.day)}
       </section>
     `;

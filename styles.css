@@ -43,7 +43,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -604,7 +605,8 @@ button {
 }
 
 .input,
-.select {
+.select,
+.textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -624,6 +626,13 @@ button {
 .select {
   min-height: 50px;
   padding: 12px 14px;
+}
+
+.textarea {
+  min-height: 112px;
+  padding: 14px 16px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .slider {
@@ -1498,7 +1507,8 @@ button {
 }
 
 .input--editor,
-.select--editor {
+.select--editor,
+.textarea--editor {
   min-height: 50px;
   padding: 12px 14px;
   border-radius: 18px;
@@ -1509,6 +1519,11 @@ button {
 
 .input--editor {
   height: 50px;
+}
+
+.textarea--editor {
+  min-height: 108px;
+  text-align: left;
 }
 
 .program-actions {
@@ -2950,6 +2965,10 @@ button {
 
 .session-finish__verdicts {
   flex-wrap: wrap;
+}
+
+.session-review-shell {
+  gap: 14px;
 }
 
 .settings-shell {
