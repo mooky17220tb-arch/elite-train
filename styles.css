@@ -4404,6 +4404,11 @@ select:focus-visible {
   backdrop-filter: blur(18px) saturate(125%);
 }
 
+.workout-entry-panel--sticky:focus-within {
+  position: relative;
+  bottom: auto;
+}
+
 .workout-entry-field .label {
   margin-bottom: 8px;
 }
