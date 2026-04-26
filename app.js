@@ -225,6 +225,7 @@ const state = {
   programPlannerGoal: "classic",
   programPlannerConstraint: "standard",
   programTemplatePreviewId: "",
+  planSection: "",
   settingsSection: "",
   cycle: createDefaultCycle(),
   exerciseData: {},
@@ -4129,6 +4130,7 @@ function buildPersistedState() {
     programPlannerDays: state.programPlannerDays,
     programPlannerGoal: state.programPlannerGoal,
     programPlannerConstraint: state.programPlannerConstraint,
+    planSection: state.planSection,
     settingsSection: state.settingsSection,
     cycle: sanitizedCycle,
     exerciseData: sanitizedExerciseData,
@@ -4193,6 +4195,7 @@ function hydrateState(parsed = {}) {
   if (isClassicProgramPlannerGoal(state.programPlannerGoal)) {
     state.programPlannerConstraint = "standard";
   }
+  state.planSection = typeof parsed.planSection === "string" ? parsed.planSection : "";
   state.settingsSection = typeof parsed.settingsSection === "string" ? parsed.settingsSection : "";
   const fallbackDay = getProgramDays()[0] || "Push";
   state.day = getProgramDays().includes(parsed.day) ? parsed.day : fallbackDay;
@@ -4494,6 +4497,7 @@ function clearAllData() {
   state.programPlannerDays = 4;
   state.programPlannerGoal = "classic";
   state.programPlannerConstraint = "standard";
+  state.planSection = "";
   state.settingsSection = "";
   state.cycle = createDefaultCycle();
   state.exerciseData = {};
@@ -7717,8 +7721,6 @@ function renderSettingsDataSection() {
 }
 
 function getSettingsSections() {
-  const cycle = getCycleSnapshot();
-  const blocks = getProgramExerciseBlocks(state.programEditorDay);
   const backupLabel = state.storageMeta.backupAvailable ? "Backup actif" : "Pas de backup";
   const soundLabel = state.restSoundEnabled ? "Son ON" : "Son OFF";
   const vibrationLabel = state.restVibrationEnabled ? "Vibreur ON" : "Vibreur OFF";
@@ -7736,39 +7738,6 @@ function getSettingsSections() {
       mark: "APP",
       accentDay: state.day,
       content: renderSettingsInstallSection(),
-    },
-    {
-      id: "cycle",
-      label: "Bloc en cours",
-      title: `${cycle.goalLabel} · S${cycle.week}/${cycle.length}`,
-      summary: "Objectif, semaine active et deload",
-      meta: `${cycle.current.phase} - ${cycle.current.focus}`,
-      stats: [cycle.current.phase, cycle.current.target],
-      mark: "CYCLE",
-      accentDay: state.day,
-      content: renderCycleSettings(),
-    },
-    {
-      id: "planner",
-      label: "Assistant programme",
-      title: getActiveProgramDisplay(),
-      summary: "Choix du split selon tes jours",
-      meta: `${getProgramDays().length} bloc(s) actifs`,
-      stats: [`${state.programPlannerDays} jours`, state.programTemplateId ? "Template" : "Perso"],
-      mark: "SPLIT",
-      accentDay: getProgramDays()[0] || state.day,
-      content: renderProgramPlanner(),
-    },
-    {
-      id: "editor",
-      label: "Edition rapide",
-      title: state.programEditorDay,
-      summary: "Series, top set, back-off et repos",
-      meta: `${blocks.length} exercice(s) groupes`,
-      stats: ["Series", "Repos"],
-      mark: "EDIT",
-      accentDay: state.programEditorDay,
-      content: renderProgramEditor(),
     },
     {
       id: "alerts",
@@ -7815,6 +7784,148 @@ function getSettingsSections() {
       content: renderSettingsDataSection(),
     },
   ];
+}
+
+function getPlanSections() {
+  const cycle = getCycleSnapshot();
+  const weeklyPlan = getWeeklyPlanStatus();
+  const blocks = getProgramExerciseBlocks(state.programEditorDay);
+
+  return [
+    {
+      id: "week",
+      label: "Planning semaine",
+      title: `${weeklyPlan.workoutDone}/${weeklyPlan.sessionTarget} muscu · ${weeklyPlan.cardioMinutes}/${weeklyPlan.cardioTarget} min`,
+      summary: "Vue semaine, cardio et prochaine action",
+      meta: weeklyPlan.todayFocus,
+      stats: [`${weeklyPlan.remainingSessions} reste`, `${weeklyPlan.remainingCardio} min`],
+      mark: "WEEK",
+      accentDay: getNextTrainingDay(),
+      content: renderWeeklyPlanner(),
+    },
+    {
+      id: "cycle",
+      label: "Bloc en cours",
+      title: `${cycle.goalLabel} · S${cycle.week}/${cycle.length}`,
+      summary: "Objectif, semaine active et deload",
+      meta: `${cycle.current.phase} - ${cycle.current.focus}`,
+      stats: [cycle.current.phase, cycle.current.target],
+      mark: "CYCLE",
+      accentDay: state.day,
+      content: renderCycleSettings(),
+    },
+    {
+      id: "planner",
+      label: "Assistant programme",
+      title: getActiveProgramDisplay(),
+      summary: "Choix du split selon tes jours",
+      meta: `${getProgramDays().length} bloc(s) actifs`,
+      stats: [`${state.programPlannerDays} jours`, state.programTemplateId ? "Template" : "Perso"],
+      mark: "SPLIT",
+      accentDay: getProgramDays()[0] || state.day,
+      content: renderProgramPlanner(),
+    },
+    {
+      id: "editor",
+      label: "Edition rapide",
+      title: state.programEditorDay,
+      summary: "Series, top set, back-off et repos",
+      meta: `${blocks.length} exercice(s) groupes`,
+      stats: ["Series", "Repos"],
+      mark: "EDIT",
+      accentDay: state.programEditorDay,
+      content: renderProgramEditor(),
+    },
+  ];
+}
+
+function getActivePlanSection() {
+  return getPlanSections().find((section) => section.id === state.planSection) || null;
+}
+
+function openPlanSection(sectionId) {
+  state.planSection = sectionId;
+  saveState();
+  renderApp();
+}
+
+function closePlanSection() {
+  state.planSection = "";
+  saveState();
+  renderApp();
+}
+
+function renderPlanHub() {
+  const sections = getPlanSections();
+
+  return `
+    <section class="stack-md settings-shell">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Pilotage</div>
+            <h2 class="section-title dashboard-section-head__title">Plan</h2>
+          </div>
+          <div class="label">${sections.length} blocs</div>
+        </div>
+        <div class="muted">
+          Programme, planning, bloc et edition rapide sont regroupes ici pour les retrouver plus vite.
+        </div>
+      </article>
+
+      <div class="settings-hub">
+        ${sections
+          .map(
+            (section) => `
+              <button class="settings-panel-card" data-action="open-plan-section" data-plan-section="${section.id}" data-accent-day="${section.accentDay}" data-theme-day="${section.accentDay}" data-settings-mark="${section.mark}">
+                <div>
+                  <div class="settings-panel-card__eyebrow">Plan</div>
+                  <div class="settings-panel-card__title">${section.label}</div>
+                  <div class="settings-panel-card__desc">${section.summary}</div>
+                </div>
+                <div class="settings-panel-card__arrow">></div>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderPlanDetail() {
+  const section = getActivePlanSection();
+  if (!section) {
+    return renderPlanHub();
+  }
+
+  return `
+    <section class="stack-md settings-shell">
+      <article class="surface surface-pad stack-md settings-group settings-detail-shell" data-accent-day="${section.accentDay}">
+        <div class="settings-detail-header">
+          <button class="button button--ghost button--compact" data-action="close-plan-section">
+            Retour
+          </button>
+          <span class="pill pill--outline">${section.label}</span>
+        </div>
+        <div class="stack-sm">
+          <div class="label">Plan</div>
+          <h2 class="section-title dashboard-section-head__title">${section.label}</h2>
+          <div class="muted">${section.title} - ${section.meta}</div>
+        </div>
+      </article>
+
+      ${section.content}
+    </section>
+  `;
+}
+
+function renderPlan() {
+  if (state.planSection) {
+    return renderPlanDetail();
+  }
+
+  return renderPlanHub();
 }
 
 function getActiveSettingsSection() {
@@ -7969,6 +8080,7 @@ function renderLegacySettings() {
 function renderBody() {
   if (state.screen === "dashboard") return renderPremiumDashboard();
   if (state.screen === "history") return renderHistory();
+  if (state.screen === "plan") return renderPlan();
   if (state.screen === "settings") return renderSettings();
   return renderWorkout();
 }
@@ -8157,6 +8269,14 @@ function bindEvents() {
 
       if (action === "close-settings-section") {
         closeSettingsSection();
+      }
+
+      if (action === "open-plan-section") {
+        openPlanSection(button.dataset.planSection || "");
+      }
+
+      if (action === "close-plan-section") {
+        closePlanSection();
       }
 
       if (action === "dismiss-rest-alert") {
@@ -9324,6 +9444,11 @@ function getScreenMeta(screen = state.screen) {
       kicker: "Progress",
       navLabel: "Suivi",
     },
+    plan: {
+      title: "Plan",
+      kicker: "Program",
+      navLabel: "Plan",
+    },
     settings: {
       title: "Reglages",
       kicker: "Control",
@@ -9373,6 +9498,17 @@ function renderNavIcon(screen) {
     `;
   }
 
+  if (screen === "plan") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="5" y="4" width="14" height="16" rx="3"></rect>
+        <path d="M8 9h8"></path>
+        <path d="M8 13h8"></path>
+        <path d="M8 17h5"></path>
+      </svg>
+    `;
+  }
+
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M5 7h14"></path>
@@ -9386,7 +9522,7 @@ function renderNavIcon(screen) {
 }
 
 function getNavItems() {
-  return ["dashboard", "workout", "history", "settings"].map((screen) => ({
+  return ["dashboard", "workout", "history", "plan", "settings"].map((screen) => ({
     screen,
     ...getScreenMeta(screen),
   }));
