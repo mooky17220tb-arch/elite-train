@@ -1368,6 +1368,12 @@ button {
   gap: 14px;
 }
 
+.program-block__reorder {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .program-block__controls {
   display: flex;
   align-items: flex-end;
@@ -3260,6 +3266,10 @@ button {
   .program-block__controls {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .program-block__reorder {
+    grid-template-columns: 1fr;
   }
 
   .program-block__series {

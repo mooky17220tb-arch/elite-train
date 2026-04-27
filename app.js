@@ -221,6 +221,7 @@ const state = {
   programTemplateId: "ppl-upper-4",
   programTemplateTitle: "PPL + Upper",
   programEditorDay: "Push",
+  programEditorReorderMode: false,
   programPlannerDays: 4,
   programPlannerGoal: "classic",
   programPlannerConstraint: "standard",
@@ -4494,6 +4495,7 @@ function clearAllData() {
   state.programTemplateId = "ppl-upper-4";
   state.programTemplateTitle = "PPL + Upper";
   state.programEditorDay = "Push";
+  state.programEditorReorderMode = false;
   state.programPlannerDays = 4;
   state.programPlannerGoal = "classic";
   state.programPlannerConstraint = "standard";
@@ -4592,6 +4594,12 @@ function dismissInstallHint() {
 function setProgramEditorDay(day) {
   if (!getProgramDays().includes(day)) return;
   state.programEditorDay = day;
+  saveState();
+  renderApp();
+}
+
+function toggleProgramEditorReorderMode() {
+  state.programEditorReorderMode = !state.programEditorReorderMode;
   saveState();
   renderApp();
 }
@@ -7029,6 +7037,38 @@ function removeProgramBlock(day, startIndex) {
   renderApp();
 }
 
+function moveProgramBlock(day, startIndex, direction = 0) {
+  const nextDirection = Number(direction);
+  if (!nextDirection) return;
+
+  const dayEntries = [...(state.program[day] || [])];
+  const blocks = getProgramExerciseBlocks(day);
+  const currentBlockIndex = blocks.findIndex((block) => block.startIndex === startIndex);
+  if (currentBlockIndex < 0) return;
+
+  const targetBlockIndex = currentBlockIndex + nextDirection;
+  if (targetBlockIndex < 0 || targetBlockIndex >= blocks.length) return;
+
+  const blockSlices = blocks.map((block) => dayEntries.slice(block.startIndex, block.endIndex + 1));
+  const [movingBlock] = blockSlices.splice(currentBlockIndex, 1);
+  blockSlices.splice(targetBlockIndex, 0, movingBlock);
+
+  state.program = {
+    ...state.program,
+    [day]: blockSlices.flat(),
+  };
+  state.programTemplateId = "";
+  state.programTemplateTitle = "Programme perso";
+
+  if (state.programEntryEditor && state.programEntryEditor.day === day) {
+    state.programEntryEditor = null;
+  }
+
+  ensureSelectedChartKeyIsValid();
+  saveState();
+  renderApp();
+}
+
 function bumpProgramBlockRest(day, startIndex, delta) {
   const block = getProgramExerciseBlock(day, startIndex);
   if (!block) return;
@@ -7058,6 +7098,7 @@ function bumpProgramBlockRest(day, startIndex, delta) {
 function renderProgramEditor() {
   const day = state.programEditorDay;
   const blocks = getProgramExerciseBlocks(day);
+  const reorderMode = state.programEditorReorderMode;
 
   return `
     <article class="surface surface-pad stack-md program-editor">
@@ -7066,11 +7107,17 @@ function renderProgramEditor() {
           <div class="label">Modifier le programme</div>
           <h3 class="section-title dashboard-section-head__title">Edition rapide</h3>
         </div>
-        <div class="label">Sauvegarde auto</div>
+        <button class="button button--ghost button--compact" data-action="toggle-program-reorder-mode">
+          ${reorderMode ? "Finir" : "Reorganiser"}
+        </button>
       </div>
 
       <div class="program-hint">
-        Vue compacte par exercice, avec reglage separe pour Activation, Top Set, Back-off ou Series classiques.
+        ${
+          reorderMode
+            ? "Mode reorganisation actif : monte ou descends chaque bloc exercice entier sans casser top set et back-off."
+            : "Vue compacte par exercice, avec reglage separe pour Activation, Top Set, Back-off ou Series classiques."
+        }
       </div>
 
       <div class="program-day-tabs">
@@ -7111,6 +7158,35 @@ function renderProgramEditor() {
                           Suppr
                         </button>
                       </div>
+
+                      ${
+                        reorderMode
+                          ? `
+                              <div class="program-block__reorder">
+                                <button
+                                  class="button button--ghost button--compact"
+                                  data-action="move-program-block"
+                                  data-program-day="${day}"
+                                  data-program-block-start="${block.startIndex}"
+                                  data-move-direction="-1"
+                                  ${index === 0 ? "disabled" : ""}
+                                >
+                                  Monter
+                                </button>
+                                <button
+                                  class="button button--ghost button--compact"
+                                  data-action="move-program-block"
+                                  data-program-day="${day}"
+                                  data-program-block-start="${block.startIndex}"
+                                  data-move-direction="1"
+                                  ${index === blocks.length - 1 ? "disabled" : ""}
+                                >
+                                  Descendre
+                                </button>
+                              </div>
+                            `
+                          : ""
+                      }
 
                       <div class="program-block__groups">
                         ${getProgramSeriesGroups(block)
@@ -8289,6 +8365,18 @@ function bindEvents() {
 
       if (action === "add-program-entry") {
         addProgramEntry(button.dataset.programDay || state.programEditorDay);
+      }
+
+      if (action === "toggle-program-reorder-mode") {
+        toggleProgramEditorReorderMode();
+      }
+
+      if (action === "move-program-block") {
+        moveProgramBlock(
+          button.dataset.programDay || state.programEditorDay,
+          Number(button.dataset.programBlockStart),
+          Number(button.dataset.moveDirection)
+        );
       }
 
       if (action === "remove-program-entry") {
