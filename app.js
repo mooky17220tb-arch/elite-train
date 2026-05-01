@@ -1,6 +1,6 @@
 ﻿const STORAGE_KEY = "elite-train-iphone-v1";
 const STORAGE_BACKUP_KEY = `${STORAGE_KEY}-backup`;
-const STORAGE_SCHEMA_VERSION = 4;
+const STORAGE_SCHEMA_VERSION = 5;
 const CURRENT_REST_PROFILE_VERSION = 2;
 
 const PROGRAM = {
@@ -213,6 +213,39 @@ const CARDIO_TYPES = {
   },
 };
 
+const BODY_ACTIVITY_LEVELS = {
+  sedentary: {
+    id: "sedentary",
+    label: "Sedentaire",
+    factor: 1.2,
+    note: "Peu de mouvement hors seances",
+  },
+  light: {
+    id: "light",
+    label: "Leger",
+    factor: 1.375,
+    note: "Un peu de marche, 2 a 3 seances/semaine",
+  },
+  moderate: {
+    id: "moderate",
+    label: "Modere",
+    factor: 1.55,
+    note: "Rythme classique salle + vie active normale",
+  },
+  active: {
+    id: "active",
+    label: "Actif",
+    factor: 1.725,
+    note: "Beaucoup de pas, cardio ou seances regulieres",
+  },
+  veryActive: {
+    id: "veryActive",
+    label: "Tres actif",
+    factor: 1.9,
+    note: "Gros volume global, a utiliser seulement si c'est vraiment ton cas",
+  },
+};
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -236,6 +269,7 @@ const state = {
   sessionReviews: [],
   cardioDraft: createDefaultCardioDraft(),
   bodyDraft: createDefaultBodyDraft(),
+  bodyProfile: createDefaultBodyProfile(),
   workoutReviewDraft: createDefaultWorkoutReviewDraft(),
   timer: { seconds: 0, active: false },
   restAlertVisible: false,
@@ -334,6 +368,16 @@ function createDefaultBodyDraft() {
     arms: "",
     thighs: "",
     date: getTodayDateInput(),
+  };
+}
+
+function createDefaultBodyProfile() {
+  return {
+    goal: "auto",
+    sex: "male",
+    age: "",
+    height: "",
+    activity: "moderate",
   };
 }
 
@@ -837,6 +881,20 @@ function sanitizeBodyDraft(draft = {}) {
     arms: String(draft.arms ?? "").trim(),
     thighs: String(draft.thighs ?? "").trim(),
     date: sanitizeDateInputValue(draft.date, getTodayDateInput()),
+  };
+}
+
+function sanitizeBodyProfile(profile = {}) {
+  const allowedGoals = ["auto", "weight-loss", "toning", "muscle-gain", "wellbeing"];
+  const allowedSexes = ["male", "female"];
+  const allowedActivities = Object.keys(BODY_ACTIVITY_LEVELS);
+
+  return {
+    goal: allowedGoals.includes(profile.goal) ? profile.goal : "auto",
+    sex: allowedSexes.includes(profile.sex) ? profile.sex : "male",
+    age: String(profile.age ?? "").trim(),
+    height: String(profile.height ?? "").trim(),
+    activity: allowedActivities.includes(profile.activity) ? profile.activity : "moderate",
   };
 }
 
@@ -3922,16 +3980,59 @@ function getWeeklyCardioMinutes(days = 7) {
 }
 
 function getLatestBodyMetric() {
-  return state.bodyMetrics
-    .slice()
-    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())[0] || null;
+  return getSortedBodyMetrics()[0] || null;
 }
 
 function getPreviousBodyMetric() {
-  const metrics = state.bodyMetrics
+  const metrics = getSortedBodyMetrics();
+  return metrics[1] || null;
+}
+
+function getSortedBodyMetrics() {
+  return state.bodyMetrics
     .slice()
     .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
-  return metrics[1] || null;
+}
+
+function getRecentBodyMetrics(days = 30) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  return getSortedBodyMetrics().filter((entry) => {
+    const time = new Date(entry.date).getTime();
+    return Number.isFinite(time) && now - time <= range;
+  });
+}
+
+function getBodyMetricTrend(field, days = 28) {
+  const now = Date.now();
+  const range = days * 24 * 60 * 60 * 1000;
+  const parseTime = (entry) => new Date(entry.date).getTime();
+  const sortAsc = (left, right) => parseTime(left) - parseTime(right);
+  const all = state.bodyMetrics
+    .filter((entry) => Number.isFinite(entry?.[field]) && Number.isFinite(parseTime(entry)))
+    .slice()
+    .sort(sortAsc);
+
+  if (all.length < 2) return null;
+
+  const recent = all.filter((entry) => now - parseTime(entry) <= range);
+  const source = recent.length >= 2 ? recent : all;
+  const first = source[0];
+  const latest = source[source.length - 1];
+  const daySpan = Math.max(1, Math.round((parseTime(latest) - parseTime(first)) / (24 * 60 * 60 * 1000)));
+  const delta = Math.round((latest[field] - first[field]) * 10) / 10;
+  const weeklyRate = Math.round(((delta / daySpan) * 7) * 10) / 10;
+
+  return {
+    field,
+    first,
+    latest,
+    delta,
+    weeklyRate,
+    daySpan,
+    count: source.length,
+    recentWindow: recent.length >= 2,
+  };
 }
 
 function getRecentSessionReviews(days = 21) {
@@ -3955,11 +4056,28 @@ function formatOptionalMetric(value, unit = "", fallback = "-") {
   return `${formatCompactNumber(value)}${unit}`;
 }
 
+function formatSignedMetric(value, unit = "", fallback = "-") {
+  if (!Number.isFinite(value)) return fallback;
+  if (value === 0) return `0${unit}`;
+  return `${value > 0 ? "+" : ""}${formatCompactNumber(value)}${unit}`;
+}
+
 function formatMetricDelta(current, previous, unit = "") {
   if (!Number.isFinite(current) || !Number.isFinite(previous)) return "Pas assez de recul";
   const delta = Math.round((current - previous) * 10) / 10;
   if (delta === 0) return "Stable";
   return `${delta > 0 ? "+" : ""}${formatCompactNumber(delta)}${unit}`;
+}
+
+function formatBodyTrendDelta(trend, unit = "", fallback = "Pas assez de recul") {
+  if (!trend) return fallback;
+  if (trend.delta === 0) return "Stable";
+  return formatSignedMetric(trend.delta, unit, fallback);
+}
+
+function formatBodyTrendRate(trend, unit = "", fallback = "Pas assez de recul") {
+  if (!trend) return fallback;
+  return `${formatSignedMetric(trend.weeklyRate, unit, "0" + unit)}/sem`;
 }
 
 function getCardioEntryMeta(entry) {
@@ -3968,6 +4086,318 @@ function getCardioEntryMeta(entry) {
   if (Number.isFinite(entry.speed)) parts.push(`${formatCompactNumber(entry.speed)} km/h`);
   if (Number.isFinite(entry.incline)) parts.push(`${formatCompactNumber(entry.incline)}%`);
   return parts.join(" · ");
+}
+
+function getBodyEntryMeta(entry) {
+  if (!entry) return "";
+  const parts = [];
+  if (Number.isFinite(entry.weight)) parts.push(`Poids ${formatOptionalMetric(entry.weight, " kg")}`);
+  if (Number.isFinite(entry.waist)) parts.push(`Tour taille ${formatOptionalMetric(entry.waist, " cm")}`);
+  if (Number.isFinite(entry.arms)) parts.push(`Bras ${formatOptionalMetric(entry.arms, " cm")}`);
+  if (Number.isFinite(entry.thighs)) parts.push(`Cuisses ${formatOptionalMetric(entry.thighs, " cm")}`);
+  return parts.join(" · ");
+}
+
+function getActiveBodyGoal() {
+  const bodyGoal = state.bodyProfile?.goal;
+  if (bodyGoal && bodyGoal !== "auto") {
+    return bodyGoal;
+  }
+  if (state.programPlannerGoal && state.programPlannerGoal !== "classic") {
+    return state.programPlannerGoal;
+  }
+  return state.cycle.goal === "strength" ? "muscle-gain" : "toning";
+}
+
+function getBodyGoalMeta(goal = getActiveBodyGoal()) {
+  const cardioTarget = getWeeklyCardioTarget();
+  const goals = {
+    "weight-loss": {
+      id: "weight-loss",
+      label: "Perte de poids",
+      shortLabel: "Cut",
+      rateTarget: "-0.2 a -0.7 kg/sem",
+      priorityLabel: "Poids + tour de taille",
+      cadenceLabel: "1 a 3 mesures / semaine",
+      successLabel: "On veut voir le poids baisser a un rythme propre et le tour de taille suivre dans le bon sens.",
+      entryHint: "Pour perdre du poids, garde surtout le poids et le tour de taille chaque semaine.",
+      cardioLabel: `${cardioTarget} min / sem`,
+    },
+    toning: {
+      id: "toning",
+      label: "Tonification",
+      shortLabel: "Recomp",
+      rateTarget: "Stable a -0.3 kg/sem",
+      priorityLabel: "Tour de taille + poids + bras/cuisses",
+      cadenceLabel: "1 a 2 mesures / semaine",
+      successLabel: "On cherche une taille qui descend, avec un poids plutot stable ou legerement en baisse.",
+      entryHint: "Pour tonifier, le plus parlant reste le tour de taille avec quelques mensurations simples.",
+      cardioLabel: `${cardioTarget} min / sem`,
+    },
+    "muscle-gain": {
+      id: "muscle-gain",
+      label: "Prise de muscle",
+      shortLabel: "Masse",
+      rateTarget: "+0.1 a +0.25 kg/sem",
+      priorityLabel: "Poids + bras/cuisses + tour de taille",
+      cadenceLabel: "1 a 2 mesures / semaine",
+      successLabel: "On veut un poids qui monte lentement, avec bras/cuisses qui progressent et une taille qui reste sage.",
+      entryHint: "Pour une prise de masse propre, garde le poids, le tour de taille et au moins bras ou cuisses.",
+      cardioLabel: `${cardioTarget} min / sem`,
+    },
+    wellbeing: {
+      id: "wellbeing",
+      label: "Bien-etre + marche",
+      shortLabel: "Bien-etre",
+      rateTarget: "Pas de pression sur la balance",
+      priorityLabel: "Regularite + tour de taille + cardio",
+      cadenceLabel: "2 a 4 mesures / mois",
+      successLabel: "Le plus important ici, c'est la regularite, une taille stable ou en baisse et plus de mouvement sur la semaine.",
+      entryHint: "Pour le bien-etre, reste simple: poids, tour de taille et un peu de cardio suffisent largement.",
+      cardioLabel: `${cardioTarget} min / sem`,
+    },
+  };
+
+  return goals[goal] || goals.toning;
+}
+
+function getBodyProfileMeta() {
+  return sanitizeBodyProfile(state.bodyProfile);
+}
+
+function getBodyProfileWeight() {
+  const latestWeight = sanitizeDecimalNumber(getLatestBodyMetric()?.weight, null, 20, 400);
+  if (Number.isFinite(latestWeight)) return latestWeight;
+  return sanitizeDecimalNumber(state.bodyDraft.weight, null, 20, 400);
+}
+
+function roundToNearestFive(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value / 5) * 5;
+}
+
+function getBodyNutritionSnapshot() {
+  const profile = getBodyProfileMeta();
+  const goal = getActiveBodyGoal();
+  const goalMeta = getBodyGoalMeta(goal);
+  const activityMeta = BODY_ACTIVITY_LEVELS[profile.activity] || BODY_ACTIVITY_LEVELS.moderate;
+  const weight = getBodyProfileWeight();
+  const age = sanitizePositiveInteger(profile.age, null, 16);
+  const height = sanitizeDecimalNumber(profile.height, null, 120, 240);
+
+  if (!Number.isFinite(weight) || !Number.isFinite(age) || !Number.isFinite(height)) {
+    return {
+      ready: false,
+      goal,
+      goalMeta,
+      activityMeta,
+      profile,
+      missing: [
+        !Number.isFinite(weight) ? "poids" : "",
+        !Number.isFinite(age) ? "age" : "",
+        !Number.isFinite(height) ? "taille" : "",
+      ].filter(Boolean),
+    };
+  }
+
+  const bmr =
+    profile.sex === "female"
+      ? 10 * weight + 6.25 * height - 5 * age - 161
+      : 10 * weight + 6.25 * height - 5 * age + 5;
+  const maintenanceCalories = roundToNearestFive(bmr * activityMeta.factor);
+  const calorieAdjustments = {
+    "weight-loss": 0.85,
+    toning: 0.92,
+    "muscle-gain": 1.08,
+    wellbeing: 1,
+  };
+  const proteinRatios = {
+    "weight-loss": 2,
+    toning: 1.8,
+    "muscle-gain": 1.8,
+    wellbeing: 1.6,
+  };
+  const fatPercents = {
+    "weight-loss": 0.3,
+    toning: 0.3,
+    "muscle-gain": 0.25,
+    wellbeing: 0.3,
+  };
+
+  const targetCalories = roundToNearestFive(maintenanceCalories * (calorieAdjustments[goal] || 1));
+  const proteinPerKg = proteinRatios[goal] || 1.8;
+  const proteinGrams = Math.round(weight * proteinPerKg);
+  const fatCalories = targetCalories * (fatPercents[goal] || 0.3);
+  const fatGrams = Math.max(35, Math.round(fatCalories / 9));
+  const carbsCalories = Math.max(0, targetCalories - proteinGrams * 4 - fatGrams * 9);
+  const carbsGrams = Math.round(carbsCalories / 4);
+
+  const notes = {
+    "weight-loss": "Deficit modere pour descendre sans casser les perfs ni la recup.",
+    toning: "Petit deficit propre pour lisser la silhouette sans agressivite inutile.",
+    "muscle-gain": "Petit surplus pour monter lentement et garder une taille sage.",
+    wellbeing: "Base d'entretien pour bouger mieux et tenir sans pression.",
+  };
+
+  return {
+    ready: true,
+    goal,
+    goalMeta,
+    activityMeta,
+    profile,
+    weight,
+    age,
+    height,
+    bmr: roundToNearestFive(bmr),
+    maintenanceCalories,
+    targetCalories,
+    proteinGrams,
+    proteinPerKg,
+    fatGrams,
+    carbsGrams,
+    note: notes[goal] || notes.toning,
+  };
+}
+
+function getPhysiqueCoachSnapshot() {
+  const goal = getActiveBodyGoal();
+  const goalMeta = getBodyGoalMeta(goal);
+  const latest = getLatestBodyMetric();
+  const previous = getPreviousBodyMetric();
+  const recentMeasures = getRecentBodyMetrics(30);
+  const weightTrend = getBodyMetricTrend("weight", 28);
+  const waistTrend = getBodyMetricTrend("waist", 28);
+  const armsTrend = getBodyMetricTrend("arms", 42);
+  const thighsTrend = getBodyMetricTrend("thighs", 42);
+  const cardioMinutes = getWeeklyCardioMinutes(7);
+  const cardioTarget = getWeeklyCardioTarget();
+  const weightStable = !!weightTrend && Math.abs(weightTrend.delta) < 0.6;
+  const weightDown = !!weightTrend && weightTrend.delta <= -0.4;
+  const waistDown = !!waistTrend && waistTrend.delta <= -0.5;
+  const armsUp = !!armsTrend && armsTrend.delta >= 0.3;
+  const thighsUp = !!thighsTrend && thighsTrend.delta >= 0.5;
+  const weightRate = weightTrend?.weeklyRate ?? null;
+  const weightNote = weightTrend
+    ? `Poids ${formatBodyTrendDelta(weightTrend, " kg")} sur ${weightTrend.daySpan}j.`
+    : "";
+  const waistNote = waistTrend
+    ? ` Tour taille ${formatBodyTrendDelta(waistTrend, " cm")} sur ${waistTrend.daySpan}j.`
+    : "";
+  const cardioNote = ` Cardio ${cardioMinutes}/${cardioTarget} min sur 7 jours.`;
+
+  let tone = "hold";
+  let headline = latest ? "Base de suivi en place" : "Commence par poser ta base";
+  let note = latest
+    ? "Garde un rythme simple mais regulier pour lire une vraie tendance."
+    : goalMeta.entryHint;
+
+  if (goal === "weight-loss") {
+    if (!latest) {
+      headline = "Pose ton point de depart";
+      note = `${goalMeta.entryHint} Deux mesures suffisent deja pour lire la tendance ensuite.`;
+    } else if (waistDown && (weightDown || weightStable)) {
+      tone = "progress";
+      headline = weightStable ? "Recomposition tres propre" : "Perte de poids dans le bon sens";
+      note = `${weightNote}${waistNote}${cardioNote} Continue comme ca.`;
+    } else if (Number.isFinite(weightRate) && weightRate < -0.9) {
+      tone = "reduce";
+      headline = "La baisse semble rapide";
+      note = `${weightNote}${waistNote} Si l'energie ou les perfs chutent, ralentis legerement.`;
+    } else if (weightTrend?.delta > 0.6 && waistTrend?.delta > 0.6) {
+      tone = "reduce";
+      headline = "Le suivi monte un peu partout";
+      note = `${weightNote}${waistNote}${cardioNote} Revois le rythme global si besoin.`;
+    } else if (cardioMinutes < cardioTarget * 0.6) {
+      headline = "Bonne base, mais la depense peut monter";
+      note = `${weightNote}${waistNote}${cardioNote} Encore un peu plus de marche ferait la difference.`;
+    } else {
+      headline = "La tendance se construit";
+      note = `${weightNote}${waistNote} Encore 2 a 3 semaines de suivi et la lecture sera bien plus nette.`;
+    }
+  }
+
+  if (goal === "toning") {
+    if (!latest) {
+      headline = "Pose tes reperes silhouette";
+      note = `${goalMeta.entryHint} Un tour de taille par semaine change deja tout pour la lecture.`;
+    } else if (waistDown && (weightStable || weightDown)) {
+      tone = "progress";
+      headline = "Silhouette dans le bon sens";
+      note = `${weightNote}${waistNote}${cardioNote} Tres bon signal pour une tonification propre.`;
+    } else if ((armsUp || thighsUp) && (!waistTrend || waistTrend.delta <= 0.5)) {
+      tone = "progress";
+      headline = "Bon signal de recomposition";
+      note = `${weightNote}${waistNote} Bras ou cuisses montent sans taille qui s'emballe.`;
+    } else if (weightTrend?.delta > 0.7 && waistTrend?.delta > 0.7) {
+      tone = "reduce";
+      headline = "Ca monte un peu trop partout";
+      note = `${weightNote}${waistNote}${cardioNote} Ajuste legerement si ce n'est pas ce que tu veux.`;
+    } else {
+      headline = "Continue a empiler les mesures";
+      note = `${weightNote}${waistNote} On cherche surtout une taille qui descend sur quelques semaines.`;
+    }
+  }
+
+  if (goal === "muscle-gain") {
+    if (!latest) {
+      headline = "Pose ta base de prise de masse";
+      note = `${goalMeta.entryHint} Avec poids, tour de taille et un bras ou une cuisse, tu lis deja beaucoup de choses.`;
+    } else if (Number.isFinite(weightRate) && weightRate >= 0.1 && weightRate <= 0.35 && (!waistTrend || waistTrend.delta <= 1.2)) {
+      tone = "progress";
+      headline = "Prise de masse propre";
+      note = `${weightNote}${waistNote}${cardioNote} Le rythme semble bon sans trop de taille.`;
+    } else if ((armsUp || thighsUp) && (!waistTrend || waistTrend.delta <= 1.5)) {
+      tone = "progress";
+      headline = "Bon signal muscle";
+      note = `${weightNote}${waistNote} Les mensurations montent dans le bon sens.`;
+    } else if ((Number.isFinite(weightRate) && weightRate > 0.45) || (weightTrend?.delta > 1.5 && waistTrend?.delta > 1.2)) {
+      tone = "reduce";
+      headline = "Le surplus semble un peu haut";
+      note = `${weightNote}${waistNote} Si la taille monte trop vite, garde une prise plus lente.`;
+    } else if (weightTrend && weightTrend.delta <= 0) {
+      headline = "Le poids bouge peu pour une prise de masse";
+      note = `${weightNote}${waistNote}${cardioNote} Attends encore un peu ou revois legerement la strategie.`;
+    } else {
+      headline = "La tendance a encore besoin de recul";
+      note = `${weightNote}${waistNote} On veut surtout une hausse lente et propre.`;
+    }
+  }
+
+  if (goal === "wellbeing") {
+    if (!latest) {
+      headline = "Commence simple";
+      note = `${goalMeta.entryHint} Une mesure de temps en temps et un peu de marche suffisent pour bien suivre.`;
+    } else if (recentMeasures.length >= 2 && cardioMinutes >= cardioTarget * 0.6) {
+      tone = "progress";
+      headline = "Rythme solide et durable";
+      note = `${weightNote}${waistNote}${cardioNote} C'est exactement l'esprit recherche ici.`;
+    } else if (cardioMinutes < cardioTarget * 0.6) {
+      headline = "Base propre, ajoute juste un peu de marche";
+      note = `${weightNote}${waistNote}${cardioNote}`;
+    } else {
+      headline = "Reste simple et regulier";
+      note = `${weightNote}${waistNote} Le plus important est de tenir dans le temps.`;
+    }
+  }
+
+  return {
+    goal,
+    goalMeta,
+    tone,
+    toneLabel:
+      tone === "progress" ? "En ligne" : tone === "reduce" ? "Ajuste" : "A suivre",
+    latest,
+    previous,
+    recentMeasuresCount: recentMeasures.length,
+    cardioMinutes,
+    cardioTarget,
+    weightTrend,
+    waistTrend,
+    armsTrend,
+    thighsTrend,
+    headline,
+    note,
+  };
 }
 
 function getReviewTone(review) {
@@ -3988,6 +4418,14 @@ function updateCardioDraft(field, value) {
 function updateBodyDraft(field, value) {
   state.bodyDraft = sanitizeBodyDraft({
     ...state.bodyDraft,
+    [field]: value,
+  });
+  saveState();
+}
+
+function updateBodyProfile(field, value) {
+  state.bodyProfile = sanitizeBodyProfile({
+    ...state.bodyProfile,
     [field]: value,
   });
   saveState();
@@ -4141,6 +4579,7 @@ function buildPersistedState() {
     sessionReviews: sanitizedSessionReviews,
     cardioDraft: sanitizeCardioDraft(state.cardioDraft),
     bodyDraft: sanitizeBodyDraft(state.bodyDraft),
+    bodyProfile: sanitizeBodyProfile(state.bodyProfile),
     workoutReviewDraft: sanitizeWorkoutReviewDraft(state.workoutReviewDraft),
     day: currentDay,
     currentIndex: state.currentIndex,
@@ -4179,6 +4618,7 @@ function hydrateState(parsed = {}) {
   state.sessionReviews = sanitizeSessionReviewEntries(parsed.sessionReviews);
   state.cardioDraft = sanitizeCardioDraft(parsed.cardioDraft);
   state.bodyDraft = sanitizeBodyDraft(parsed.bodyDraft);
+  state.bodyProfile = sanitizeBodyProfile(parsed.bodyProfile);
   state.workoutReviewDraft = sanitizeWorkoutReviewDraft(parsed.workoutReviewDraft);
   state.cycle = sanitizeCycle(parsed.cycle);
   state.programPlannerGoal = PROGRAM_PLANNER_GOALS[parsed.programPlannerGoal]
@@ -4509,6 +4949,7 @@ function clearAllData() {
   state.sessionReviews = [];
   state.cardioDraft = createDefaultCardioDraft();
   state.bodyDraft = createDefaultBodyDraft();
+  state.bodyProfile = createDefaultBodyProfile();
   state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
   state.pendingSession = [];
   state.selectedChartKey = "";
@@ -7643,15 +8084,55 @@ function renderCardioSettingsSection() {
 }
 
 function renderBodyMetricsSection() {
-  const latest = getLatestBodyMetric();
-  const previous = getPreviousBodyMetric();
-  const recent = state.bodyMetrics
-    .slice()
-    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
-    .slice(0, 3);
+  const coach = getPhysiqueCoachSnapshot();
+  const goalMeta = coach.goalMeta;
+  const latest = coach.latest;
+  const previous = coach.previous;
+  const recent = getSortedBodyMetrics().slice(0, 3);
+  const nutrition = getBodyNutritionSnapshot();
 
   return `
     <section class="stack-md">
+      <article class="surface surface-pad coach-shell coach-shell--${coach.tone}" data-accent-day="Upper">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Physique intelligent</div>
+            <h3 class="section-title dashboard-section-head__title">${goalMeta.label}: ${coach.headline}</h3>
+          </div>
+          <div class="coach-score coach-score--${coach.tone}">
+            <span>${goalMeta.shortLabel}</span>
+            <strong>${coach.toneLabel}</strong>
+          </div>
+        </div>
+
+        <div class="coach-grid coach-grid--triple">
+          <div class="coach-card">
+            <div class="label">Poids</div>
+            <div class="coach-card__value">${formatBodyTrendDelta(coach.weightTrend, " kg", formatOptionalMetric(latest?.weight, " kg"))}</div>
+            <div class="coach-card__meta">${coach.weightTrend ? `Sur ${coach.weightTrend.daySpan}j · ${formatBodyTrendRate(coach.weightTrend, " kg")}` : "Ajoute au moins 2 mesures pour lire une tendance."}</div>
+          </div>
+          <div class="coach-card">
+            <div class="label">Tour taille</div>
+            <div class="coach-card__value">${formatBodyTrendDelta(coach.waistTrend, " cm", formatOptionalMetric(latest?.waist, " cm"))}</div>
+            <div class="coach-card__meta">${coach.waistTrend ? `Sur ${coach.waistTrend.daySpan}j · ${formatOptionalMetric(latest?.waist, " cm")}` : "Le tour de taille reste la mesure la plus utile avec le poids."}</div>
+          </div>
+          <div class="coach-card">
+            <div class="label">Cadence</div>
+            <div class="coach-card__value">${coach.recentMeasuresCount}/30j</div>
+            <div class="coach-card__meta">Cardio ${coach.cardioMinutes}/${coach.cardioTarget} min · Cible ${goalMeta.cardioLabel}</div>
+          </div>
+        </div>
+
+        <div class="coach-note">${coach.note}</div>
+
+        <div class="coach-tags">
+          <span class="coach-tag">Priorite ${goalMeta.priorityLabel}</span>
+          <span class="coach-tag">Repere ${goalMeta.rateTarget}</span>
+          <span class="coach-tag">Mesure ${goalMeta.cadenceLabel}</span>
+          <span class="coach-tag">Cardio ${goalMeta.cardioLabel}</span>
+        </div>
+      </article>
+
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
@@ -7661,24 +8142,178 @@ function renderBodyMetricsSection() {
           <div class="label">${state.bodyMetrics.length} entree${state.bodyMetrics.length > 1 ? "s" : ""}</div>
         </div>
 
-        <div class="metric-grid">
-          <div class="metric">
-            <div class="label">Poids</div>
-            <div class="metric__value">${formatOptionalMetric(latest?.weight, " kg")}</div>
+        <div class="coach-pulse-grid">
+          <div class="coach-pulse">
+            <span class="label">Poids actuel</span>
+            <strong>${formatOptionalMetric(latest?.weight, " kg")}</strong>
+            <span>${formatMetricDelta(latest?.weight, previous?.weight, " kg")}</span>
           </div>
-          <div class="metric">
-            <div class="label">Taille</div>
-            <div class="metric__value">${formatOptionalMetric(latest?.waist, " cm")}</div>
+          <div class="coach-pulse">
+            <span class="label">Tour taille</span>
+            <strong>${formatOptionalMetric(latest?.waist, " cm")}</strong>
+            <span>${formatMetricDelta(latest?.waist, previous?.waist, " cm")}</span>
+          </div>
+          <div class="coach-pulse">
+            <span class="label">Bras</span>
+            <strong>${formatOptionalMetric(latest?.arms, " cm")}</strong>
+            <span>${formatBodyTrendDelta(coach.armsTrend, " cm")}</span>
+          </div>
+          <div class="coach-pulse">
+            <span class="label">Cuisses</span>
+            <strong>${formatOptionalMetric(latest?.thighs, " cm")}</strong>
+            <span>${formatBodyTrendDelta(coach.thighsTrend, " cm")}</span>
+          </div>
+          <div class="coach-pulse">
+            <span class="label">Cardio 7j</span>
+            <strong>${coach.cardioMinutes} min</strong>
+            <span>Cible ${coach.cardioTarget} min</span>
+          </div>
+          <div class="coach-pulse">
+            <span class="label">Mesures 30j</span>
+            <strong>${coach.recentMeasuresCount}</strong>
+            <span>${goalMeta.cadenceLabel}</span>
           </div>
         </div>
 
-        <div class="muted">
+        <div class="confidence-note">
           ${
             latest
-              ? `Derniere mesure le ${formatDate(latest.date)} · Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}`
-              : "Ajoute ton poids, ton tour de taille et tes mensurations pour suivre la vraie progression."
+              ? `Derniere mesure le ${formatDate(latest.date)} · ${getBodyEntryMeta(latest)}`
+              : "Ajoute ton poids, ton tour de taille et quelques mensurations pour lire la vraie progression."
           }
         </div>
+      </article>
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Repere</div>
+            <h3 class="section-title dashboard-section-head__title">Ce qu'on veut voir</h3>
+          </div>
+          <div class="label">${goalMeta.label}</div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="label">Rythme poids</div>
+            <div class="metric__value">${goalMeta.rateTarget}</div>
+          </div>
+          <div class="metric">
+            <div class="label">Cardio cible</div>
+            <div class="metric__value">${goalMeta.cardioLabel}</div>
+          </div>
+          <div class="metric">
+            <div class="label">Priorite</div>
+            <div class="metric__value">${goalMeta.priorityLabel}</div>
+          </div>
+          <div class="metric">
+            <div class="label">Cadence</div>
+            <div class="metric__value">${goalMeta.cadenceLabel}</div>
+          </div>
+        </div>
+
+        <div class="install-hint">${goalMeta.successLabel}</div>
+      </article>
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Profil nutrition</div>
+            <h3 class="section-title dashboard-section-head__title">Calories et macros</h3>
+          </div>
+          <div class="label">${nutrition.goalMeta.label}</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-goal-select">Objectif nutrition</label>
+            <select id="body-goal-select" class="select select--editor">
+              <option value="auto" ${state.bodyProfile.goal === "auto" ? "selected" : ""}>Auto (objectif actif)</option>
+              <option value="weight-loss" ${state.bodyProfile.goal === "weight-loss" ? "selected" : ""}>Perte de poids</option>
+              <option value="toning" ${state.bodyProfile.goal === "toning" ? "selected" : ""}>Tonification</option>
+              <option value="muscle-gain" ${state.bodyProfile.goal === "muscle-gain" ? "selected" : ""}>Prise de muscle</option>
+              <option value="wellbeing" ${state.bodyProfile.goal === "wellbeing" ? "selected" : ""}>Bien-etre + marche</option>
+            </select>
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="body-sex-select">Sexe</label>
+            <select id="body-sex-select" class="select select--editor">
+              <option value="male" ${state.bodyProfile.sex === "male" ? "selected" : ""}>Homme</option>
+              <option value="female" ${state.bodyProfile.sex === "female" ? "selected" : ""}>Femme</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-age-input">Age</label>
+            <input id="body-age-input" class="input input--editor" type="number" min="16" max="90" step="1" value="${state.bodyProfile.age}" placeholder="31" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="body-height-input">Taille (cm)</label>
+            <input id="body-height-input" class="input input--editor" type="number" min="120" max="240" step="1" value="${state.bodyProfile.height}" placeholder="178" />
+          </div>
+        </div>
+
+        <div class="field-wrap">
+          <label class="label" for="body-activity-select">Activite</label>
+          <select id="body-activity-select" class="select select--editor">
+            ${Object.values(BODY_ACTIVITY_LEVELS)
+              .map(
+                (item) => `
+                  <option value="${item.id}" ${state.bodyProfile.activity === item.id ? "selected" : ""}>
+                    ${item.label}
+                  </option>
+                `
+              )
+              .join("")}
+          </select>
+          <div class="muted">${nutrition.activityMeta.note}</div>
+        </div>
+
+        ${
+          nutrition.ready
+            ? `
+              <div class="coach-pulse-grid">
+                <div class="coach-pulse">
+                  <span class="label">Entretien</span>
+                  <strong>${nutrition.maintenanceCalories} kcal</strong>
+                  <span>BMR ${nutrition.bmr} kcal</span>
+                </div>
+                <div class="coach-pulse">
+                  <span class="label">Objectif</span>
+                  <strong>${nutrition.targetCalories} kcal</strong>
+                  <span>${nutrition.goalMeta.label}</span>
+                </div>
+                <div class="coach-pulse">
+                  <span class="label">Proteines</span>
+                  <strong>${nutrition.proteinGrams} g</strong>
+                  <span>${formatCompactNumber(nutrition.proteinPerKg)} g/kg</span>
+                </div>
+                <div class="coach-pulse">
+                  <span class="label">Glucides</span>
+                  <strong>${nutrition.carbsGrams} g</strong>
+                  <span>Variable d'ajustement</span>
+                </div>
+                <div class="coach-pulse">
+                  <span class="label">Lipides</span>
+                  <strong>${nutrition.fatGrams} g</strong>
+                  <span>Base hormonale + satiete</span>
+                </div>
+                <div class="coach-pulse">
+                  <span class="label">Poids calcule</span>
+                  <strong>${formatOptionalMetric(nutrition.weight, " kg")}</strong>
+                  <span>${nutrition.profile.sex === "female" ? "Formule femme" : "Formule homme"}</span>
+                </div>
+              </div>
+              <div class="install-hint">${nutrition.note} Ajuste ensuite apres 2 a 3 semaines selon le poids, le tour de taille et les perfs.</div>
+            `
+            : `
+              <div class="install-hint">
+                Renseigne ${nutrition.missing.join(", ")} pour calculer tes calories et tes macros. Le poids est pris depuis ta derniere mesure si tu l'as deja note.
+              </div>
+            `
+        }
       </article>
 
       <article class="surface surface-pad stack-md settings-group">
@@ -7703,7 +8338,7 @@ function renderBodyMetricsSection() {
 
         <div class="grid-2">
           <div class="field-wrap">
-            <label class="label" for="body-waist-input">Taille (cm)</label>
+            <label class="label" for="body-waist-input">Tour de taille (cm)</label>
             <input id="body-waist-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.waist}" placeholder="84" />
           </div>
           <div class="field-wrap">
@@ -7718,8 +8353,8 @@ function renderBodyMetricsSection() {
             <input id="body-thighs-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.thighs}" placeholder="58" />
           </div>
           <div class="field-wrap">
-            <label class="label">Resume</label>
-            <div class="install-hint">Tu peux ne rentrer qu'une seule mesure. Le but est de garder quelque chose de simple a tenir dans le temps.</div>
+            <label class="label">Conseil</label>
+            <div class="install-hint">${goalMeta.entryHint} Tu peux ne rentrer qu'une seule mesure: le plus important reste la regularite.</div>
           </div>
         </div>
 
@@ -7748,7 +8383,7 @@ function renderBodyMetricsSection() {
                       <div class="pending-item">
                         <div>
                           <div class="pending-item__title">${formatDate(entry.date)}</div>
-                          <div class="pending-item__meta">Poids ${formatOptionalMetric(entry.weight, " kg")} · Taille ${formatOptionalMetric(entry.waist, " cm")} · Bras ${formatOptionalMetric(entry.arms, " cm")} · Cuisses ${formatOptionalMetric(entry.thighs, " cm")}</div>
+                          <div class="pending-item__meta">${getBodyEntryMeta(entry)}</div>
                         </div>
                       </div>
                     `
@@ -7802,6 +8437,7 @@ function getSettingsSections() {
   const vibrationLabel = state.restVibrationEnabled ? "Vibreur ON" : "Vibreur OFF";
   const weeklyCardioMinutes = getWeeklyCardioMinutes();
   const latestBodyMetric = getLatestBodyMetric();
+  const bodyCoach = getPhysiqueCoachSnapshot();
 
   return [
     {
@@ -7840,10 +8476,10 @@ function getSettingsSections() {
     {
       id: "body",
       label: "Physique",
-      title: latestBodyMetric?.weight ? `${formatOptionalMetric(latestBodyMetric.weight, " kg")}` : "Aucune mesure",
-      summary: "Poids, taille et mensurations",
-      meta: latestBodyMetric ? `Derniere mesure le ${formatDate(latestBodyMetric.date)}` : "Ajoute du poids et quelques mensurations simples",
-      stats: [formatOptionalMetric(latestBodyMetric?.weight, " kg"), formatOptionalMetric(latestBodyMetric?.waist, " cm")],
+      title: latestBodyMetric?.weight ? `${formatOptionalMetric(latestBodyMetric.weight, " kg")} · ${bodyCoach.goalMeta.shortLabel}` : bodyCoach.goalMeta.label,
+      summary: "Poids, tour de taille, macros et lecture objectif",
+      meta: latestBodyMetric ? `${bodyCoach.goalMeta.label} · ${bodyCoach.headline}` : bodyCoach.goalMeta.entryHint,
+      stats: [formatOptionalMetric(latestBodyMetric?.weight, " kg"), `${bodyCoach.cardioMinutes}/${bodyCoach.cardioTarget} min`],
       mark: "BODY",
       accentDay: "Upper",
       content: renderBodyMetricsSection(),
@@ -8648,6 +9284,50 @@ function bindEvents() {
   if (bodyThighsInput) {
     bodyThighsInput.oninput = (event) => {
       updateBodyDraft("thighs", event.target.value);
+    };
+  }
+
+  const bodyGoalSelect = document.getElementById("body-goal-select");
+  if (bodyGoalSelect) {
+    bodyGoalSelect.onchange = (event) => {
+      updateBodyProfile("goal", event.target.value);
+      renderApp();
+    };
+  }
+
+  const bodySexSelect = document.getElementById("body-sex-select");
+  if (bodySexSelect) {
+    bodySexSelect.onchange = (event) => {
+      updateBodyProfile("sex", event.target.value);
+      renderApp();
+    };
+  }
+
+  const bodyAgeInput = document.getElementById("body-age-input");
+  if (bodyAgeInput) {
+    bodyAgeInput.oninput = (event) => {
+      updateBodyProfile("age", event.target.value);
+    };
+    bodyAgeInput.onchange = () => {
+      renderApp();
+    };
+  }
+
+  const bodyHeightInput = document.getElementById("body-height-input");
+  if (bodyHeightInput) {
+    bodyHeightInput.oninput = (event) => {
+      updateBodyProfile("height", event.target.value);
+    };
+    bodyHeightInput.onchange = () => {
+      renderApp();
+    };
+  }
+
+  const bodyActivitySelect = document.getElementById("body-activity-select");
+  if (bodyActivitySelect) {
+    bodyActivitySelect.onchange = (event) => {
+      updateBodyProfile("activity", event.target.value);
+      renderApp();
     };
   }
 
@@ -9765,13 +10445,15 @@ function renderBodyMetricsOverviewSection() {
   if (!latest) return "";
 
   const previous = getPreviousBodyMetric();
+  const coach = getPhysiqueCoachSnapshot();
+  const nutrition = getBodyNutritionSnapshot();
 
   return `
     <article class="surface surface-pad stack-md" data-accent-day="Upper">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Physique</div>
-          <h3 class="section-title dashboard-section-head__title">Derniere mesure</h3>
+          <h3 class="section-title dashboard-section-head__title">${coach.goalMeta.label}</h3>
         </div>
         <div class="label">${formatDate(latest.date)}</div>
       </div>
@@ -9782,7 +10464,7 @@ function renderBodyMetricsOverviewSection() {
           <div class="metric__value">${formatOptionalMetric(latest.weight, " kg")}</div>
         </div>
         <div class="metric">
-          <div class="label">Taille</div>
+          <div class="label">Tour taille</div>
           <div class="metric__value">${formatOptionalMetric(latest.waist, " cm")}</div>
         </div>
         <div class="metric">
@@ -9796,8 +10478,13 @@ function renderBodyMetricsOverviewSection() {
       </div>
 
       <div class="muted">
-        Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}
+        ${coach.headline} · Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Tour taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}
       </div>
+      ${
+        nutrition.ready
+          ? `<div class="muted">Objectif ~ ${nutrition.targetCalories} kcal · P ${nutrition.proteinGrams} g · G ${nutrition.carbsGrams} g · L ${nutrition.fatGrams} g</div>`
+          : ""
+      }
     </article>
   `;
 }
