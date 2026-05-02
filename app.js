@@ -10009,11 +10009,7 @@ function renderPremiumDashboard() {
       </article>
 
       ${getInstallHintHtml()}
-      ${renderResumeCard()}
       ${renderWeeklyPlanner()}
-      ${renderCycleSection()}
-      ${renderCoachSection()}
-      ${renderLifestyleDashboardSection()}
       ${renderDashboardProgressOverview()}
 
       <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}" id="dashboard-progress-chart">
