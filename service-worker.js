@@ -1,12 +1,12 @@
-const CACHE_NAME = "elite-train-iphone-cache-v86";
+const CACHE_NAME = "elite-train-iphone-cache-v87";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./index.html?v=86",
-  "./styles.css?v=86",
-  "./app.js?v=86",
-  "./manifest.webmanifest?v=86",
-  "./icon.svg?v=86",
+  "./index.html?v=87",
+  "./styles.css?v=87",
+  "./app.js?v=87",
+  "./manifest.webmanifest?v=87",
+  "./icon.svg?v=87",
   "./assets/push-card.svg",
   "./assets/pull-card.svg",
   "./assets/legs-card.svg",

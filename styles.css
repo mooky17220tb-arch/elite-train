@@ -4149,6 +4149,17 @@ select:focus-visible {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
 }
 
+.surface-button {
+  appearance: none;
+  display: block;
+  width: 100%;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .bottom-nav__inner {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 28px;

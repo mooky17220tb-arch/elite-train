@@ -9122,6 +9122,14 @@ function bindEvents() {
         openSettingsSection(button.dataset.settingsSection || "");
       }
 
+      if (action === "open-body-settings") {
+        state.screen = "settings";
+        state.settingsSection = "body";
+        state.planSection = "";
+        saveState();
+        renderApp();
+      }
+
       if (action === "close-settings-section") {
         closeSettingsSection();
       }
@@ -10676,7 +10684,7 @@ function renderBodyMetricsOverviewSection() {
   const nutrition = getBodyNutritionSnapshot();
 
   return `
-    <article class="surface surface-pad stack-md" data-accent-day="Upper">
+    <button class="surface surface-pad stack-md surface-button" data-action="open-body-settings" data-accent-day="Upper" aria-label="Ouvrir le detail physique dans les reglages">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Physique</div>
@@ -10712,7 +10720,7 @@ function renderBodyMetricsOverviewSection() {
           ? `<div class="muted">Objectif ~ ${nutrition.targetCalories} kcal · P ${nutrition.proteinGrams} g · G ${nutrition.carbsGrams} g · L ${nutrition.fatGrams} g</div>`
           : ""
       }
-    </article>
+    </button>
   `;
 }
 
