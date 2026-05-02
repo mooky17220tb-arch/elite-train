@@ -246,6 +246,37 @@ const BODY_ACTIVITY_LEVELS = {
   },
 };
 
+const BODY_CHART_FIELDS = {
+  weight: {
+    id: "weight",
+    label: "Poids",
+    shortLabel: "Poids",
+    unit: " kg",
+    empty: "Ajoute au moins 2 poids pour lire une vraie tendance.",
+  },
+  waist: {
+    id: "waist",
+    label: "Tour de taille",
+    shortLabel: "Taille",
+    unit: " cm",
+    empty: "Ajoute au moins 2 tours de taille pour visualiser la courbe.",
+  },
+  arms: {
+    id: "arms",
+    label: "Bras",
+    shortLabel: "Bras",
+    unit: " cm",
+    empty: "Ajoute au moins 2 mesures de bras pour voir la progression.",
+  },
+  thighs: {
+    id: "thighs",
+    label: "Cuisses",
+    shortLabel: "Cuisses",
+    unit: " cm",
+    empty: "Ajoute au moins 2 mesures de cuisses pour voir la progression.",
+  },
+};
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -286,6 +317,8 @@ const state = {
   workoutStartedAt: "",
   selectedChartKey: "",
   historyDetailKey: "",
+  historyOverviewFilter: "all",
+  bodyChartField: "weight",
   pendingSession: [],
   installHintDismissed: false,
   onboardingCompleted: false,
@@ -4031,6 +4064,100 @@ function getRecentBodyMetrics(days = 30) {
   });
 }
 
+function sanitizeBodyChartField(value) {
+  return BODY_CHART_FIELDS[value] ? value : "weight";
+}
+
+function getBodyChartFieldOptions() {
+  return Object.values(BODY_CHART_FIELDS);
+}
+
+function getBodyProgressChartData(field = state.bodyChartField, limit = 8) {
+  const selectedField = sanitizeBodyChartField(field);
+  const meta = BODY_CHART_FIELDS[selectedField];
+  const height = 160;
+  const width = 320;
+  const paddingX = 16;
+  const paddingTop = 18;
+  const paddingBottom = 26;
+  const floorY = height - paddingBottom;
+  const validEntries = state.bodyMetrics
+    .filter((entry) => {
+      const value = entry?.[selectedField];
+      const time = new Date(entry?.date).getTime();
+      return Number.isFinite(value) && Number.isFinite(time);
+    })
+    .slice()
+    .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
+    .slice(-limit);
+
+  if (validEntries.length < 2) {
+    return {
+      ready: false,
+      selectedField,
+      meta,
+      entries: validEntries,
+      entryCount: validEntries.length,
+    };
+  }
+
+  const values = validEntries.map((entry) => Number(entry[selectedField]));
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const innerWidth = width - paddingX * 2;
+  const innerHeight = height - paddingTop - paddingBottom;
+  const range = maxValue - minValue;
+  const pointY = (value) =>
+    range === 0
+      ? paddingTop + innerHeight / 2
+      : paddingTop + ((maxValue - value) / range) * innerHeight;
+  const pointX = (index) =>
+    validEntries.length === 1
+      ? width / 2
+      : paddingX + (index / (validEntries.length - 1)) * innerWidth;
+  const points = validEntries.map((entry, index) => {
+    const value = Number(entry[selectedField]);
+    return {
+      entry,
+      value,
+      x: Math.round(pointX(index) * 10) / 10,
+      y: Math.round(pointY(value) * 10) / 10,
+    };
+  });
+  const linePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`)
+    .join(" ");
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  const areaPath = `${linePath} L${lastPoint.x} ${floorY} L${firstPoint.x} ${floorY} Z`;
+  const firstEntry = validEntries[0];
+  const latestEntry = validEntries[validEntries.length - 1];
+  const delta = Math.round((Number(latestEntry[selectedField]) - Number(firstEntry[selectedField])) * 10) / 10;
+  const trend = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
+
+  return {
+    ready: true,
+    selectedField,
+    meta,
+    entries: validEntries,
+    entryCount: validEntries.length,
+    latestValue: Number(latestEntry[selectedField]),
+    latestValueLabel: formatOptionalMetric(Number(latestEntry[selectedField]), meta.unit),
+    latestDate: latestEntry.date,
+    firstDate: firstEntry.date,
+    delta,
+    deltaLabel: delta === 0 ? "Stable" : formatSignedMetric(delta, meta.unit),
+    rangeLabel: `${formatOptionalMetric(minValue, meta.unit)} a ${formatOptionalMetric(maxValue, meta.unit)}`,
+    trend,
+    points,
+    linePath,
+    areaPath,
+    height,
+    width,
+    floorY,
+  };
+}
+
 function getBodyMetricTrend(field, days = 28) {
   const now = Date.now();
   const range = days * 24 * 60 * 60 * 1000;
@@ -4077,6 +4204,36 @@ function getRecentSessionReviews(days = 21) {
 
 function getLatestSessionReview() {
   return getRecentSessionReviews(3650)[0] || null;
+}
+
+function getHistoryOverviewFilterOptions() {
+  const historyDays = Array.from(new Set(getSortedHistory().map((item) => item.day)));
+  const orderedDays = [];
+  const pushDay = (day) => {
+    if (!day || orderedDays.includes(day) || !historyDays.includes(day)) return;
+    orderedDays.push(day);
+  };
+
+  getProgramDayKeys(state.program).forEach(pushDay);
+  historyDays.forEach(pushDay);
+
+  return [
+    { key: "all", label: "Tous" },
+    ...orderedDays.map((day) => ({ key: day, label: day })),
+  ];
+}
+
+function sanitizeHistoryOverviewFilter(value) {
+  const normalized = typeof value === "string" ? value : "all";
+  const options = getHistoryOverviewFilterOptions();
+  return options.some((item) => item.key === normalized) ? normalized : "all";
+}
+
+function getFilteredHistoryOverviewEntries(filter = state.historyOverviewFilter) {
+  const activeFilter = sanitizeHistoryOverviewFilter(filter);
+  const entries = getSortedHistory();
+  if (activeFilter === "all") return entries;
+  return entries.filter((entry) => entry.day === activeFilter);
 }
 
 function formatOptionalMetric(value, unit = "", fallback = "-") {
@@ -4716,6 +4873,8 @@ function buildPersistedState() {
     pendingSession: sanitizedPendingSession,
     selectedChartKey: state.selectedChartKey,
     historyDetailKey: state.historyDetailKey,
+    historyOverviewFilter: sanitizeHistoryOverviewFilter(state.historyOverviewFilter),
+    bodyChartField: sanitizeBodyChartField(state.bodyChartField),
     installHintDismissed: state.installHintDismissed,
     onboardingCompleted: state.onboardingCompleted,
     onboardingStep: state.onboardingStep,
@@ -4781,6 +4940,8 @@ function hydrateState(parsed = {}) {
   state.pendingSession = sanitizePendingSessionEntries(parsed.pendingSession);
   state.selectedChartKey = parsed.selectedChartKey || "";
   state.historyDetailKey = parsed.historyDetailKey || "";
+  state.historyOverviewFilter = sanitizeHistoryOverviewFilter(parsed.historyOverviewFilter);
+  state.bodyChartField = sanitizeBodyChartField(parsed.bodyChartField);
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
   state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
   state.onboardingStep = Math.max(0, Math.min(parsed.onboardingStep || 0, 2));
@@ -5084,6 +5245,8 @@ function clearAllData() {
   state.pendingSession = [];
   state.selectedChartKey = "";
   state.historyDetailKey = "";
+  state.historyOverviewFilter = "all";
+  state.bodyChartField = "weight";
   state.installHintDismissed = false;
   state.onboardingCompleted = false;
   state.onboardingStep = 0;
@@ -5106,6 +5269,18 @@ function clearAllData() {
   resetWorkoutState();
   state.day = "Push";
   state.screen = "dashboard";
+  renderApp();
+}
+
+function setHistoryOverviewFilter(filter) {
+  state.historyOverviewFilter = sanitizeHistoryOverviewFilter(filter);
+  saveState();
+  renderApp();
+}
+
+function setBodyChartField(field) {
+  state.bodyChartField = sanitizeBodyChartField(field);
+  saveState();
   renderApp();
 }
 
@@ -6030,12 +6205,12 @@ function getWeeklyPlanStatus() {
   };
 }
 
-function getGlobalRecords() {
-  const numericEntries = state.history.filter((item) => isNumericLoad(item.load));
+function getGlobalRecords(entries = state.history) {
+  const numericEntries = entries.filter((item) => isNumericLoad(item.load));
   const heaviest = numericEntries
     .slice()
     .sort((a, b) => (b.load || 0) - (a.load || 0) || b.reps - a.reps)[0] || null;
-  const bestReps = state.history
+  const bestReps = entries
     .slice()
     .sort((a, b) => b.reps - a.reps || new Date(b.date).getTime() - new Date(a.date).getTime())[0] || null;
 
@@ -6089,10 +6264,10 @@ function getExerciseRecords(limit = 8) {
     .slice(0, limit);
 }
 
-function getHistoryOverviewCards() {
+function getHistoryOverviewCards(entries = getSortedHistory()) {
   const cards = new Map();
 
-  getSortedHistory().forEach((item) => {
+  entries.forEach((item) => {
     const current = cards.get(item.day) || {
       key: item.day,
       day: item.day,
@@ -8224,6 +8399,8 @@ function renderBodyMetricsSection() {
   const previous = coach.previous;
   const recent = getSortedBodyMetrics().slice(0, 3);
   const nutrition = getBodyNutritionSnapshot();
+  const bodyChart = getBodyProgressChartData(state.bodyChartField);
+  const bodyChartFieldOptions = getBodyChartFieldOptions();
 
   return `
     <section class="stack-md">
@@ -8265,6 +8442,139 @@ function renderBodyMetricsSection() {
           <span class="coach-tag">Mesure ${goalMeta.cadenceLabel}</span>
           <span class="coach-tag">Cardio ${goalMeta.cardioLabel}</span>
         </div>
+      </article>
+
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Nouvelle entree</div>
+            <h3 class="section-title dashboard-section-head__title">Ajouter une mesure</h3>
+          </div>
+          <div class="label">Corps</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-date-input">Date</label>
+            <input id="body-date-input" class="input input--editor" type="date" value="${state.bodyDraft.date}" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="body-weight-input">Poids</label>
+            <input id="body-weight-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.weight}" placeholder="78.4" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-waist-input">Tour de taille (cm)</label>
+            <input id="body-waist-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.waist}" placeholder="84" />
+          </div>
+          <div class="field-wrap">
+            <label class="label" for="body-arms-input">Bras (cm)</label>
+            <input id="body-arms-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.arms}" placeholder="38" />
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field-wrap">
+            <label class="label" for="body-thighs-input">Cuisses (cm)</label>
+            <input id="body-thighs-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.thighs}" placeholder="58" />
+          </div>
+          <div class="field-wrap">
+            <label class="label">Conseil</label>
+            <div class="install-hint">${goalMeta.entryHint} Tu peux ne rentrer qu'une seule mesure: le plus important reste la regularite.</div>
+          </div>
+        </div>
+
+        <div class="sheet-card__actions">
+          <button class="button button--ghost" data-action="clear-body-draft">Vider</button>
+          <button class="button button--primary" data-action="save-body-metric">Enregistrer la mesure</button>
+        </div>
+      </article>
+
+      <article class="surface surface-pad stack-md settings-group chart-shell" data-accent-day="Upper">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Courbe physique</div>
+            <h3 class="section-title dashboard-section-head__title">Voir la progression</h3>
+          </div>
+          <div class="chart-shell__metric">${bodyChart.ready ? `${bodyChart.entryCount} mesure${bodyChart.entryCount > 1 ? "s" : ""}` : "En attente"}</div>
+        </div>
+
+        <div class="history-filter-row history-filter-row--compact">
+          ${bodyChartFieldOptions
+            .map(
+              (item) => `
+                <button
+                  class="history-filter-chip ${state.bodyChartField === item.id ? "is-active" : ""}"
+                  data-action="set-body-chart-field"
+                  data-body-chart-field="${item.id}"
+                  aria-pressed="${state.bodyChartField === item.id ? "true" : "false"}"
+                >
+                  ${item.shortLabel}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+
+        ${
+          bodyChart.ready
+            ? `
+              <div class="body-progress-hero">
+                <div>
+                  <div class="label">${bodyChart.meta.label}</div>
+                  <div class="body-progress-hero__value">${bodyChart.latestValueLabel}</div>
+                  <div class="body-progress-hero__meta">Derniere mesure le ${formatDate(bodyChart.latestDate)} · Fenetre ${formatDate(bodyChart.firstDate)} -> ${formatDate(bodyChart.latestDate)}</div>
+                </div>
+                <div class="body-progress-badge body-progress-badge--${bodyChart.trend}">
+                  ${bodyChart.deltaLabel}
+                </div>
+              </div>
+
+              <div class="body-progress-chart">
+                <svg class="body-progress-chart__svg" viewBox="0 0 ${bodyChart.width} ${bodyChart.height}" preserveAspectRatio="none" aria-label="Courbe de progression ${bodyChart.meta.label}">
+                  <defs>
+                    <linearGradient id="body-progress-fill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="rgba(22, 196, 127, 0.34)"></stop>
+                      <stop offset="100%" stop-color="rgba(22, 196, 127, 0)"></stop>
+                    </linearGradient>
+                  </defs>
+                  <line class="body-progress-chart__guide" x1="16" y1="34" x2="304" y2="34"></line>
+                  <line class="body-progress-chart__guide" x1="16" y1="74" x2="304" y2="74"></line>
+                  <line class="body-progress-chart__guide" x1="16" y1="${bodyChart.floorY}" x2="304" y2="${bodyChart.floorY}"></line>
+                  <path class="body-progress-chart__area" d="${bodyChart.areaPath}"></path>
+                  <path class="body-progress-chart__line" d="${bodyChart.linePath}"></path>
+                  ${bodyChart.points
+                    .map(
+                      (point, index) => `
+                        <circle
+                          class="body-progress-chart__dot ${index === bodyChart.points.length - 1 ? "is-latest" : ""}"
+                          cx="${point.x}"
+                          cy="${point.y}"
+                          r="${index === bodyChart.points.length - 1 ? 4.5 : 3.5}"
+                        ></circle>
+                      `
+                    )
+                    .join("")}
+                </svg>
+              </div>
+
+              <div class="body-progress-chart__foot">
+                <span>${formatDate(bodyChart.firstDate)}</span>
+                <span>${bodyChart.rangeLabel}</span>
+                <span>${formatDate(bodyChart.latestDate)}</span>
+              </div>
+            `
+            : `
+              <div class="chart-empty">
+                <div>
+                  <strong>Pas encore assez de donnees</strong>
+                  <span>${bodyChart.entryCount === 1 ? `Encore une mesure de ${bodyChart.meta.shortLabel.toLowerCase()} et la courbe apparaitra.` : bodyChart.meta.empty}</span>
+                </div>
+              </div>
+            `
+        }
       </article>
 
       <article class="surface surface-pad stack-md settings-group">
@@ -8448,54 +8758,6 @@ function renderBodyMetricsSection() {
               </div>
             `
         }
-      </article>
-
-      <article class="surface surface-pad stack-md settings-group">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Nouvelle entree</div>
-            <h3 class="section-title dashboard-section-head__title">Ajouter une mesure</h3>
-          </div>
-          <div class="label">Corps</div>
-        </div>
-
-        <div class="grid-2">
-          <div class="field-wrap">
-            <label class="label" for="body-date-input">Date</label>
-            <input id="body-date-input" class="input input--editor" type="date" value="${state.bodyDraft.date}" />
-          </div>
-          <div class="field-wrap">
-            <label class="label" for="body-weight-input">Poids</label>
-            <input id="body-weight-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.weight}" placeholder="78.4" />
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="field-wrap">
-            <label class="label" for="body-waist-input">Tour de taille (cm)</label>
-            <input id="body-waist-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.waist}" placeholder="84" />
-          </div>
-          <div class="field-wrap">
-            <label class="label" for="body-arms-input">Bras (cm)</label>
-            <input id="body-arms-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.arms}" placeholder="38" />
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="field-wrap">
-            <label class="label" for="body-thighs-input">Cuisses (cm)</label>
-            <input id="body-thighs-input" class="input input--editor" type="number" min="0" step="0.1" value="${state.bodyDraft.thighs}" placeholder="58" />
-          </div>
-          <div class="field-wrap">
-            <label class="label">Conseil</label>
-            <div class="install-hint">${goalMeta.entryHint} Tu peux ne rentrer qu'une seule mesure: le plus important reste la regularite.</div>
-          </div>
-        </div>
-
-        <div class="sheet-card__actions">
-          <button class="button button--ghost" data-action="clear-body-draft">Vider</button>
-          <button class="button button--primary" data-action="save-body-metric">Enregistrer la mesure</button>
-        </div>
       </article>
 
       ${
@@ -9128,6 +9390,14 @@ function bindEvents() {
         state.planSection = "";
         saveState();
         renderApp();
+      }
+
+      if (action === "set-history-overview-filter") {
+        setHistoryOverviewFilter(button.dataset.historyFilter || "all");
+      }
+
+      if (action === "set-body-chart-field") {
+        setBodyChartField(button.dataset.bodyChartField || "weight");
       }
 
       if (action === "close-settings-section") {
@@ -10778,8 +11048,11 @@ function renderSessionReviewsOverviewSection() {
 }
 
 function renderHistoryOverview() {
-  const cards = getHistoryOverviewCards();
-  const { heaviest, bestReps } = getGlobalRecords();
+  const filterOptions = getHistoryOverviewFilterOptions();
+  const activeFilter = sanitizeHistoryOverviewFilter(state.historyOverviewFilter);
+  const filteredHistory = getFilteredHistoryOverviewEntries(activeFilter);
+  const cards = getHistoryOverviewCards(filteredHistory);
+  const { heaviest, bestReps } = getGlobalRecords(filteredHistory);
 
   return `
     <section class="history-list">
@@ -10787,13 +11060,46 @@ function renderHistoryOverview() {
       ${renderBodyMetricsOverviewSection()}
       ${renderSessionReviewsOverviewSection()}
 
+      ${
+        filterOptions.length > 1
+          ? `
+            <article class="surface surface-pad stack-sm" data-accent-day="${state.day}">
+              <div class="dashboard-section-head">
+                <div>
+                  <div class="label">Filtre rapide</div>
+                  <h3 class="section-title dashboard-section-head__title">Trouver une seance vite</h3>
+                </div>
+                <div class="label">${activeFilter === "all" ? "Tout afficher" : activeFilter}</div>
+              </div>
+
+              <div class="history-filter-row">
+                ${filterOptions
+                  .map(
+                    (option) => `
+                      <button
+                        class="history-filter-chip ${activeFilter === option.key ? "is-active" : ""}"
+                        data-action="set-history-overview-filter"
+                        data-history-filter="${option.key}"
+                        aria-pressed="${activeFilter === option.key ? "true" : "false"}"
+                      >
+                        ${option.label}
+                      </button>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </article>
+          `
+          : ""
+      }
+
       <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
         <div class="dashboard-section-head">
           <div>
             <div class="label">Suivi</div>
             <h3 class="section-title dashboard-section-head__title">Meilleurs PR par seance</h3>
           </div>
-          <div class="label">${cards.length} seances</div>
+          <div class="label">${cards.length} seance${cards.length > 1 ? "s" : ""}</div>
         </div>
 
         <div class="records-summary">
@@ -10815,42 +11121,53 @@ function renderHistoryOverview() {
       </article>
 
       <div class="history-group-list">
-        ${cards
-          .map(
-            (card) => `
-              <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
-                <div class="history-group-card__top">
-                  <div class="history-card__identity">
-                    <div class="history-card__eyebrow">${card.exerciseCount} exo${card.exerciseCount > 1 ? "s" : ""} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
-                    <div class="history-card__title">${card.day}</div>
-                  </div>
-                  <span class="pill pill--outline">${formatDate(card.lastDate)}</span>
-                </div>
+        ${
+          cards.length
+            ? cards
+                .map(
+                  (card) => `
+                    <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
+                      <div class="history-group-card__top">
+                        <div class="history-card__identity">
+                          <div class="history-card__eyebrow">${card.exerciseCount} exo${card.exerciseCount > 1 ? "s" : ""} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
+                          <div class="history-card__title">${card.day}</div>
+                        </div>
+                        <span class="pill pill--outline">${formatDate(card.lastDate)}</span>
+                      </div>
 
-                <div class="history-group-card__stats">
-                  <span class="history-group-card__stat">
-                    <strong>${isNumericLoad(card.bestLoad) ? formatLoad(card.bestLoad, card.bestLoadLabel) : "-"}</strong>
-                    <em>PR charge</em>
-                    <span class="history-group-card__detail">${card.bestLoadExercise ? shortenLabel(card.bestLoadExercise, 16) : "Aucun exo"}</span>
-                  </span>
-                  <span class="history-group-card__stat">
-                    <strong>${card.bestReps}</strong>
-                    <em>PR reps</em>
-                    <span class="history-group-card__detail">${card.bestRepsExercise ? shortenLabel(card.bestRepsExercise, 16) : "Aucun exo"}</span>
-                  </span>
-                  <span class="history-group-card__stat">
-                    <strong>${card.count}</strong>
-                    <em>Logs</em>
-                  </span>
-                  <span class="history-group-card__stat">
-                    <strong>${card.exerciseCount}</strong>
-                    <em>Exos</em>
-                  </span>
-                </div>
-              </button>
-            `
-          )
-          .join("")}
+                      <div class="history-group-card__stats">
+                        <span class="history-group-card__stat">
+                          <strong>${isNumericLoad(card.bestLoad) ? formatLoad(card.bestLoad, card.bestLoadLabel) : "-"}</strong>
+                          <em>PR charge</em>
+                          <span class="history-group-card__detail">${card.bestLoadExercise ? shortenLabel(card.bestLoadExercise, 16) : "Aucun exo"}</span>
+                        </span>
+                        <span class="history-group-card__stat">
+                          <strong>${card.bestReps}</strong>
+                          <em>PR reps</em>
+                          <span class="history-group-card__detail">${card.bestRepsExercise ? shortenLabel(card.bestRepsExercise, 16) : "Aucun exo"}</span>
+                        </span>
+                        <span class="history-group-card__stat">
+                          <strong>${card.count}</strong>
+                          <em>Logs</em>
+                        </span>
+                        <span class="history-group-card__stat">
+                          <strong>${card.exerciseCount}</strong>
+                          <em>Exos</em>
+                        </span>
+                      </div>
+                    </button>
+                  `
+                )
+                .join("")
+            : `
+                <article class="surface surface-pad empty-state" data-accent-day="${state.day}">
+                  <div class="empty-state__icon">ET</div>
+                  <div class="empty-state__eyebrow">Suivi</div>
+                  <h3 class="empty-state__title">Aucune seance pour ce filtre</h3>
+                  <p class="empty-state__text">Change de filtre pour revoir l'ensemble ou choisis une autre seance.</p>
+                </article>
+              `
+        }
       </div>
     </section>
   `;
