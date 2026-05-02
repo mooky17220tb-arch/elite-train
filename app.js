@@ -272,6 +272,7 @@ const state = {
   bodyProfile: createDefaultBodyProfile(),
   workoutReviewDraft: createDefaultWorkoutReviewDraft(),
   timer: { seconds: 0, active: false },
+  timerTotalSeconds: 0,
   restAlertVisible: false,
   restSoundEnabled: true,
   restVibrationEnabled: true,
@@ -761,6 +762,18 @@ function sanitizeTimerState(timer = {}) {
     seconds,
     active,
   };
+}
+
+function getTimerTotalSeconds(timer = state.timer, timerTotalSeconds = state.timerTotalSeconds) {
+  const seconds = sanitizePositiveInteger(timer?.seconds, 0, 0);
+  const total = sanitizePositiveInteger(timerTotalSeconds, seconds, 0);
+  return Math.max(seconds, total);
+}
+
+function getTimerProgressRatio() {
+  const total = getTimerTotalSeconds();
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(1, state.timer.seconds / total));
 }
 
 function formatTargetLabelFromRange(minReps, maxReps) {
@@ -3014,6 +3027,20 @@ function formatTimer(seconds) {
   return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
+function getTimerButtonLabel(screenMeta = getScreenMeta()) {
+  if (state.timer.active) return "Pause";
+  if (state.timer.seconds > 0) return "Reprendre";
+  return screenMeta.title;
+}
+
+function formatChartMetricValue(value, metric = "reps") {
+  const amount = Number(value);
+  const safeValue = Number.isFinite(amount)
+    ? amount.toLocaleString("fr-FR", { maximumFractionDigits: amount % 1 === 0 ? 0 : 1 })
+    : "0";
+  return metric === "load" ? `${safeValue} kg` : `${safeValue}`;
+}
+
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString("fr-FR", {
     day: "2-digit",
@@ -3570,6 +3597,7 @@ function reopenLastPendingSet(prefill = false) {
   state.screen = "workout";
   state.restAlertVisible = false;
   state.timer = { seconds: 0, active: false };
+  state.timerTotalSeconds = 0;
   state.timerEndsAt = 0;
   state.workoutFinished = false;
   state.pendingAdvance = null;
@@ -4541,6 +4569,95 @@ function getChartData(preferredKey = "") {
   };
 }
 
+function getExerciseChartPriority(series = "") {
+  const label = String(series || "").toLowerCase();
+  if (label.includes("top set")) return 0;
+  if (label.includes("serie 1")) return 1;
+  if (label.includes("back-off")) return 2;
+  if (label.includes("activation")) return 3;
+  return 4;
+}
+
+function getPreferredExerciseChartKey(entries = []) {
+  const slots = new Map();
+  entries.forEach((item) => {
+    if (!slots.has(item.key)) {
+      slots.set(item.key, {
+        key: item.key,
+        count: 0,
+        hasLoad: false,
+        priority: getExerciseChartPriority(item.series),
+        lastDate: 0,
+      });
+    }
+
+    const slot = slots.get(item.key);
+    slot.count += 1;
+    slot.hasLoad = slot.hasLoad || isNumericLoad(item.load);
+    slot.lastDate = Math.max(slot.lastDate, new Date(item.date).getTime() || 0);
+  });
+
+  return (
+    [...slots.values()].sort(
+      (left, right) =>
+        left.priority - right.priority ||
+        Number(right.hasLoad) - Number(left.hasLoad) ||
+        right.count - left.count ||
+        right.lastDate - left.lastDate
+    )[0]?.key || ""
+  );
+}
+
+function getDashboardProgressCards(limit = 6) {
+  const grouped = new Map();
+
+  getSortedHistory().forEach((item) => {
+    if (!grouped.has(item.exercise)) grouped.set(item.exercise, []);
+    grouped.get(item.exercise).push(item);
+  });
+
+  return [...grouped.values()]
+    .map((entries) => {
+      const key = getPreferredExerciseChartKey(entries);
+      if (!key) return null;
+
+      const chart = getChartData(key);
+      if (!chart.entries.length) return null;
+
+      const latest = chart.entries[chart.entries.length - 1];
+      const first = chart.entries[0];
+      const delta = Number(((latest.chartValue || 0) - (first.chartValue || 0)).toFixed(1));
+      const threshold = chart.metric === "load" ? 0.5 : 1;
+      const trend = delta > threshold ? "up" : delta < -threshold ? "down" : "flat";
+
+      return {
+        key,
+        exercise: latest.exercise,
+        series: latest.series,
+        day: latest.day,
+        accentDay: resolveDayThemeKey(latest.day),
+        metric: chart.metric,
+        entryCount: chart.entries.length,
+        entries: chart.entries.slice(-6),
+        latest,
+        first,
+        delta,
+        trend,
+        latestValueLabel: formatChartMetricValue(latest.chartValue, chart.metric),
+        deltaLabel:
+          trend === "flat"
+            ? "Stable"
+            : `${delta > 0 ? "+" : ""}${formatChartMetricValue(Math.abs(delta), chart.metric)}`,
+      };
+    })
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        new Date(right.latest.date).getTime() - new Date(left.latest.date).getTime()
+    )
+    .slice(0, limit);
+}
+
 function buildPersistedState() {
   const sanitizedProgram = sanitizeProgram(state.program);
   const sanitizedCycle = sanitizeCycle(state.cycle);
@@ -4584,6 +4701,7 @@ function buildPersistedState() {
     day: currentDay,
     currentIndex: state.currentIndex,
     timer: sanitizedTimer,
+    timerTotalSeconds: getTimerTotalSeconds(sanitizedTimer, state.timerTotalSeconds),
     restAlertVisible: state.restAlertVisible,
     restSoundEnabled: state.restSoundEnabled,
     restVibrationEnabled: state.restVibrationEnabled,
@@ -4648,6 +4766,7 @@ function hydrateState(parsed = {}) {
     Math.max(0, (state.program[state.day] || []).length - 1)
   );
   state.timer = sanitizeTimerState(parsed.timer);
+  state.timerTotalSeconds = getTimerTotalSeconds(state.timer, parsed.timerTotalSeconds);
   state.restAlertVisible = Boolean(parsed.restAlertVisible);
   state.restSoundEnabled = parsed.restSoundEnabled ?? true;
   state.restVibrationEnabled = parsed.restVibrationEnabled ?? true;
@@ -4685,10 +4804,12 @@ function hydrateState(parsed = {}) {
     const remainingMs = state.timerEndsAt - Date.now();
     if (remainingMs <= 0) {
       state.timer = { seconds: 0, active: false };
+      state.timerTotalSeconds = 0;
       state.timerEndsAt = 0;
       state.restAlertVisible = true;
     } else {
       state.timer.seconds = Math.ceil(remainingMs / 1000);
+      state.timerTotalSeconds = getTimerTotalSeconds(state.timer, state.timerTotalSeconds);
     }
   }
 }
@@ -4807,6 +4928,7 @@ function resetWorkoutState() {
   state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
   state.showPlates = false;
   state.timer = { seconds: 0, active: false };
+  state.timerTotalSeconds = 0;
   state.timerEndsAt = 0;
   state.workoutFinished = false;
   state.pendingAdvance = null;
@@ -4842,6 +4964,12 @@ function scrollWorkoutViewToTop() {
   window.setTimeout(scrollToTop, 140);
 }
 
+function scrollDashboardProgressChartIntoView() {
+  const chart = document.getElementById("dashboard-progress-chart");
+  if (!chart) return;
+  chart.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function handleValidation() {
   const active = getActiveExercise();
   const reps = parseInt(state.repsInput, 10);
@@ -4873,6 +5001,7 @@ function handleValidation() {
   state.timer = isLastExercise
     ? { seconds: 0, active: false }
     : { seconds: active.rest, active: active.rest > 0 };
+  state.timerTotalSeconds = isLastExercise ? 0 : active.rest;
   state.timerEndsAt = isLastExercise || active.rest <= 0 ? 0 : getTimerEndTimestamp(active.rest);
   state.repsInput = "";
 
@@ -4920,6 +5049,7 @@ function finalizeWorkout() {
   state.selectedChartKey = state.pendingSession[state.pendingSession.length - 1]?.key || "";
   state.pendingSession = [];
   state.workoutFinished = false;
+  state.timerTotalSeconds = 0;
   state.timerEndsAt = 0;
   state.workoutStartedAt = "";
   state.workoutReviewDraft = createDefaultWorkoutReviewDraft();
@@ -4959,6 +5089,8 @@ function clearAllData() {
   state.onboardingStep = 0;
   state.restAlertVisible = false;
   state.pendingAdvance = null;
+  state.timer = { seconds: 0, active: false };
+  state.timerTotalSeconds = 0;
   state.timerEndsAt = 0;
   state.restSoundEnabled = true;
   state.restVibrationEnabled = true;
@@ -5487,6 +5619,7 @@ function extendRest(seconds = 30) {
     seconds,
     active: true,
   };
+  state.timerTotalSeconds = seconds;
   state.timerEndsAt = getTimerEndTimestamp(seconds);
   state.restAlertVisible = false;
   scheduleRestSound(seconds);
@@ -5496,6 +5629,7 @@ function extendRest(seconds = 30) {
 
 function triggerRestAlert(options = {}) {
   clearScheduledRestSound();
+  state.timerTotalSeconds = 0;
   state.restAlertVisible = true;
   playRestSound();
   vibrateRestAlert();
@@ -8826,6 +8960,7 @@ function bindEvents() {
       if (action === "toggle-timer") {
         if (state.timer.seconds <= 0) {
           state.timer.active = false;
+          state.timerTotalSeconds = 0;
           state.timerEndsAt = 0;
           clearScheduledRestSound();
         } else if (state.timer.active) {
@@ -8893,6 +9028,14 @@ function bindEvents() {
         state.screen = "workout";
         saveState();
         renderApp();
+      }
+
+      if (action === "focus-dashboard-chart") {
+        state.selectedChartKey = button.dataset.chartKey || state.selectedChartKey;
+        state.screen = "dashboard";
+        saveState();
+        renderApp();
+        window.setTimeout(scrollDashboardProgressChartIntoView, 60);
       }
 
       if (action === "discard-workout") {
@@ -9471,6 +9614,7 @@ function tickTimer() {
     if (remainingMs <= 0) {
       state.timer.seconds = 0;
       state.timer.active = false;
+      state.timerTotalSeconds = 0;
       state.timerEndsAt = 0;
       triggerRestAlert();
       return;
@@ -9486,6 +9630,7 @@ function tickTimer() {
   if (state.timer.seconds <= 0) {
     state.timer.seconds = 0;
     state.timer.active = false;
+    state.timerTotalSeconds = 0;
     state.timerEndsAt = 0;
     triggerRestAlert();
     return;
@@ -9869,8 +10014,9 @@ function renderPremiumDashboard() {
       ${renderCycleSection()}
       ${renderCoachSection()}
       ${renderLifestyleDashboardSection()}
+      ${renderDashboardProgressOverview()}
 
-      <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}">
+      <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}" id="dashboard-progress-chart">
         <div class="dashboard-section-head">
           <div>
             <div class="label">Progression recente</div>
@@ -10314,6 +10460,91 @@ function renderEmptyState(title, text, eyebrow = "A venir", accentDay = state.da
       <div class="empty-state__eyebrow">${eyebrow}</div>
       <h3 class="empty-state__title">${title}</h3>
       <p class="empty-state__text">${text}</p>
+    </article>
+  `;
+}
+
+function renderDashboardProgressSparkline(entries = [], metric = "load") {
+  if (!entries.length) return "";
+  const max = Math.max(...entries.map((entry) => entry.chartValue || 0), 1);
+
+  return `
+    <div class="progress-overview-spark">
+      ${entries
+        .map((entry, index) => {
+          const height = Math.max(12, Math.round(((entry.chartValue || 0) / max) * 48));
+          return `
+            <div class="progress-overview-spark__col ${index === entries.length - 1 ? "is-latest" : ""}">
+              <span
+                class="progress-overview-spark__bar ${metric === "reps" ? "progress-overview-spark__bar--reps" : ""}"
+                style="height:${height}px"
+              ></span>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderDashboardProgressOverview() {
+  const cards = getDashboardProgressCards();
+  if (!cards.length) return "";
+
+  return `
+    <article class="surface surface-pad progress-overview-shell" data-accent-day="${state.day}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Vue globale</div>
+          <h3 class="section-title dashboard-section-head__title">Progression par exercice</h3>
+          <div class="dashboard-hero__cue">Lis d'un coup d'oeil ce qui monte vraiment semaine apres semaine.</div>
+        </div>
+        <div class="chart-shell__metric">${cards.length} exo${cards.length > 1 ? "s" : ""}</div>
+      </div>
+
+      <div class="progress-overview-grid">
+        ${cards
+          .map(
+            (card) => `
+              <button
+                class="progress-overview-card"
+                data-action="focus-dashboard-chart"
+                data-chart-key="${card.key}"
+                data-accent-day="${card.accentDay}"
+                aria-label="Voir la courbe detaillee de ${card.exercise}"
+              >
+                <div class="progress-overview-card__top">
+                  <div>
+                    <div class="progress-overview-card__eyebrow">${card.day} - ${card.series}</div>
+                    <div class="progress-overview-card__title">${card.exercise}</div>
+                  </div>
+                  <span class="progress-overview-card__delta progress-overview-card__delta--${card.trend}">
+                    ${card.deltaLabel}
+                  </span>
+                </div>
+
+                <div class="progress-overview-card__stats">
+                  <div>
+                    <div class="label">Dernier</div>
+                    <div class="progress-overview-card__value">${card.latestValueLabel}</div>
+                  </div>
+                  <div>
+                    <div class="label">Points</div>
+                    <div class="progress-overview-card__meta">${card.entryCount}</div>
+                  </div>
+                </div>
+
+                ${renderDashboardProgressSparkline(card.entries, card.metric)}
+
+                <div class="progress-overview-card__foot">
+                  <span>${formatDate(card.first.date)} -> ${formatDate(card.latest.date)}</span>
+                  <span>${card.metric === "load" ? "Charge" : "Reps"}</span>
+                </div>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
     </article>
   `;
 }
@@ -10811,6 +11042,9 @@ function renderApp() {
   const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
   const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
   const screenMeta = getScreenMeta();
+  const timerButtonLabel = getTimerButtonLabel(screenMeta);
+  const timerProgress = getTimerProgressRatio();
+  const hasTimerProgress = getTimerTotalSeconds() > 0 && state.timer.seconds > 0;
   const navItems = getNavItems();
 
   root.innerHTML = `
@@ -10823,12 +11057,18 @@ function renderApp() {
           </div>
 
           <button
-            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""}"
+            class="timer-button ${state.timer.active ? "is-active" : ""} ${isTimerEndingSoon ? "is-warning" : ""} ${hasTimerProgress ? "has-progress" : ""}"
             data-action="toggle-timer"
             aria-label="Pause ou reprise du timer"
+            style="--timer-progress: ${timerProgress.toFixed(4)};"
           >
-            <span>${state.timer.active ? "Pause" : screenMeta.title}</span>
-            <span class="mono">${formatTimer(state.timer.seconds)}</span>
+            <span class="timer-button__copy">
+              <span class="timer-button__label">${timerButtonLabel}</span>
+              <span class="timer-button__time mono">${formatTimer(state.timer.seconds)}</span>
+            </span>
+            <span class="timer-button__progress" aria-hidden="true">
+              <span class="timer-button__progress-fill"></span>
+            </span>
           </button>
         </div>
       </header>
@@ -10878,18 +11118,26 @@ function syncTimerButtonUI() {
 
   const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
   const screenMeta = getScreenMeta();
+  const hasTimerProgress = getTimerTotalSeconds() > 0 && state.timer.seconds > 0;
 
   timerButton.className = `timer-button ${state.timer.active ? "is-active" : ""} ${
     isTimerEndingSoon ? "is-warning" : ""
-  }`.trim();
-  timerButton.setAttribute("aria-label", "Pause ou reprise du timer");
+  } ${hasTimerProgress ? "has-progress" : ""}`.trim();
+  timerButton.setAttribute(
+    "aria-label",
+    state.timer.seconds > 0
+      ? `Timer de repos ${formatTimer(state.timer.seconds)}. ${state.timer.active ? "Mettre en pause" : "Reprendre"}`
+      : "Pause ou reprise du timer"
+  );
+  timerButton.style.setProperty("--timer-progress", getTimerProgressRatio().toFixed(4));
 
-  const parts = timerButton.querySelectorAll("span");
-  if (parts[0]) {
-    parts[0].textContent = state.timer.active ? "Pause" : screenMeta.title;
+  const label = timerButton.querySelector(".timer-button__label");
+  const time = timerButton.querySelector(".timer-button__time");
+  if (label) {
+    label.textContent = getTimerButtonLabel(screenMeta);
   }
-  if (parts[1]) {
-    parts[1].textContent = formatTimer(state.timer.seconds);
+  if (time) {
+    time.textContent = formatTimer(state.timer.seconds);
   }
 }
 
