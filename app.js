@@ -285,6 +285,34 @@ const HISTORY_SECTION_FILTERS = [
   { key: "reviews", label: "Ressenti" },
 ];
 
+const BODY_SECTION_FILTERS = [
+  { key: "entry", label: "Ajouter" },
+  { key: "chart", label: "Courbe" },
+  { key: "overview", label: "Synthese" },
+  { key: "targets", label: "Repere" },
+  { key: "nutrition", label: "Macros" },
+  { key: "recent", label: "Historique" },
+];
+
+const WORKOUT_SECTION_FILTERS = [
+  { key: "all", label: "Tout" },
+  { key: "load", label: "Charge" },
+  { key: "entry", label: "Reps" },
+];
+
+const HISTORY_DETAIL_SECTION_FILTERS = [
+  { key: "all", label: "Tout" },
+  { key: "records", label: "PR" },
+  { key: "chart", label: "Courbe" },
+  { key: "groups", label: "Exos" },
+];
+
+const PROGRAM_EDITOR_SECTION_FILTERS = [
+  { key: "all", label: "Tout" },
+  { key: "exercises", label: "Exos" },
+  { key: "actions", label: "Actions" },
+];
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -327,6 +355,11 @@ const state = {
   historyDetailKey: "",
   historyOverviewFilter: "all",
   historySectionFilter: "all",
+  historyDetailSectionFilter: "all",
+  bodySectionFilter: "entry",
+  workoutSectionFilter: "all",
+  programEditorSectionFilter: "all",
+  programTemplatePreviewDay: "",
   bodyChartField: "weight",
   pendingSession: [],
   installHintDismissed: false,
@@ -3906,6 +3939,10 @@ function renderProgramTemplatePreviewOverlay() {
   const accentDay = getDayTheme(template.days[0]).accentDay;
   const goalMeta = template.goal ? getProgramPlannerGoalMeta(template.goal) : null;
   const constraintMeta = template.constraint ? getProgramPlannerConstraintMeta(template.constraint) : null;
+  const availablePreviewDays = Object.keys(previewProgram);
+  const activePreviewDay = availablePreviewDays.includes(state.programTemplatePreviewDay)
+    ? state.programTemplatePreviewDay
+    : availablePreviewDays[0] || "";
 
   return `
     <div class="sheet-overlay">
@@ -3946,8 +3983,32 @@ function renderProgramTemplatePreviewOverlay() {
               : ""
           }
 
+          ${
+            availablePreviewDays.length > 1
+              ? `
+                <div class="history-filter-row history-filter-row--compact">
+                  ${availablePreviewDays
+                    .map(
+                      (day) => `
+                        <button
+                          class="history-filter-chip ${activePreviewDay === day ? "is-active" : ""}"
+                          data-action="set-program-preview-day"
+                          data-preview-day="${day}"
+                          aria-pressed="${activePreviewDay === day ? "true" : "false"}"
+                        >
+                          ${day}
+                        </button>
+                      `
+                    )
+                    .join("")}
+                </div>
+              `
+              : ""
+          }
+
           <div class="template-preview__days">
             ${Object.entries(previewProgram)
+              .filter(([day]) => !activePreviewDay || day === activePreviewDay)
               .map(([day, entries]) => {
                 const exerciseSummary = summarizeTemplateDayEntries(entries);
 
@@ -4256,6 +4317,45 @@ function sanitizeHistorySectionFilter(value) {
 
 function shouldRenderHistorySection(section, filter = state.historySectionFilter) {
   const activeFilter = sanitizeHistorySectionFilter(filter);
+  return activeFilter === "all" || activeFilter === section;
+}
+
+function sanitizeBodySectionFilter(value) {
+  const normalized = typeof value === "string" ? value : "entry";
+  return BODY_SECTION_FILTERS.some((item) => item.key === normalized) ? normalized : "entry";
+}
+
+function shouldRenderBodySection(section, filter = state.bodySectionFilter) {
+  return sanitizeBodySectionFilter(filter) === section;
+}
+
+function sanitizeWorkoutSectionFilter(value) {
+  const normalized = typeof value === "string" ? value : "all";
+  return WORKOUT_SECTION_FILTERS.some((item) => item.key === normalized) ? normalized : "all";
+}
+
+function shouldRenderWorkoutSection(section, filter = state.workoutSectionFilter) {
+  const activeFilter = sanitizeWorkoutSectionFilter(filter);
+  return activeFilter === "all" || activeFilter === section;
+}
+
+function sanitizeHistoryDetailSectionFilter(value) {
+  const normalized = typeof value === "string" ? value : "all";
+  return HISTORY_DETAIL_SECTION_FILTERS.some((item) => item.key === normalized) ? normalized : "all";
+}
+
+function shouldRenderHistoryDetailSection(section, filter = state.historyDetailSectionFilter) {
+  const activeFilter = sanitizeHistoryDetailSectionFilter(filter);
+  return activeFilter === "all" || activeFilter === section;
+}
+
+function sanitizeProgramEditorSectionFilter(value) {
+  const normalized = typeof value === "string" ? value : "all";
+  return PROGRAM_EDITOR_SECTION_FILTERS.some((item) => item.key === normalized) ? normalized : "all";
+}
+
+function shouldRenderProgramEditorSection(section, filter = state.programEditorSectionFilter) {
+  const activeFilter = sanitizeProgramEditorSectionFilter(filter);
   return activeFilter === "all" || activeFilter === section;
 }
 
@@ -4905,6 +5005,10 @@ function buildPersistedState() {
     historyDetailKey: state.historyDetailKey,
     historyOverviewFilter: sanitizeHistoryOverviewFilter(state.historyOverviewFilter),
     historySectionFilter: sanitizeHistorySectionFilter(state.historySectionFilter),
+    historyDetailSectionFilter: sanitizeHistoryDetailSectionFilter(state.historyDetailSectionFilter),
+    bodySectionFilter: sanitizeBodySectionFilter(state.bodySectionFilter),
+    workoutSectionFilter: sanitizeWorkoutSectionFilter(state.workoutSectionFilter),
+    programEditorSectionFilter: sanitizeProgramEditorSectionFilter(state.programEditorSectionFilter),
     bodyChartField: sanitizeBodyChartField(state.bodyChartField),
     installHintDismissed: state.installHintDismissed,
     onboardingCompleted: state.onboardingCompleted,
@@ -4973,6 +5077,10 @@ function hydrateState(parsed = {}) {
   state.historyDetailKey = parsed.historyDetailKey || "";
   state.historyOverviewFilter = sanitizeHistoryOverviewFilter(parsed.historyOverviewFilter);
   state.historySectionFilter = sanitizeHistorySectionFilter(parsed.historySectionFilter);
+  state.historyDetailSectionFilter = sanitizeHistoryDetailSectionFilter(parsed.historyDetailSectionFilter);
+  state.bodySectionFilter = sanitizeBodySectionFilter(parsed.bodySectionFilter);
+  state.workoutSectionFilter = sanitizeWorkoutSectionFilter(parsed.workoutSectionFilter);
+  state.programEditorSectionFilter = sanitizeProgramEditorSectionFilter(parsed.programEditorSectionFilter);
   state.bodyChartField = sanitizeBodyChartField(parsed.bodyChartField);
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
   state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
@@ -5313,6 +5421,35 @@ function setHistoryOverviewFilter(filter) {
 function setHistorySectionFilter(filter) {
   state.historySectionFilter = sanitizeHistorySectionFilter(filter);
   saveState();
+  renderApp();
+}
+
+function setHistoryDetailSectionFilter(filter) {
+  state.historyDetailSectionFilter = sanitizeHistoryDetailSectionFilter(filter);
+  saveState();
+  renderApp();
+}
+
+function setBodySectionFilter(filter) {
+  state.bodySectionFilter = sanitizeBodySectionFilter(filter);
+  saveState();
+  renderApp();
+}
+
+function setWorkoutSectionFilter(filter) {
+  state.workoutSectionFilter = sanitizeWorkoutSectionFilter(filter);
+  saveState();
+  renderApp();
+}
+
+function setProgramEditorSectionFilter(filter) {
+  state.programEditorSectionFilter = sanitizeProgramEditorSectionFilter(filter);
+  saveState();
+  renderApp();
+}
+
+function setProgramTemplatePreviewDay(day) {
+  state.programTemplatePreviewDay = typeof day === "string" ? day : "";
   renderApp();
 }
 
@@ -5765,13 +5902,16 @@ function setProgramPlannerConstraint(constraint) {
 }
 
 function openProgramTemplatePreview(templateId) {
-  if (!getProgramTemplateById(templateId)) return;
+  const template = getProgramTemplateById(templateId);
+  if (!template) return;
   state.programTemplatePreviewId = templateId;
+  state.programTemplatePreviewDay = template.days[0] || "";
   renderApp();
 }
 
 function closeProgramTemplatePreview() {
   state.programTemplatePreviewId = "";
+  state.programTemplatePreviewDay = "";
   renderApp();
 }
 
@@ -5798,6 +5938,7 @@ function applyProgramTemplate(templateId) {
       ? template.constraint
       : "standard";
   state.programTemplatePreviewId = "";
+  state.programTemplatePreviewDay = "";
   state.programEntryEditor = null;
   state.day = Object.keys(state.program)[0] || "Push";
   state.programEditorDay = state.day;
@@ -7887,6 +8028,9 @@ function renderProgramEditor() {
   const day = state.programEditorDay;
   const blocks = getProgramExerciseBlocks(day);
   const reorderMode = state.programEditorReorderMode;
+  const activeEditorSection = sanitizeProgramEditorSectionFilter(state.programEditorSectionFilter);
+  const showExerciseList = shouldRenderProgramEditorSection("exercises", activeEditorSection);
+  const showActions = shouldRenderProgramEditorSection("actions", activeEditorSection);
 
   return `
     <article class="surface surface-pad stack-md program-editor">
@@ -7908,6 +8052,23 @@ function renderProgramEditor() {
         }
       </div>
 
+      <div class="history-filter-row history-filter-row--compact">
+        ${PROGRAM_EDITOR_SECTION_FILTERS
+          .map(
+            (section) => `
+              <button
+                class="history-filter-chip ${activeEditorSection === section.key ? "is-active" : ""}"
+                data-action="set-program-editor-section-filter"
+                data-program-editor-section="${section.key}"
+                aria-pressed="${activeEditorSection === section.key ? "true" : "false"}"
+              >
+                ${section.label}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+
       <div class="program-day-tabs">
         ${getProgramDays()
           .map(
@@ -7923,12 +8084,15 @@ function renderProgramEditor() {
           .join("")}
       </div>
 
-      <div class="program-editor-list">
-        ${
-          blocks.length
-            ? blocks
-                .map(
-                  (block, index) => `
+      ${
+        showExerciseList
+          ? `
+            <div class="program-editor-list">
+              ${
+                blocks.length
+                  ? blocks
+                      .map(
+                        (block, index) => `
                     <article class="surface surface--soft surface-pad program-entry program-entry--compact program-block">
                       <div class="program-entry__head">
                         <div class="stack-sm">
@@ -8019,25 +8183,34 @@ function renderProgramEditor() {
                         </button>
                       </div>
                     </article>
-                  `
-                )
-                .join("")
-            : `
-                <article class="surface surface--soft surface-pad">
-                  <div class="muted">Aucun exercice sur ce bloc pour le moment.</div>
-                </article>
-              `
-        }
-      </div>
+                        `
+                      )
+                      .join("")
+                  : `
+                      <article class="surface surface--soft surface-pad">
+                        <div class="muted">Aucun exercice sur ce bloc pour le moment.</div>
+                      </article>
+                    `
+              }
+            </div>
+          `
+          : ""
+      }
 
-      <div class="program-actions">
-        <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
-          Ajouter via preset
-        </button>
-        <button class="button button--ghost" data-action="reset-program">
-          Revenir au programme de base
-        </button>
-      </div>
+      ${
+        showActions
+          ? `
+            <div class="program-actions">
+              <button class="button button--primary" data-action="add-program-entry" data-program-day="${day}">
+                Ajouter via preset
+              </button>
+              <button class="button button--ghost" data-action="reset-program">
+                Revenir au programme de base
+              </button>
+            </div>
+          `
+          : ""
+      }
     </article>
   `;
 }
@@ -8439,9 +8612,46 @@ function renderBodyMetricsSection() {
   const nutrition = getBodyNutritionSnapshot();
   const bodyChart = getBodyProgressChartData(state.bodyChartField);
   const bodyChartFieldOptions = getBodyChartFieldOptions();
+  const activeBodySection = sanitizeBodySectionFilter(state.bodySectionFilter);
+  const showEntrySection = shouldRenderBodySection("entry", activeBodySection);
+  const showChartSection = shouldRenderBodySection("chart", activeBodySection);
+  const showOverviewSection = shouldRenderBodySection("overview", activeBodySection);
+  const showTargetsSection = shouldRenderBodySection("targets", activeBodySection);
+  const showNutritionSection = shouldRenderBodySection("nutrition", activeBodySection);
+  const showRecentSection = shouldRenderBodySection("recent", activeBodySection);
 
   return `
     <section class="stack-md">
+      <article class="surface surface-pad stack-sm" data-accent-day="Upper">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Acces rapide</div>
+            <h3 class="section-title dashboard-section-head__title">Physique sans long scroll</h3>
+          </div>
+          <div class="label">${BODY_SECTION_FILTERS.find((item) => item.key === activeBodySection)?.label || "Ajouter"}</div>
+        </div>
+
+        <div class="history-filter-row">
+          ${BODY_SECTION_FILTERS
+            .map(
+              (section) => `
+                <button
+                  class="history-filter-chip ${activeBodySection === section.key ? "is-active" : ""}"
+                  data-action="set-body-section-filter"
+                  data-body-section="${section.key}"
+                  aria-pressed="${activeBodySection === section.key ? "true" : "false"}"
+                >
+                  ${section.label}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+      </article>
+
+      ${
+        showOverviewSection
+          ? `
       <article class="surface surface-pad coach-shell coach-shell--${coach.tone}" data-accent-day="Upper">
         <div class="dashboard-section-head">
           <div>
@@ -8481,7 +8691,13 @@ function renderBodyMetricsSection() {
           <span class="coach-tag">Cardio ${goalMeta.cardioLabel}</span>
         </div>
       </article>
+          `
+          : ""
+      }
 
+      ${
+        showEntrySection
+          ? `
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
@@ -8529,7 +8745,13 @@ function renderBodyMetricsSection() {
           <button class="button button--primary" data-action="save-body-metric">Enregistrer la mesure</button>
         </div>
       </article>
+          `
+          : ""
+      }
 
+      ${
+        showChartSection
+          ? `
       <article class="surface surface-pad stack-md settings-group chart-shell" data-accent-day="Upper">
         <div class="dashboard-section-head">
           <div>
@@ -8614,7 +8836,13 @@ function renderBodyMetricsSection() {
             `
         }
       </article>
+          `
+          : ""
+      }
 
+      ${
+        showOverviewSection
+          ? `
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
@@ -8665,7 +8893,13 @@ function renderBodyMetricsSection() {
           }
         </div>
       </article>
+          `
+          : ""
+      }
 
+      ${
+        showTargetsSection
+          ? `
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
@@ -8696,7 +8930,13 @@ function renderBodyMetricsSection() {
 
         <div class="install-hint">${goalMeta.successLabel}</div>
       </article>
+          `
+          : ""
+      }
 
+      ${
+        showNutritionSection
+          ? `
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
@@ -8797,9 +9037,12 @@ function renderBodyMetricsSection() {
             `
         }
       </article>
+          `
+          : ""
+      }
 
       ${
-        recent.length
+        showRecentSection && recent.length
           ? `
             <article class="surface surface-pad stack-md settings-group">
               <div class="dashboard-section-head">
@@ -9017,6 +9260,21 @@ function renderPlanHub() {
         <div class="muted">
           Programme, planning, bloc et edition rapide sont regroupes ici pour les retrouver plus vite.
         </div>
+        <div class="history-filter-row history-filter-row--compact">
+          ${sections
+            .map(
+              (section) => `
+                <button
+                  class="history-filter-chip"
+                  data-action="open-plan-section"
+                  data-plan-section="${section.id}"
+                >
+                  ${section.label}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
       </article>
 
       <div class="settings-hub">
@@ -9040,6 +9298,7 @@ function renderPlanHub() {
 }
 
 function renderPlanDetail() {
+  const sections = getPlanSections();
   const section = getActivePlanSection();
   if (!section) {
     return renderPlanHub();
@@ -9058,6 +9317,22 @@ function renderPlanDetail() {
           <div class="label">Plan</div>
           <h2 class="section-title dashboard-section-head__title">${section.label}</h2>
           <div class="muted">${section.title} - ${section.meta}</div>
+        </div>
+        <div class="history-filter-row history-filter-row--compact">
+          ${sections
+            .map(
+              (item) => `
+                <button
+                  class="history-filter-chip ${item.id === section.id ? "is-active" : ""}"
+                  data-action="open-plan-section"
+                  data-plan-section="${item.id}"
+                  aria-pressed="${item.id === section.id ? "true" : "false"}"
+                >
+                  ${item.label}
+                </button>
+              `
+            )
+            .join("")}
         </div>
       </article>
 
@@ -9434,6 +9709,26 @@ function bindEvents() {
 
       if (action === "set-history-section-filter") {
         setHistorySectionFilter(button.dataset.historySection || "all");
+      }
+
+      if (action === "set-history-detail-section-filter") {
+        setHistoryDetailSectionFilter(button.dataset.historyDetailSection || "all");
+      }
+
+      if (action === "set-body-section-filter") {
+        setBodySectionFilter(button.dataset.bodySection || "entry");
+      }
+
+      if (action === "set-workout-section-filter") {
+        setWorkoutSectionFilter(button.dataset.workoutSection || "all");
+      }
+
+      if (action === "set-program-editor-section-filter") {
+        setProgramEditorSectionFilter(button.dataset.programEditorSection || "all");
+      }
+
+      if (action === "set-program-preview-day") {
+        setProgramTemplatePreviewDay(button.dataset.previewDay || "");
       }
 
       if (action === "set-body-chart-field") {
@@ -10562,6 +10857,9 @@ function renderWorkout() {
   const advice = getCurrentAdvice();
   const isFocusMode = state.focusWorkoutMode;
   const theme = getDayTheme(state.day);
+  const activeWorkoutSection = sanitizeWorkoutSectionFilter(state.workoutSectionFilter);
+  const showLoadSection = shouldRenderWorkoutSection("load", activeWorkoutSection);
+  const showEntrySection = shouldRenderWorkoutSection("entry", activeWorkoutSection);
 
   if (state.workoutFinished) {
     return renderWorkoutCompletionScreen();
@@ -10609,38 +10907,61 @@ function renderWorkout() {
         </div>
       </div>
 
-      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
-
-      <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
-        <div class="workout-entry-row">
-          <div class="field-wrap workout-entry-field">
-            <label class="label" for="reps-input">Reps</label>
-            <input
-              id="reps-input"
-              class="input input--reps"
-              type="number"
-              min="1"
-              inputmode="numeric"
-              placeholder="${active.targetLabel}"
-              value="${state.repsInput}"
-            />
-          </div>
-
-          <button
-            id="validate-set-button"
-            class="${getValidationButtonClass(advice)} validation-button--inline"
-            data-action="validate-set"
-            aria-label="${getValidationButtonLabel(advice)}"
-            ${hasValidRepsInput() ? "" : "disabled"}
-          >
-            ${renderValidationButtonContent(advice)}
-          </button>
-        </div>
-
-        ${renderRepQuickPicks()}
-
-        ${renderLastSetActions()}
+      <div class="history-filter-row history-filter-row--compact">
+        ${WORKOUT_SECTION_FILTERS
+          .map(
+            (section) => `
+              <button
+                class="history-filter-chip ${activeWorkoutSection === section.key ? "is-active" : ""}"
+                data-action="set-workout-section-filter"
+                data-workout-section="${section.key}"
+                aria-pressed="${activeWorkoutSection === section.key ? "true" : "false"}"
+              >
+                ${section.label}
+              </button>
+            `
+          )
+          .join("")}
       </div>
+
+      ${showLoadSection ? (state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)) : ""}
+
+      ${
+        showEntrySection
+          ? `
+            <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
+              <div class="workout-entry-row">
+                <div class="field-wrap workout-entry-field">
+                  <label class="label" for="reps-input">Reps</label>
+                  <input
+                    id="reps-input"
+                    class="input input--reps"
+                    type="number"
+                    min="1"
+                    inputmode="numeric"
+                    placeholder="${active.targetLabel}"
+                    value="${state.repsInput}"
+                  />
+                </div>
+
+                <button
+                  id="validate-set-button"
+                  class="${getValidationButtonClass(advice)} validation-button--inline"
+                  data-action="validate-set"
+                  aria-label="${getValidationButtonLabel(advice)}"
+                  ${hasValidRepsInput() ? "" : "disabled"}
+                >
+                  ${renderValidationButtonContent(advice)}
+                </button>
+              </div>
+
+              ${renderRepQuickPicks()}
+
+              ${renderLastSetActions()}
+            </div>
+          `
+          : ""
+      }
     </section>
   `;
 }
@@ -11303,6 +11624,10 @@ function renderHistoryDetail() {
   const chartKey = getPreferredHistoryChartKey(day, state.selectedChartKey);
   const chart = getChartData(chartKey);
   const sortedHistory = getSortedHistory();
+  const activeDetailSection = sanitizeHistoryDetailSectionFilter(state.historyDetailSectionFilter);
+  const showDetailRecords = shouldRenderHistoryDetailSection("records", activeDetailSection);
+  const showDetailChart = shouldRenderHistoryDetailSection("chart", activeDetailSection);
+  const showDetailGroups = shouldRenderHistoryDetailSection("groups", activeDetailSection);
 
   return `
     <section class="history-list">
@@ -11320,6 +11645,26 @@ function renderHistoryDetail() {
           <div class="muted">Tous les PR de cette seance, puis le detail groupe par exercice.</div>
         </div>
 
+        <div class="history-filter-row history-filter-row--compact">
+          ${HISTORY_DETAIL_SECTION_FILTERS
+            .map(
+              (section) => `
+                <button
+                  class="history-filter-chip ${activeDetailSection === section.key ? "is-active" : ""}"
+                  data-action="set-history-detail-section-filter"
+                  data-history-detail-section="${section.key}"
+                  aria-pressed="${activeDetailSection === section.key ? "true" : "false"}"
+                >
+                  ${section.label}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+
+        ${
+          showDetailRecords
+            ? `
         <div class="records-summary">
           <div class="metric metric--record">
             <div class="label">PR charge</div>
@@ -11334,8 +11679,14 @@ function renderHistoryDetail() {
             <div class="records-summary__meta">${slotOptions.length} slot(s) actifs</div>
           </div>
         </div>
+            `
+            : ""
+        }
       </article>
 
+      ${
+        showDetailChart
+          ? `
       <article class="surface surface-pad chart-shell" data-accent-day="${latest.day}">
         <div class="dashboard-section-head">
           <div>
@@ -11365,7 +11716,13 @@ function renderHistoryDetail() {
 
         <div class="chart-box">${renderChart(chartKey)}</div>
       </article>
+          `
+          : ""
+      }
 
+      ${
+        showDetailGroups
+          ? `
       <div class="history-slot-list">
         ${detailGroups
           .map(
@@ -11451,6 +11808,9 @@ function renderHistoryDetail() {
           `
         )
         .join("")}
+          `
+          : ""
+      }
     </section>
   `;
 }
