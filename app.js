@@ -1061,7 +1061,7 @@ function getRestAlertCopy() {
   return {
     title: "Repos termine",
     text: state.workoutFinished ? "Tu peux terminer ta seance." : upcoming
-      ? `Tu peux repartir sur ${upcoming.exercise} Â· ${upcoming.series}.`
+      ? `Tu peux repartir sur ${upcoming.exercise} - ${upcoming.series}.`
       : "Tu peux reprendre ton entrainement.",
   };
 }
@@ -3062,7 +3062,7 @@ function getActiveProgramDisplay() {
   const fallbackMeta = inferProgramTemplateMeta(state.program);
   const title = sanitizePlainText(state.programTemplateTitle, fallbackMeta.title);
   const dayCount = getProgramDays().length;
-  return `${title} Â· ${dayCount} jours`;
+  return `${title} - ${dayCount} jours`;
 }
 
 function summarizeTemplateDayEntries(entries = []) {
@@ -3540,7 +3540,7 @@ function getLastPerformancePreviewCard() {
     eyebrow: "Derniere fois",
     verdict,
     title: `${last.reps} reps a ${formatLoad(last.load, last.loadLabel)}`,
-    meta: `${last.series} Â· ${formatDate(last.date)}`,
+    meta: `${last.series} - ${formatDate(last.date)}`,
   };
 }
 
@@ -3581,8 +3581,8 @@ function getNextExercisePreview() {
   };
 
   return {
-    title: `${next.exercise} Â· ${next.series}`,
-    meta: `${formatLoad(nextSettings.load, nextSettings.loadLabel)} Â· ${next.rest}s de repos`,
+    title: `${next.exercise} - ${next.series}`,
+    meta: `${formatLoad(nextSettings.load, nextSettings.loadLabel)} - ${next.rest}s de repos`,
     tone: "next",
   };
 }
@@ -3761,7 +3761,7 @@ function renderLastSetActions() {
       <div class="last-set-card__copy">
         <span class="label">Derniere serie</span>
         <strong>${lastEntry.exercise}</strong>
-        <span>${lastEntry.reps} reps Â· ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
+        <span>${lastEntry.reps} reps - ${formatLoad(lastEntry.load, lastEntry.loadLabel)}</span>
       </div>
       <div class="last-set-card__actions">
         <button class="button button--ghost button--compact" data-action="edit-last-set">Corriger</button>
@@ -3900,7 +3900,7 @@ function renderHistoryEditorOverlay() {
         </div>
 
         <div class="sheet-card__body">
-          <div class="muted">${currentEntry.exercise} Â· ${currentEntry.series} Â· ${formatDate(currentEntry.date)}</div>
+          <div class="muted">${currentEntry.exercise} - ${currentEntry.series} - ${formatDate(currentEntry.date)}</div>
           <div class="grid-2">
             <div class="field-wrap">
               <label class="label" for="history-editor-reps">Reps</label>
@@ -5088,7 +5088,7 @@ function hydrateState(parsed = {}) {
   state.historyEditor = null;
   ensureHistoryDetailKeyIsValid();
   state.storageMeta.recoveredFromBackup = false;
-  state.storageMeta.backupAvailable = Boolean(localStorage.getItem(STORAGE_BACKUP_KEY));
+  state.storageMeta.backupAvailable = Boolean(readStorageItemSafely(STORAGE_BACKUP_KEY));
   state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
   state.storageMeta.saveError = "";
 
@@ -5136,7 +5136,7 @@ function saveState() {
   }
 
   state.storageMeta.lastSavedAt = payload.savedAt;
-  state.storageMeta.backupAvailable = backupSaved || Boolean(localStorage.getItem(STORAGE_BACKUP_KEY));
+  state.storageMeta.backupAvailable = backupSaved || Boolean(readStorageItemSafely(STORAGE_BACKUP_KEY));
 
   if (mainSaved && backupSaved) {
     state.storageMeta.saveError = "";
@@ -5156,10 +5156,19 @@ function saveState() {
   state.storageMeta.saveError = "Sauvegarde locale incomplete";
 }
 
+function readStorageItemSafely(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.error(`Erreur lecture locale (${key})`, error);
+    return null;
+  }
+}
+
 function restoreState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const backupRaw = localStorage.getItem(STORAGE_BACKUP_KEY);
+    const raw = readStorageItemSafely(STORAGE_KEY);
+    const backupRaw = readStorageItemSafely(STORAGE_BACKUP_KEY);
     let parsed = null;
     let recoveredFromBackup = false;
 
@@ -6188,7 +6197,7 @@ function renderDashboard() {
       <article class="surface surface-pad chart-shell">
         <div class="row">
           <div class="label">Progression recente</div>
-          <div class="label">${chart.entries.length} points Â· ${chart.metric === "load" ? "charge" : "reps"}</div>
+          <div class="label">${chart.entries.length} points - ${chart.metric === "load" ? "charge" : "reps"}</div>
         </div>
 
         ${
@@ -6199,7 +6208,7 @@ function renderDashboard() {
                     .map(
                       (item) => `
                         <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
-                          ${item.exercise} Â· ${item.series}
+                          ${item.exercise} - ${item.series}
                         </option>
                       `
                     )
@@ -6231,7 +6240,7 @@ function renderDashboard() {
                   <div class="day-button__title">${day.toUpperCase()}</div>
                   <div class="muted">${state.program[day].length} exercices</div>
                 </div>
-                <div class="day-button__arrow">â€º</div>
+                <div class="day-button__arrow">></div>
               </button>
             `
           )
@@ -6775,7 +6784,7 @@ function renderCycleSection() {
       <div class="dashboard-section-head">
         <div>
           <div class="label">Bloc de progression</div>
-          <h3 class="section-title dashboard-section-head__title">Semaine ${cycle.week} / ${cycle.length} Â· ${cycle.current.phase}</h3>
+          <h3 class="section-title dashboard-section-head__title">Semaine ${cycle.week} / ${cycle.length} - ${cycle.current.phase}</h3>
         </div>
         <div class="cycle-badge">${cycle.goalLabel}</div>
       </div>
@@ -7037,7 +7046,7 @@ function getSmartResumeData() {
       subtitle: state.workoutFinished
         ? `${state.pendingSession.length} series a enregistrer`
         : `${Math.min(state.currentIndex + 1, exercises.length)} / ${exercises.length} series`,
-      meta: active ? `${active.exercise} Â· ${active.series}` : "Session en cours",
+      meta: active ? `${active.exercise} - ${active.series}` : "Session en cours",
       progress: getProgressPercent(),
       actionLabel: "Reprendre",
       actionAttrs: `data-action="resume-workout"`,
@@ -7054,7 +7063,7 @@ function getSmartResumeData() {
     mode: "next",
     day,
     title: `Prochaine ${day}`,
-    subtitle: `${summary.exerciseCount} exos Â· ${summary.setCount} series`,
+    subtitle: `${summary.exerciseCount} exos - ${summary.setCount} series`,
     meta: lastEntry ? `Derniere ${formatDate(lastEntry.date)}` : "Jamais lancee",
     progress: 0,
     actionLabel: `Lancer ${day}`,
@@ -7538,7 +7547,7 @@ function getCoachSnapshot() {
       : "Pas encore assez de data sur ce bloc",
     signal,
     note,
-    cycleLabel: `S${cycle.week}/${cycle.length} Â· ${cycle.current.phase}`,
+    cycleLabel: `S${cycle.week}/${cycle.length} - ${cycle.current.phase}`,
     scoreText: `${fatigue.score}/9`,
     streakText: fatigue.streak ? `${fatigue.streak} j d'affilee` : "Streak calme",
     intensityCall,
@@ -9355,6 +9364,9 @@ function getActiveSettingsSection() {
 
 function openSettingsSection(sectionId) {
   state.settingsSection = sectionId;
+  if (sectionId === "body") {
+    state.bodySectionFilter = "entry";
+  }
   saveState();
   renderApp();
 }
@@ -9697,10 +9709,8 @@ function bindEvents() {
 
       if (action === "open-body-settings") {
         state.screen = "settings";
-        state.settingsSection = "body";
         state.planSection = "";
-        saveState();
-        renderApp();
+        openSettingsSection("body");
       }
 
       if (action === "set-history-overview-filter") {
@@ -10304,7 +10314,7 @@ function renderPremiumDayList() {
               <div>
                 <div class="day-button__eyebrow">${theme.badge}</div>
                 <div class="day-button__title">${day.toUpperCase()}</div>
-                <div class="day-button__meta">${theme.subtitle} Â· ${theme.cue}</div>
+                <div class="day-button__meta">${theme.subtitle} - ${theme.cue}</div>
                 <div class="day-button__stats">
                   <span>${summary.exerciseCount} exos</span>
                   <span>${summary.setCount} series</span>
@@ -10886,7 +10896,7 @@ function renderWorkout() {
           ${
             isFocusMode
               ? ""
-              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span class="workout-shell__meta-chip">Exo ${state.currentIndex + 1}/${getExercises().length} Â· ${getProgressPercent()}%</span></div>`
+              : `<div class="workout-shell__cue-row"><span>${theme.cue}</span><span class="workout-shell__meta-chip">Exo ${state.currentIndex + 1}/${getExercises().length} - ${getProgressPercent()}%</span></div>`
           }
         </div>
         <div class="workout-shell__tools">
@@ -11443,6 +11453,33 @@ function renderSessionReviewsOverviewSection() {
   `;
 }
 
+function renderHistorySectionEmptyState(section) {
+  const emptyStates = {
+    cardio: {
+      title: "Aucun cardio pour l'instant",
+      text: "Ajoute une seance tapis ou cardio pour retrouver ici tes durees et tes tendances.",
+      eyebrow: "Cardio",
+      accentDay: "Legs",
+    },
+    body: {
+      title: "Aucune mesure pour l'instant",
+      text: "Ajoute ton poids ou tes mensurations pour suivre visuellement ta progression physique.",
+      eyebrow: "Physique",
+      accentDay: "Upper",
+    },
+    reviews: {
+      title: "Aucun ressenti pour l'instant",
+      text: "Ton energie, ta gene et tes notes de fin de seance apparaitront ici apres enregistrement.",
+      eyebrow: "Ressenti",
+      accentDay: state.day,
+    },
+  };
+
+  const current = emptyStates[section];
+  if (!current) return "";
+  return renderEmptyState(current.title, current.text, current.eyebrow, current.accentDay);
+}
+
 function renderHistoryOverview() {
   const filterOptions = getHistoryOverviewFilterOptions();
   const activeFilter = sanitizeHistoryOverviewFilter(state.historyOverviewFilter);
@@ -11456,6 +11493,27 @@ function renderHistoryOverview() {
   const showCardio = shouldRenderHistorySection("cardio", activeSectionFilter);
   const showBody = shouldRenderHistorySection("body", activeSectionFilter);
   const showReviews = shouldRenderHistorySection("reviews", activeSectionFilter);
+  const cardioSection = showCardio
+    ? state.cardioSessions.length
+      ? renderCardioOverviewSection()
+      : activeSectionFilter === "cardio"
+        ? renderHistorySectionEmptyState("cardio")
+        : ""
+    : "";
+  const bodySection = showBody
+    ? getLatestBodyMetric()
+      ? renderBodyMetricsOverviewSection()
+      : activeSectionFilter === "body"
+        ? renderHistorySectionEmptyState("body")
+        : ""
+    : "";
+  const reviewSection = showReviews
+    ? state.sessionReviews.length
+      ? renderSessionReviewsOverviewSection()
+      : activeSectionFilter === "reviews"
+        ? renderHistorySectionEmptyState("reviews")
+        : ""
+    : "";
 
   return `
     <section class="history-list">
@@ -11486,9 +11544,9 @@ function renderHistoryOverview() {
         </div>
       </article>
 
-      ${showCardio ? renderCardioOverviewSection() : ""}
-      ${showBody ? renderBodyMetricsOverviewSection() : ""}
-      ${showReviews ? renderSessionReviewsOverviewSection() : ""}
+      ${cardioSection}
+      ${bodySection}
+      ${reviewSection}
 
       ${
         shouldRenderRecordsSection && filterOptions.length > 1
