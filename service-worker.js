@@ -1,12 +1,12 @@
-const CACHE_NAME = "elite-train-iphone-cache-v88";
+const CACHE_NAME = "elite-train-iphone-cache-v89";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./index.html?v=88",
-  "./styles.css?v=88",
-  "./app.js?v=88",
-  "./manifest.webmanifest?v=88",
-  "./icon.svg?v=88",
+  "./index.html?v=89",
+  "./styles.css?v=89",
+  "./app.js?v=89",
+  "./manifest.webmanifest?v=89",
+  "./icon.svg?v=89",
   "./assets/push-card.svg",
   "./assets/pull-card.svg",
   "./assets/legs-card.svg",
@@ -53,7 +53,7 @@ self.addEventListener("fetch", (event) => {
             caches.match(event.request).then((cached) => {
               if (cached) return cached;
               return (
-                caches.match("./index.html?v=88") ||
+                caches.match("./index.html?v=89") ||
                 caches.match("./index.html") ||
                 caches.match("./")
               );
@@ -67,7 +67,7 @@ self.addEventListener("fetch", (event) => {
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).catch(
-        () => caches.match("./index.html?v=88") || caches.match("./index.html")
+        () => caches.match("./index.html?v=89") || caches.match("./index.html")
       );
     })
   );

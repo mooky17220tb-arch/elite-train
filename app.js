@@ -4765,17 +4765,28 @@ function getPreferredExerciseChartKey(entries = []) {
   );
 }
 
-function getDashboardProgressCards(limit = 6) {
-  const grouped = new Map();
+function getDashboardProgressCards(day = state.day, limit = 6) {
+  const blocks = getProgramExerciseBlocks(day);
 
-  getSortedHistory().forEach((item) => {
-    if (!grouped.has(item.exercise)) grouped.set(item.exercise, []);
-    grouped.get(item.exercise).push(item);
-  });
+  return blocks
+    .map((block) => {
+      const candidates = block.entries
+        .map((entry) => {
+          const key = buildExerciseKey(day, block.exercise, entry.series);
+          return {
+            key,
+            series: entry.series,
+            count: state.history.filter((item) => item.key === key).length,
+          };
+        })
+        .filter((item) => item.count > 0)
+        .sort(
+          (left, right) =>
+            getHistorySeriesPriority(left.series) - getHistorySeriesPriority(right.series) ||
+            right.count - left.count
+        );
 
-  return [...grouped.values()]
-    .map((entries) => {
-      const key = getPreferredExerciseChartKey(entries);
+      const key = candidates[0]?.key || "";
       if (!key) return null;
 
       const chart = getChartData(key);
@@ -4808,10 +4819,6 @@ function getDashboardProgressCards(limit = 6) {
       };
     })
     .filter(Boolean)
-    .sort(
-      (left, right) =>
-        new Date(right.latest.date).getTime() - new Date(left.latest.date).getTime()
-    )
     .slice(0, limit);
 }
 
@@ -9294,10 +9301,8 @@ function bindEvents() {
 
       if (action === "focus-dashboard-chart") {
         state.selectedChartKey = button.dataset.chartKey || state.selectedChartKey;
-        state.screen = "dashboard";
-        saveState();
-        renderApp();
-        window.setTimeout(scrollDashboardProgressChartIntoView, 60);
+        state.screen = "history";
+        openHistoryDetail(button.dataset.historyDay || "");
       }
 
       if (action === "discard-workout") {
@@ -10223,8 +10228,6 @@ function renderCoachSection() {
 }
 
 function renderPremiumDashboard() {
-  const chart = getChartData();
-  const historyKeys = getHistoryKeys();
   const sessionCount = getSessionCount();
   const weeklySessions = getWeeklySessionCount();
   const recentSets = getRecentSets();
@@ -10288,37 +10291,7 @@ function renderPremiumDashboard() {
 
       ${getInstallHintHtml()}
       ${renderWeeklyPlanner()}
-      ${renderDashboardProgressOverview()}
-
-      <article class="surface surface-pad chart-shell" data-accent-day="${heroTheme.accentDay}" id="dashboard-progress-chart">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Progression recente</div>
-            <h3 class="section-title dashboard-section-head__title">Courbe de performance</h3>
-            <div class="dashboard-hero__cue">${heroTheme.cue}</div>
-          </div>
-          <div class="chart-shell__metric">${chart.entries.length} pts - ${chart.metric === "load" ? "charge" : "reps"}</div>
-        </div>
-
-        ${
-          historyKeys.length
-            ? `
-                <select class="select" id="chart-select" aria-label="Choisir un exercice">
-                  ${historyKeys
-                    .map(
-                      (item) => `
-                        <option value="${item.key}" ${item.key === chart.selectedKey ? "selected" : ""}>
-                          ${item.exercise} - ${item.series}
-                        </option>
-                      `
-                    )
-                    .join("")}
-                </select>
-                <div class="chart-box">${renderChart()}</div>
-              `
-            : `<div class="chart-box"><div class="chart-empty">Aucune donnee enregistree pour le moment.</div></div>`
-        }
-      </article>
+      ${renderDashboardProgressOverview(heroDay)}
 
       <div class="dashboard-section-head">
         <div>
@@ -10761,17 +10734,36 @@ function renderDashboardProgressSparkline(entries = [], metric = "load") {
   `;
 }
 
-function renderDashboardProgressOverview() {
-  const cards = getDashboardProgressCards();
-  if (!cards.length) return "";
+function renderDashboardProgressOverview(day = state.day) {
+  const cards = getDashboardProgressCards(day);
+  if (!cards.length) {
+    return `
+      <article class="surface surface-pad progress-overview-shell" data-accent-day="${resolveDayThemeKey(day)}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Vue globale</div>
+            <h3 class="section-title dashboard-section-head__title">Progression du ${day}</h3>
+            <div class="dashboard-hero__cue">Cette vue suivra les exos de la seance mise en avant des que tu auras un peu d'historique.</div>
+          </div>
+        </div>
+
+        <div class="chart-empty">
+          <div>
+            <strong>Pas encore assez de recul sur ${day}</strong>
+            <span>Fais quelques passages sur cette seance et les cartes de progression apparaitront ici.</span>
+          </div>
+        </div>
+      </article>
+    `;
+  }
 
   return `
-    <article class="surface surface-pad progress-overview-shell" data-accent-day="${state.day}">
+    <article class="surface surface-pad progress-overview-shell" data-accent-day="${resolveDayThemeKey(day)}">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Vue globale</div>
-          <h3 class="section-title dashboard-section-head__title">Progression par exercice</h3>
-          <div class="dashboard-hero__cue">Lis d'un coup d'oeil ce qui monte vraiment semaine apres semaine.</div>
+          <h3 class="section-title dashboard-section-head__title">Progression du ${day}</h3>
+          <div class="dashboard-hero__cue">Lis d'un coup d'oeil les exos qui correspondent a cette seance.</div>
         </div>
         <div class="chart-shell__metric">${cards.length} exo${cards.length > 1 ? "s" : ""}</div>
       </div>
@@ -10784,8 +10776,9 @@ function renderDashboardProgressOverview() {
                 class="progress-overview-card"
                 data-action="focus-dashboard-chart"
                 data-chart-key="${card.key}"
+                data-history-day="${card.day}"
                 data-accent-day="${card.accentDay}"
-                aria-label="Voir la courbe detaillee de ${card.exercise}"
+                aria-label="Voir le suivi detaille de ${card.exercise}"
               >
                 <div class="progress-overview-card__top">
                   <div>
