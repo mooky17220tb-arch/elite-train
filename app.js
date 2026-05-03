@@ -10079,8 +10079,30 @@ function renderWeeklyPlanner() {
             (day) => `
               <div class="planner-day ${day.isDone ? "is-done" : ""} ${day.isToday ? "is-today" : ""} ${day.isFuture ? "is-future" : ""}">
                 <div class="planner-day__label">${day.label}</div>
-                <div class="planner-day__count">${day.workoutCount || "-"}</div>
-                <div class="planner-day__sub">C ${day.cardioMinutes ? `${day.cardioMinutes}m` : "-"}</div>
+                <div class="planner-day__activities">
+                  ${
+                    day.workoutCount
+                      ? `
+                        <div class="planner-activity">
+                          <span class="planner-activity__icon planner-activity__icon--workout">
+                            ${renderPlannerActivityIcon("workout")}
+                          </span>
+                        </div>
+                      `
+                      : ""
+                  }
+                  ${
+                    day.cardioMinutes
+                      ? `
+                        <div class="planner-activity">
+                          <span class="planner-activity__icon planner-activity__icon--cardio">
+                            ${renderPlannerActivityIcon("cardio")}
+                          </span>
+                        </div>
+                      `
+                      : ""
+                  }
+                </div>
                 <div class="planner-day__date">${day.dateLabel}</div>
               </div>
             `
@@ -10678,6 +10700,29 @@ function renderNavIcon(screen) {
       <circle cx="7" cy="7" r="2"></circle>
       <circle cx="15" cy="12" r="2"></circle>
       <circle cx="11" cy="17" r="2"></circle>
+    </svg>
+  `;
+}
+
+function renderPlannerActivityIcon(type = "workout") {
+  if (type === "cardio") {
+    return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 18h16"></path>
+        <path d="M7 18l2-8h6l2 8"></path>
+        <path d="M10 10V7h4v3"></path>
+        <path d="M15 7h3"></path>
+      </svg>
+    `;
+  }
+
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 10h3v4H3z"></path>
+      <path d="M18 10h3v4h-3z"></path>
+      <path d="M6 9h2v6H6z"></path>
+      <path d="M16 9h2v6h-2z"></path>
+      <path d="M8 11h8v2H8z"></path>
     </svg>
   `;
 }

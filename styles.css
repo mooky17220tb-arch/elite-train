@@ -2264,6 +2264,48 @@ button {
   color: #d6e2dc;
 }
 
+.planner-day__activities {
+  margin-top: 10px;
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.planner-activity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.planner-activity__icon {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  color: #edf4f0;
+  opacity: 0.92;
+}
+
+.planner-activity__icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.planner-activity__icon--workout {
+  color: #b9f1d3;
+}
+
+.planner-activity__icon--cardio {
+  color: #d9e2dd;
+}
+
 .planner-note {
   display: inline-flex;
   align-items: center;
