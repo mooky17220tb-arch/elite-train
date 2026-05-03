@@ -2266,11 +2266,11 @@ button {
 
 .planner-day__activities {
   margin-top: 10px;
-  min-height: 43px;
+  min-height: 46px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .planner-activity {
@@ -2280,30 +2280,55 @@ button {
 }
 
 .planner-activity__icon {
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   display: inline-grid;
   place-items: center;
   color: #edf4f0;
-  opacity: 0.92;
+  opacity: 0.98;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(7, 10, 9, 0.22));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 16px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(10px);
 }
 
 .planner-activity__icon svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.8;
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .planner-activity__icon--workout {
-  color: #b9f1d3;
+  color: #bdf4d6;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(195, 255, 223, 0.22), transparent 50%),
+    linear-gradient(180deg, rgba(88, 163, 118, 0.22), rgba(7, 10, 9, 0.3));
+  border-color: rgba(171, 239, 203, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 18px rgba(16, 35, 23, 0.34),
+    0 0 0 1px rgba(120, 205, 159, 0.08);
 }
 
 .planner-activity__icon--cardio {
-  color: #d9e2dd;
+  color: #eaf2ef;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(222, 236, 232, 0.22), transparent 50%),
+    linear-gradient(180deg, rgba(125, 146, 137, 0.18), rgba(7, 10, 9, 0.3));
+  border-color: rgba(216, 226, 221, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 18px rgba(15, 20, 18, 0.28),
+    0 0 0 1px rgba(220, 228, 224, 0.06);
 }
 
 .planner-note {

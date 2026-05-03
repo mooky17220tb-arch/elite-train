@@ -277,6 +277,14 @@ const BODY_CHART_FIELDS = {
   },
 };
 
+const HISTORY_SECTION_FILTERS = [
+  { key: "all", label: "Tout" },
+  { key: "records", label: "PR" },
+  { key: "cardio", label: "Cardio" },
+  { key: "body", label: "Physique" },
+  { key: "reviews", label: "Ressenti" },
+];
+
 const state = {
   screen: "dashboard",
   day: "Push",
@@ -318,6 +326,7 @@ const state = {
   selectedChartKey: "",
   historyDetailKey: "",
   historyOverviewFilter: "all",
+  historySectionFilter: "all",
   bodyChartField: "weight",
   pendingSession: [],
   installHintDismissed: false,
@@ -4236,6 +4245,20 @@ function getFilteredHistoryOverviewEntries(filter = state.historyOverviewFilter)
   return entries.filter((entry) => entry.day === activeFilter);
 }
 
+function getHistorySectionFilterOptions() {
+  return HISTORY_SECTION_FILTERS;
+}
+
+function sanitizeHistorySectionFilter(value) {
+  const normalized = typeof value === "string" ? value : "all";
+  return HISTORY_SECTION_FILTERS.some((item) => item.key === normalized) ? normalized : "all";
+}
+
+function shouldRenderHistorySection(section, filter = state.historySectionFilter) {
+  const activeFilter = sanitizeHistorySectionFilter(filter);
+  return activeFilter === "all" || activeFilter === section;
+}
+
 function formatOptionalMetric(value, unit = "", fallback = "-") {
   if (!Number.isFinite(value)) return fallback;
   return `${formatCompactNumber(value)}${unit}`;
@@ -4881,6 +4904,7 @@ function buildPersistedState() {
     selectedChartKey: state.selectedChartKey,
     historyDetailKey: state.historyDetailKey,
     historyOverviewFilter: sanitizeHistoryOverviewFilter(state.historyOverviewFilter),
+    historySectionFilter: sanitizeHistorySectionFilter(state.historySectionFilter),
     bodyChartField: sanitizeBodyChartField(state.bodyChartField),
     installHintDismissed: state.installHintDismissed,
     onboardingCompleted: state.onboardingCompleted,
@@ -4948,6 +4972,7 @@ function hydrateState(parsed = {}) {
   state.selectedChartKey = parsed.selectedChartKey || "";
   state.historyDetailKey = parsed.historyDetailKey || "";
   state.historyOverviewFilter = sanitizeHistoryOverviewFilter(parsed.historyOverviewFilter);
+  state.historySectionFilter = sanitizeHistorySectionFilter(parsed.historySectionFilter);
   state.bodyChartField = sanitizeBodyChartField(parsed.bodyChartField);
   state.installHintDismissed = Boolean(parsed.installHintDismissed);
   state.onboardingCompleted = Boolean(parsed.onboardingCompleted);
@@ -5281,6 +5306,12 @@ function clearAllData() {
 
 function setHistoryOverviewFilter(filter) {
   state.historyOverviewFilter = sanitizeHistoryOverviewFilter(filter);
+  saveState();
+  renderApp();
+}
+
+function setHistorySectionFilter(filter) {
+  state.historySectionFilter = sanitizeHistorySectionFilter(filter);
   saveState();
   renderApp();
 }
@@ -9401,6 +9432,10 @@ function bindEvents() {
         setHistoryOverviewFilter(button.dataset.historyFilter || "all");
       }
 
+      if (action === "set-history-section-filter") {
+        setHistorySectionFilter(button.dataset.historySection || "all");
+      }
+
       if (action === "set-body-chart-field") {
         setBodyChartField(button.dataset.bodyChartField || "weight");
       }
@@ -10708,21 +10743,23 @@ function renderPlannerActivityIcon(type = "workout") {
   if (type === "cardio") {
     return `
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 18h16"></path>
-        <path d="M7 18l2-8h6l2 8"></path>
-        <path d="M10 10V7h4v3"></path>
-        <path d="M15 7h3"></path>
+        <path d="M5 18h14"></path>
+        <path d="M7.5 18l2.2-8.2h5.4l2.4 8.2"></path>
+        <path d="M10.4 9.8V6.9h3.2v2.9"></path>
+        <path d="M14.8 7h2.7"></path>
+        <path d="M8.8 14.1h6.5"></path>
       </svg>
     `;
   }
 
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 10h3v4H3z"></path>
-      <path d="M18 10h3v4h-3z"></path>
-      <path d="M6 9h2v6H6z"></path>
-      <path d="M16 9h2v6h-2z"></path>
-      <path d="M8 11h8v2H8z"></path>
+      <path d="M3.5 9.5h2.3v5H3.5z"></path>
+      <path d="M18.2 9.5h2.3v5h-2.3z"></path>
+      <path d="M5.8 8.6h2.1v6.8H5.8z"></path>
+      <path d="M16.1 8.6h2.1v6.8h-2.1z"></path>
+      <path d="M7.9 10.9h8.2v2.2H7.9z"></path>
+      <path d="M12 10.9v2.2"></path>
     </svg>
   `;
 }
@@ -11088,18 +11125,52 @@ function renderSessionReviewsOverviewSection() {
 function renderHistoryOverview() {
   const filterOptions = getHistoryOverviewFilterOptions();
   const activeFilter = sanitizeHistoryOverviewFilter(state.historyOverviewFilter);
+  const sectionOptions = getHistorySectionFilterOptions();
+  const activeSectionFilter = sanitizeHistorySectionFilter(state.historySectionFilter);
   const filteredHistory = getFilteredHistoryOverviewEntries(activeFilter);
   const cards = getHistoryOverviewCards(filteredHistory);
   const { heaviest, bestReps } = getGlobalRecords(filteredHistory);
+  const showRecords = shouldRenderHistorySection("records", activeSectionFilter);
+  const shouldRenderRecordsSection = showRecords && (state.history.length || activeSectionFilter === "records");
+  const showCardio = shouldRenderHistorySection("cardio", activeSectionFilter);
+  const showBody = shouldRenderHistorySection("body", activeSectionFilter);
+  const showReviews = shouldRenderHistorySection("reviews", activeSectionFilter);
 
   return `
     <section class="history-list">
-      ${renderCardioOverviewSection()}
-      ${renderBodyMetricsOverviewSection()}
-      ${renderSessionReviewsOverviewSection()}
+      <article class="surface surface-pad stack-sm" data-accent-day="${state.day}">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Vue rapide</div>
+            <h3 class="section-title dashboard-section-head__title">Ouvrir le bon bloc sans scroller</h3>
+          </div>
+          <div class="label">${sectionOptions.find((option) => option.key === activeSectionFilter)?.label || "Tout"}</div>
+        </div>
+
+        <div class="history-filter-row">
+          ${sectionOptions
+            .map(
+              (option) => `
+                <button
+                  class="history-filter-chip ${activeSectionFilter === option.key ? "is-active" : ""}"
+                  data-action="set-history-section-filter"
+                  data-history-section="${option.key}"
+                  aria-pressed="${activeSectionFilter === option.key ? "true" : "false"}"
+                >
+                  ${option.label}
+                </button>
+              `
+            )
+            .join("")}
+        </div>
+      </article>
+
+      ${showCardio ? renderCardioOverviewSection() : ""}
+      ${showBody ? renderBodyMetricsOverviewSection() : ""}
+      ${showReviews ? renderSessionReviewsOverviewSection() : ""}
 
       ${
-        filterOptions.length > 1
+        shouldRenderRecordsSection && filterOptions.length > 1
           ? `
             <article class="surface surface-pad stack-sm" data-accent-day="${state.day}">
               <div class="dashboard-section-head">
@@ -11131,82 +11202,88 @@ function renderHistoryOverview() {
           : ""
       }
 
-      <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
-        <div class="dashboard-section-head">
-          <div>
-            <div class="label">Suivi</div>
-            <h3 class="section-title dashboard-section-head__title">Meilleurs PR par seance</h3>
-          </div>
-          <div class="label">${cards.length} seance${cards.length > 1 ? "s" : ""}</div>
-        </div>
+      ${
+        shouldRenderRecordsSection
+          ? `
+            <article class="surface surface-pad records-shell" data-accent-day="${state.day}">
+              <div class="dashboard-section-head">
+                <div>
+                  <div class="label">Suivi</div>
+                  <h3 class="section-title dashboard-section-head__title">Meilleurs PR par seance</h3>
+                </div>
+                <div class="label">${cards.length} seance${cards.length > 1 ? "s" : ""}</div>
+              </div>
 
-        <div class="records-summary">
-          <div class="metric metric--record">
-            <div class="label">Charge max</div>
-            <div class="metric__value">${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "-"}</div>
-            <div class="records-summary__meta">
-              ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} - ${heaviest.reps} reps` : "Pas encore de PR"}
+              <div class="records-summary">
+                <div class="metric metric--record">
+                  <div class="label">Charge max</div>
+                  <div class="metric__value">${heaviest ? formatLoad(heaviest.load, heaviest.loadLabel) : "-"}</div>
+                  <div class="records-summary__meta">
+                    ${heaviest ? `${shortenLabel(heaviest.exercise, 18)} - ${heaviest.reps} reps` : "Pas encore de PR"}
+                  </div>
+                </div>
+                <div class="metric metric--record">
+                  <div class="label">Reps max</div>
+                  <div class="metric__value">${bestReps ? bestReps.reps : "-"}</div>
+                  <div class="records-summary__meta">
+                    ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <div class="history-group-list">
+              ${
+                cards.length
+                  ? cards
+                      .map(
+                        (card) => `
+                          <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
+                            <div class="history-group-card__top">
+                              <div class="history-card__identity">
+                                <div class="history-card__eyebrow">${card.exerciseCount} exo${card.exerciseCount > 1 ? "s" : ""} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
+                                <div class="history-card__title">${card.day}</div>
+                              </div>
+                              <span class="pill pill--outline">${formatDate(card.lastDate)}</span>
+                            </div>
+
+                            <div class="history-group-card__stats">
+                              <span class="history-group-card__stat">
+                                <strong>${isNumericLoad(card.bestLoad) ? formatLoad(card.bestLoad, card.bestLoadLabel) : "-"}</strong>
+                                <em>PR charge</em>
+                                <span class="history-group-card__detail">${card.bestLoadExercise ? shortenLabel(card.bestLoadExercise, 16) : "Aucun exo"}</span>
+                              </span>
+                              <span class="history-group-card__stat">
+                                <strong>${card.bestReps}</strong>
+                                <em>PR reps</em>
+                                <span class="history-group-card__detail">${card.bestRepsExercise ? shortenLabel(card.bestRepsExercise, 16) : "Aucun exo"}</span>
+                              </span>
+                              <span class="history-group-card__stat">
+                                <strong>${card.count}</strong>
+                                <em>Logs</em>
+                              </span>
+                              <span class="history-group-card__stat">
+                                <strong>${card.exerciseCount}</strong>
+                                <em>Exos</em>
+                              </span>
+                            </div>
+                          </button>
+                        `
+                      )
+                      .join("")
+                  : `
+                      <article class="surface surface-pad empty-state" data-accent-day="${state.day}">
+                        <div class="empty-state__icon">ET</div>
+                        <div class="empty-state__eyebrow">Suivi</div>
+                        <h3 class="empty-state__title">Aucune seance pour ce filtre</h3>
+                        <p class="empty-state__text">Change de filtre pour revoir l'ensemble ou choisis une autre seance.</p>
+                      </article>
+                    `
+              }
             </div>
-          </div>
-          <div class="metric metric--record">
-            <div class="label">Reps max</div>
-            <div class="metric__value">${bestReps ? bestReps.reps : "-"}</div>
-            <div class="records-summary__meta">
-              ${bestReps ? shortenLabel(bestReps.exercise, 18) : "Pas encore de PR"}
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <div class="history-group-list">
-        ${
-          cards.length
-            ? cards
-                .map(
-                  (card) => `
-                    <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
-                      <div class="history-group-card__top">
-                        <div class="history-card__identity">
-                          <div class="history-card__eyebrow">${card.exerciseCount} exo${card.exerciseCount > 1 ? "s" : ""} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
-                          <div class="history-card__title">${card.day}</div>
-                        </div>
-                        <span class="pill pill--outline">${formatDate(card.lastDate)}</span>
-                      </div>
-
-                      <div class="history-group-card__stats">
-                        <span class="history-group-card__stat">
-                          <strong>${isNumericLoad(card.bestLoad) ? formatLoad(card.bestLoad, card.bestLoadLabel) : "-"}</strong>
-                          <em>PR charge</em>
-                          <span class="history-group-card__detail">${card.bestLoadExercise ? shortenLabel(card.bestLoadExercise, 16) : "Aucun exo"}</span>
-                        </span>
-                        <span class="history-group-card__stat">
-                          <strong>${card.bestReps}</strong>
-                          <em>PR reps</em>
-                          <span class="history-group-card__detail">${card.bestRepsExercise ? shortenLabel(card.bestRepsExercise, 16) : "Aucun exo"}</span>
-                        </span>
-                        <span class="history-group-card__stat">
-                          <strong>${card.count}</strong>
-                          <em>Logs</em>
-                        </span>
-                        <span class="history-group-card__stat">
-                          <strong>${card.exerciseCount}</strong>
-                          <em>Exos</em>
-                        </span>
-                      </div>
-                    </button>
-                  `
-                )
-                .join("")
-            : `
-                <article class="surface surface-pad empty-state" data-accent-day="${state.day}">
-                  <div class="empty-state__icon">ET</div>
-                  <div class="empty-state__eyebrow">Suivi</div>
-                  <h3 class="empty-state__title">Aucune seance pour ce filtre</h3>
-                  <p class="empty-state__text">Change de filtre pour revoir l'ensemble ou choisis une autre seance.</p>
-                </article>
-              `
-        }
-      </div>
+          `
+          : ""
+      }
     </section>
   `;
 }
@@ -11379,12 +11456,12 @@ function renderHistoryDetail() {
 }
 
 function renderHistory() {
-  if (!state.history.length) {
+  const hasSecondaryHistoryData =
+    state.cardioSessions.length || state.bodyMetrics.length || state.sessionReviews.length;
+
+  if (!state.history.length && !hasSecondaryHistoryData) {
     return `
       <section class="stack-md">
-        ${renderCardioOverviewSection()}
-        ${renderBodyMetricsOverviewSection()}
-        ${renderSessionReviewsOverviewSection()}
         ${renderEmptyState("Aucun log pour l'instant", "Ta premiere seance fera apparaitre ici ton suivi detaille, tes charges et tes meilleurs passages.", "Suivi", state.day)}
       </section>
     `;
