@@ -281,7 +281,7 @@ const HISTORY_SECTION_FILTERS = [
   { key: "all", label: "Tout" },
   { key: "records", label: "PR" },
   { key: "cardio", label: "Cardio" },
-  { key: "body", label: "Physique" },
+  { key: "body", label: "Mensurations" },
   { key: "reviews", label: "Ressenti" },
 ];
 
@@ -5433,6 +5433,19 @@ function setHistorySectionFilter(filter) {
   renderApp();
 }
 
+function openHistorySection(section, options = {}) {
+  state.screen = "history";
+  state.planSection = "";
+  state.settingsSection = "";
+  state.historyDetailKey = "";
+  state.historySectionFilter = sanitizeHistorySectionFilter(section);
+  if (section === "body") {
+    state.bodySectionFilter = sanitizeBodySectionFilter(options.bodySection || "entry");
+  }
+  saveState();
+  renderApp();
+}
+
 function setHistoryDetailSectionFilter(filter) {
   state.historyDetailSectionFilter = sanitizeHistoryDetailSectionFilter(filter);
   saveState();
@@ -8467,7 +8480,7 @@ function renderSettingsInstallSection() {
     <article class="surface surface-pad stack-md settings-group">
       <div class="dashboard-section-head">
         <div>
-          <div class="label">App iPhone</div>
+          <div class="label">Installation iPhone</div>
           <h3 class="section-title dashboard-section-head__title">Installation</h3>
         </div>
         <div class="label">PWA</div>
@@ -8635,7 +8648,7 @@ function renderBodyMetricsSection() {
         <div class="dashboard-section-head">
           <div>
             <div class="label">Acces rapide</div>
-            <h3 class="section-title dashboard-section-head__title">Physique sans long scroll</h3>
+            <h3 class="section-title dashboard-section-head__title">Pilotage mensurations</h3>
           </div>
           <div class="label">${BODY_SECTION_FILTERS.find((item) => item.key === activeBodySection)?.label || "Ajouter"}</div>
         </div>
@@ -8664,7 +8677,7 @@ function renderBodyMetricsSection() {
       <article class="surface surface-pad coach-shell coach-shell--${coach.tone}" data-accent-day="Upper">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Physique intelligent</div>
+            <div class="label">Coach forme</div>
             <h3 class="section-title dashboard-section-head__title">${goalMeta.label}: ${coach.headline}</h3>
           </div>
           <div class="coach-score coach-score--${coach.tone}">
@@ -8710,8 +8723,8 @@ function renderBodyMetricsSection() {
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Nouvelle entree</div>
-            <h3 class="section-title dashboard-section-head__title">Ajouter une mesure</h3>
+            <div class="label">Saisie</div>
+            <h3 class="section-title dashboard-section-head__title">Nouvelle mesure</h3>
           </div>
           <div class="label">Corps</div>
         </div>
@@ -8764,8 +8777,8 @@ function renderBodyMetricsSection() {
       <article class="surface surface-pad stack-md settings-group chart-shell" data-accent-day="Upper">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Courbe physique</div>
-            <h3 class="section-title dashboard-section-head__title">Voir la progression</h3>
+            <div class="label">Courbe mensurations</div>
+            <h3 class="section-title dashboard-section-head__title">Evolution visuelle</h3>
           </div>
           <div class="chart-shell__metric">${bodyChart.ready ? `${bodyChart.entryCount} mesure${bodyChart.entryCount > 1 ? "s" : ""}` : "En attente"}</div>
         </div>
@@ -8855,8 +8868,8 @@ function renderBodyMetricsSection() {
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Physique</div>
-            <h3 class="section-title dashboard-section-head__title">Poids et mensurations</h3>
+            <div class="label">Mensurations</div>
+            <h3 class="section-title dashboard-section-head__title">Vue d'ensemble</h3>
           </div>
           <div class="label">${state.bodyMetrics.length} entree${state.bodyMetrics.length > 1 ? "s" : ""}</div>
         </div>
@@ -9092,17 +9105,17 @@ function renderSettingsDataSection() {
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Donnees</div>
-            <h3 class="section-title dashboard-section-head__title">Backup et nettoyage</h3>
+          <div class="label">Donnees</div>
+          <h3 class="section-title dashboard-section-head__title">Sauvegarde et reinitialisation</h3>
           </div>
           <div class="label">JSON</div>
         </div>
         <div class="muted">
-          Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
+          Exporte tes donnees pour les conserver ou les restaurer plus tard.
         </div>
         <div class="backup-actions">
           <button class="button button--ghost" data-action="export-backup">
-            Exporter mes donnees
+            Exporter les donnees
           </button>
           <button class="button button--primary" data-action="import-backup">
             Importer un backup
@@ -9121,17 +9134,14 @@ function getSettingsSections() {
   const backupLabel = state.storageMeta.backupAvailable ? "Backup actif" : "Pas de backup";
   const soundLabel = state.restSoundEnabled ? "Son ON" : "Son OFF";
   const vibrationLabel = state.restVibrationEnabled ? "Vibreur ON" : "Vibreur OFF";
-  const weeklyCardioMinutes = getWeeklyCardioMinutes();
-  const latestBodyMetric = getLatestBodyMetric();
-  const bodyCoach = getPhysiqueCoachSnapshot();
 
   return [
     {
       id: "app",
-      label: "App iPhone",
+      label: "Installation iPhone",
       title: "Installation",
-      summary: "Ajout ecran d'accueil et mode app",
-      meta: "Ajout ecran d'accueil et stockage local",
+      summary: "Icone, ecran d'accueil et mode app",
+      meta: "Acces rapide depuis Safari avec stockage local",
       stats: ["PWA", "Safari"],
       mark: "APP",
       accentDay: state.day,
@@ -9149,33 +9159,11 @@ function getSettingsSections() {
       content: renderRestSettings(),
     },
     {
-      id: "cardio",
-      label: "Cardio / tapis",
-      title: weeklyCardioMinutes ? `${weeklyCardioMinutes} min / 7j` : "Aucun cardio logge",
-      summary: "Marche, duree, vitesse et inclinaison",
-      meta: state.cardioSessions.length ? `${state.cardioSessions.length} seance(s) cardio en memoire` : "Ajoute tes vraies seances cardio",
-      stats: [`${weeklyCardioMinutes} min`, `${state.cardioSessions.length} seance${state.cardioSessions.length > 1 ? "s" : ""}`],
-      mark: "CARDIO",
-      accentDay: "Legs",
-      content: renderCardioSettingsSection(),
-    },
-    {
-      id: "body",
-      label: "Physique",
-      title: latestBodyMetric?.weight ? `${formatOptionalMetric(latestBodyMetric.weight, " kg")} · ${bodyCoach.goalMeta.shortLabel}` : bodyCoach.goalMeta.label,
-      summary: "Poids, tour de taille, macros et lecture objectif",
-      meta: latestBodyMetric ? `${bodyCoach.goalMeta.label} · ${bodyCoach.headline}` : bodyCoach.goalMeta.entryHint,
-      stats: [formatOptionalMetric(latestBodyMetric?.weight, " kg"), `${bodyCoach.cardioMinutes}/${bodyCoach.cardioTarget} min`],
-      mark: "BODY",
-      accentDay: "Upper",
-      content: renderBodyMetricsSection(),
-    },
-    {
       id: "data",
       label: "Donnees",
       title: backupLabel,
-      summary: "Export, import et reinitialisation",
-      meta: state.storageMeta.saveError || "Export, import et reinitialisation",
+      summary: "Sauvegarde, import et reinitialisation",
+      meta: state.storageMeta.saveError || "Protege tes donnees et restaure-les si besoin",
       stats: [backupLabel, state.storageMeta.recoveredFromBackup ? "Recup OK" : "Local"],
       mark: "DATA",
       accentDay: state.day,
@@ -9385,13 +9373,13 @@ function renderSettingsHub() {
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">App iPhone</div>
+            <div class="label">Options</div>
             <h2 class="section-title dashboard-section-head__title">Reglages</h2>
           </div>
           <div class="label">${sections.length} blocs</div>
         </div>
         <div class="muted">
-          Tout est groupe en cartes: touche un bloc pour ouvrir son detail sans faire defiler tout le menu.
+          Chaque bloc s'ouvre seul pour garder un menu plus clair et plus rapide a parcourir.
         </div>
       </article>
 
@@ -9401,7 +9389,7 @@ function renderSettingsHub() {
             (section) => `
               <button class="settings-panel-card" data-action="open-settings-section" data-settings-section="${section.id}" data-accent-day="${section.accentDay}" data-theme-day="${section.accentDay}" data-settings-mark="${section.mark}">
                 <div>
-                  <div class="settings-panel-card__eyebrow">Reglages</div>
+                  <div class="settings-panel-card__eyebrow">Bloc</div>
                   <div class="settings-panel-card__title">${section.label}</div>
                   <div class="settings-panel-card__desc">${section.summary}</div>
                 </div>
@@ -9431,7 +9419,7 @@ function renderSettingsDetail() {
           <span class="pill pill--outline">${section.label}</span>
         </div>
         <div class="stack-sm">
-          <div class="label">Reglages</div>
+          <div class="label">Detail du bloc</div>
           <h2 class="section-title dashboard-section-head__title">${section.label}</h2>
           <div class="muted">${section.title} - ${section.meta}</div>
         </div>
@@ -9456,7 +9444,7 @@ function renderLegacySettings() {
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">App iPhone</div>
+            <div class="label">Options</div>
             <h2 class="section-title dashboard-section-head__title">Reglages</h2>
           </div>
           <div class="label">PWA</div>
@@ -9483,17 +9471,17 @@ function renderLegacySettings() {
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Donnees</div>
-            <h3 class="section-title dashboard-section-head__title">Backup et nettoyage</h3>
+          <div class="label">Donnees</div>
+          <h3 class="section-title dashboard-section-head__title">Sauvegarde et reinitialisation</h3>
           </div>
           <div class="label">JSON</div>
         </div>
         <div class="muted">
-          Exporte toutes tes donnees en fichier pour les garder ou les remettre plus tard.
+          Exporte tes donnees pour les conserver ou les restaurer plus tard.
         </div>
         <div class="backup-actions">
           <button class="button button--ghost" data-action="export-backup">
-            Exporter mes donnees
+            Exporter les donnees
           </button>
           <button class="button button--primary" data-action="import-backup">
             Importer un backup
@@ -9707,10 +9695,14 @@ function bindEvents() {
         openSettingsSection(button.dataset.settingsSection || "");
       }
 
+      if (action === "open-history-section") {
+        openHistorySection(button.dataset.historySection || "all", {
+          bodySection: button.dataset.bodySection || "entry",
+        });
+      }
+
       if (action === "open-body-settings") {
-        state.screen = "settings";
-        state.planSection = "";
-        openSettingsSection("body");
+        openHistorySection("body", { bodySection: "entry" });
       }
 
       if (action === "set-history-overview-filter") {
@@ -10597,7 +10589,7 @@ function renderPremiumDashboard() {
   const heroDay = resume?.day || state.day;
   const heroSummary = getDaySummary(heroDay);
   const heroTheme = getDayTheme(heroDay);
-  const heroActionLabel = resume?.mode === "active" ? "Reprendre la seance" : `Lancer ${heroDay}`;
+  const heroActionLabel = resume?.mode === "active" ? `Continuer ${heroDay}` : `Lancer ${heroDay}`;
   const heroActionAttrs = resume?.mode === "active"
     ? `data-action="resume-workout"`
     : `data-day="${heroDay}"`;
@@ -11305,19 +11297,17 @@ function renderLifestyleDashboardSection() {
 }
 
 function renderCardioOverviewSection() {
-  if (!state.cardioSessions.length) return "";
-
   const recent = getSortedCardioSessions().slice(0, 3);
   const weeklyMinutes = getWeeklyCardioMinutes();
 
   return `
-    <article class="surface surface-pad stack-md" data-accent-day="Legs">
+    <button class="surface surface-pad stack-md surface-button" data-action="open-history-section" data-history-section="cardio" data-accent-day="Legs" aria-label="Ouvrir le suivi cardio">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Cardio / tapis</div>
-          <h3 class="section-title dashboard-section-head__title">Cardio recent</h3>
+          <h3 class="section-title dashboard-section-head__title">Dernieres seances cardio</h3>
         </div>
-        <div class="label">${weeklyMinutes} min / 7j</div>
+        <div class="label">${state.cardioSessions.length ? `${weeklyMinutes} min / 7j` : "Ouvrir"}</div>
       </div>
 
       <div class="metric-grid">
@@ -11331,68 +11321,76 @@ function renderCardioOverviewSection() {
         </div>
       </div>
 
-      <div class="pending-list">
-        ${recent
-          .map((entry) => {
-            const meta = getCardioEntryMeta(entry);
-            return `
-              <div class="pending-item">
-                <div>
-                  <div class="pending-item__title">${getCardioTypeMeta(entry.type).title}</div>
-                  <div class="pending-item__meta">${formatDate(entry.date)}${meta ? ` · ${meta}` : ""}${entry.note ? ` · ${shortenLabel(entry.note, 40)}` : ""}</div>
-                </div>
-                <div class="pending-item__score">${entry.duration} min</div>
-              </div>
-            `;
-          })
-          .join("")}
-      </div>
-    </article>
+      ${
+        recent.length
+          ? `
+            <div class="pending-list">
+              ${recent
+                .map((entry) => {
+                  const meta = getCardioEntryMeta(entry);
+                  return `
+                    <div class="pending-item">
+                      <div>
+                        <div class="pending-item__title">${getCardioTypeMeta(entry.type).title}</div>
+                        <div class="pending-item__meta">${formatDate(entry.date)}${meta ? ` · ${meta}` : ""}${entry.note ? ` · ${shortenLabel(entry.note, 40)}` : ""}</div>
+                      </div>
+                      <div class="pending-item__score">${entry.duration} min</div>
+                    </div>
+                  `;
+                })
+                .join("")}
+            </div>
+          `
+          : `<div class="muted">Ajoute une marche ou un cardio pour lancer le suivi et retrouver ici tes dernieres donnees.</div>`
+      }
+    </button>
   `;
 }
 
 function renderBodyMetricsOverviewSection() {
   const latest = getLatestBodyMetric();
-  if (!latest) return "";
-
-  const previous = getPreviousBodyMetric();
   const coach = getPhysiqueCoachSnapshot();
   const nutrition = getBodyNutritionSnapshot();
+  const previous = getPreviousBodyMetric();
 
   return `
-    <button class="surface surface-pad stack-md surface-button" data-action="open-body-settings" data-accent-day="Upper" aria-label="Ouvrir le detail physique dans les reglages">
+    <button class="surface surface-pad stack-md surface-button" data-action="open-history-section" data-history-section="body" data-body-section="entry" data-accent-day="Upper" aria-label="Ouvrir le suivi des mensurations">
       <div class="dashboard-section-head">
         <div>
-          <div class="label">Physique</div>
+          <div class="label">Mensurations</div>
           <h3 class="section-title dashboard-section-head__title">${coach.goalMeta.label}</h3>
         </div>
-        <div class="label">${formatDate(latest.date)}</div>
+        <div class="label">${latest ? formatDate(latest.date) : "Ouvrir"}</div>
       </div>
 
       <div class="metric-grid">
         <div class="metric">
           <div class="label">Poids</div>
-          <div class="metric__value">${formatOptionalMetric(latest.weight, " kg")}</div>
+          <div class="metric__value">${formatOptionalMetric(latest?.weight, " kg")}</div>
         </div>
         <div class="metric">
           <div class="label">Tour taille</div>
-          <div class="metric__value">${formatOptionalMetric(latest.waist, " cm")}</div>
+          <div class="metric__value">${formatOptionalMetric(latest?.waist, " cm")}</div>
         </div>
         <div class="metric">
           <div class="label">Bras</div>
-          <div class="metric__value">${formatOptionalMetric(latest.arms, " cm")}</div>
+          <div class="metric__value">${formatOptionalMetric(latest?.arms, " cm")}</div>
         </div>
         <div class="metric">
           <div class="label">Cuisses</div>
-          <div class="metric__value">${formatOptionalMetric(latest.thighs, " cm")}</div>
+          <div class="metric__value">${formatOptionalMetric(latest?.thighs, " cm")}</div>
         </div>
       </div>
 
       <div class="muted">
-        ${coach.headline} · Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Tour taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}
+        ${
+          latest
+            ? `${coach.headline} · Poids ${formatMetricDelta(latest.weight, previous?.weight, " kg")} · Tour taille ${formatMetricDelta(latest.waist, previous?.waist, " cm")}`
+            : `${coach.goalMeta.entryHint} Ouvre ce bloc pour ajouter ta premiere mesure.`
+        }
       </div>
       ${
-        nutrition.ready
+        nutrition.ready && latest
           ? `<div class="muted">Objectif ~ ${nutrition.targetCalories} kcal · P ${nutrition.proteinGrams} g · G ${nutrition.carbsGrams} g · L ${nutrition.fatGrams} g</div>`
           : ""
       }
@@ -11401,8 +11399,6 @@ function renderBodyMetricsOverviewSection() {
 }
 
 function renderSessionReviewsOverviewSection() {
-  if (!state.sessionReviews.length) return "";
-
   const recent = getRecentSessionReviews(30).slice(0, 3);
   const avgEnergy = recent.length
     ? Math.round((recent.reduce((total, entry) => total + entry.energy, 0) / recent.length) * 10) / 10
@@ -11412,13 +11408,13 @@ function renderSessionReviewsOverviewSection() {
     : null;
 
   return `
-    <article class="surface surface-pad stack-md" data-accent-day="${state.day}">
+    <button class="surface surface-pad stack-md surface-button" data-action="open-history-section" data-history-section="reviews" data-accent-day="${state.day}" aria-label="Ouvrir le suivi ressenti">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Ressenti</div>
-          <h3 class="section-title dashboard-section-head__title">Retour de seance</h3>
+          <h3 class="section-title dashboard-section-head__title">Bilan recent</h3>
         </div>
-        <div class="label">${recent.length} recent${recent.length > 1 ? "s" : ""}</div>
+        <div class="label">${recent.length ? `${recent.length} recent${recent.length > 1 ? "s" : ""}` : "Ouvrir"}</div>
       </div>
 
       <div class="metric-grid">
@@ -11432,14 +11428,73 @@ function renderSessionReviewsOverviewSection() {
         </div>
       </div>
 
+      ${
+        recent.length
+          ? `
+            <div class="pending-list">
+              ${recent
+                .map(
+                  (entry) => `
+                    <div class="pending-item">
+                      <div>
+                        <div class="pending-item__title">${entry.day} · ${formatDate(entry.date)}</div>
+                        <div class="pending-item__meta">${entry.exerciseCount} exos · ${entry.setCount} series · ${entry.durationMinutes} min${entry.note ? ` · ${shortenLabel(entry.note, 42)}` : ""}</div>
+                      </div>
+                      <div class="pending-item__score">
+                        <span class="pill ${getReviewTone(entry) === "progress" ? "" : getReviewTone(entry) === "reduce" ? "pill--amber" : "pill--outline"}">E${entry.energy} · D${entry.pain}</span>
+                      </div>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+          `
+          : `<div class="muted">Le ressenti de fin de seance apparaitra ici apres tes prochains enregistrements.</div>`
+      }
+    </button>
+  `;
+}
+
+function renderSessionReviewsDetailSection() {
+  const reviews = getRecentSessionReviews(3650).slice(0, 12);
+  if (!reviews.length) {
+    return renderHistorySectionEmptyState("reviews");
+  }
+
+  const avgEnergy =
+    Math.round((reviews.reduce((total, entry) => total + entry.energy, 0) / reviews.length) * 10) / 10;
+  const avgPain =
+    Math.round((reviews.reduce((total, entry) => total + entry.pain, 0) / reviews.length) * 10) / 10;
+
+  return `
+    <article class="surface surface-pad stack-md" data-accent-day="${state.day}">
+      <div class="dashboard-section-head">
+        <div>
+          <div class="label">Ressenti</div>
+          <h3 class="section-title dashboard-section-head__title">Journal de ressenti</h3>
+        </div>
+        <div class="label">${reviews.length} entree${reviews.length > 1 ? "s" : ""}</div>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="label">Energie moy.</div>
+          <div class="metric__value">${Number.isFinite(avgEnergy) ? `${formatCompactNumber(avgEnergy)}/5` : "-"}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Gene moy.</div>
+          <div class="metric__value">${Number.isFinite(avgPain) ? `${formatCompactNumber(avgPain)}/3` : "-"}</div>
+        </div>
+      </div>
+
       <div class="pending-list">
-        ${recent
+        ${reviews
           .map(
             (entry) => `
               <div class="pending-item">
                 <div>
                   <div class="pending-item__title">${entry.day} · ${formatDate(entry.date)}</div>
-                  <div class="pending-item__meta">${entry.exerciseCount} exos · ${entry.setCount} series · ${entry.durationMinutes} min${entry.note ? ` · ${shortenLabel(entry.note, 42)}` : ""}</div>
+                  <div class="pending-item__meta">${entry.exerciseCount} exos · ${entry.setCount} series · ${entry.durationMinutes} min${entry.note ? ` · ${shortenLabel(entry.note, 64)}` : ""}</div>
                 </div>
                 <div class="pending-item__score">
                   <span class="pill ${getReviewTone(entry) === "progress" ? "" : getReviewTone(entry) === "reduce" ? "pill--amber" : "pill--outline"}">E${entry.energy} · D${entry.pain}</span>
@@ -11464,7 +11519,7 @@ function renderHistorySectionEmptyState(section) {
     body: {
       title: "Aucune mesure pour l'instant",
       text: "Ajoute ton poids ou tes mensurations pour suivre visuellement ta progression physique.",
-      eyebrow: "Physique",
+      eyebrow: "Mensurations",
       accentDay: "Upper",
     },
     reviews: {
@@ -11494,25 +11549,19 @@ function renderHistoryOverview() {
   const showBody = shouldRenderHistorySection("body", activeSectionFilter);
   const showReviews = shouldRenderHistorySection("reviews", activeSectionFilter);
   const cardioSection = showCardio
-    ? state.cardioSessions.length
-      ? renderCardioOverviewSection()
-      : activeSectionFilter === "cardio"
-        ? renderHistorySectionEmptyState("cardio")
-        : ""
+    ? activeSectionFilter === "cardio"
+      ? renderCardioSettingsSection()
+      : renderCardioOverviewSection()
     : "";
   const bodySection = showBody
-    ? getLatestBodyMetric()
-      ? renderBodyMetricsOverviewSection()
-      : activeSectionFilter === "body"
-        ? renderHistorySectionEmptyState("body")
-        : ""
+    ? activeSectionFilter === "body"
+      ? renderBodyMetricsSection()
+      : renderBodyMetricsOverviewSection()
     : "";
   const reviewSection = showReviews
-    ? state.sessionReviews.length
-      ? renderSessionReviewsOverviewSection()
-      : activeSectionFilter === "reviews"
-        ? renderHistorySectionEmptyState("reviews")
-        : ""
+    ? activeSectionFilter === "reviews"
+      ? renderSessionReviewsDetailSection()
+      : renderSessionReviewsOverviewSection()
     : "";
 
   return `
@@ -11520,8 +11569,8 @@ function renderHistoryOverview() {
       <article class="surface surface-pad stack-sm" data-accent-day="${state.day}">
         <div class="dashboard-section-head">
           <div>
-            <div class="label">Vue rapide</div>
-            <h3 class="section-title dashboard-section-head__title">Ouvrir le bon bloc sans scroller</h3>
+            <div class="label">Acces direct</div>
+            <h3 class="section-title dashboard-section-head__title">Trouver le bon bloc instantanement</h3>
           </div>
           <div class="label">${sectionOptions.find((option) => option.key === activeSectionFilter)?.label || "Tout"}</div>
         </div>
@@ -11874,17 +11923,6 @@ function renderHistoryDetail() {
 }
 
 function renderHistory() {
-  const hasSecondaryHistoryData =
-    state.cardioSessions.length || state.bodyMetrics.length || state.sessionReviews.length;
-
-  if (!state.history.length && !hasSecondaryHistoryData) {
-    return `
-      <section class="stack-md">
-        ${renderEmptyState("Aucun log pour l'instant", "Ta premiere seance fera apparaitre ici ton suivi detaille, tes charges et tes meilleurs passages.", "Suivi", state.day)}
-      </section>
-    `;
-  }
-
   if (state.historyDetailKey) {
     return renderHistoryDetail();
   }
