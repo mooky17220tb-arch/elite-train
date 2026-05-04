@@ -11301,7 +11301,7 @@ function renderCardioOverviewSection() {
   const weeklyMinutes = getWeeklyCardioMinutes();
 
   return `
-    <button class="surface surface-pad stack-md surface-button" data-action="open-history-section" data-history-section="cardio" data-accent-day="Legs" aria-label="Ouvrir le suivi cardio">
+    <button class="surface surface-pad stack-md surface-button history-entry-card" data-action="open-history-section" data-history-section="cardio" data-accent-day="Legs" aria-label="Ouvrir le suivi cardio">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Cardio / tapis</div>
@@ -11343,6 +11343,11 @@ function renderCardioOverviewSection() {
           `
           : `<div class="muted">Ajoute une marche ou un cardio pour lancer le suivi et retrouver ici tes dernieres donnees.</div>`
       }
+
+      <div class="history-entry-card__footer" aria-hidden="true">
+        <span>Ouvrir le detail</span>
+        <span class="history-entry-card__arrow">></span>
+      </div>
     </button>
   `;
 }
@@ -11354,7 +11359,7 @@ function renderBodyMetricsOverviewSection() {
   const previous = getPreviousBodyMetric();
 
   return `
-    <button class="surface surface-pad stack-md surface-button" data-action="open-history-section" data-history-section="body" data-body-section="entry" data-accent-day="Upper" aria-label="Ouvrir le suivi des mensurations">
+    <button class="surface surface-pad stack-md surface-button history-entry-card" data-action="open-history-section" data-history-section="body" data-body-section="entry" data-accent-day="Upper" aria-label="Ouvrir le suivi des mensurations">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Mensurations</div>
@@ -11394,6 +11399,11 @@ function renderBodyMetricsOverviewSection() {
           ? `<div class="muted">Objectif ~ ${nutrition.targetCalories} kcal · P ${nutrition.proteinGrams} g · G ${nutrition.carbsGrams} g · L ${nutrition.fatGrams} g</div>`
           : ""
       }
+
+      <div class="history-entry-card__footer" aria-hidden="true">
+        <span>Ouvrir le detail</span>
+        <span class="history-entry-card__arrow">></span>
+      </div>
     </button>
   `;
 }
@@ -11408,7 +11418,7 @@ function renderSessionReviewsOverviewSection() {
     : null;
 
   return `
-    <button class="surface surface-pad stack-md surface-button" data-action="open-history-section" data-history-section="reviews" data-accent-day="${state.day}" aria-label="Ouvrir le suivi ressenti">
+    <button class="surface surface-pad stack-md surface-button history-entry-card" data-action="open-history-section" data-history-section="reviews" data-accent-day="${state.day}" aria-label="Ouvrir le suivi ressenti">
       <div class="dashboard-section-head">
         <div>
           <div class="label">Ressenti</div>
@@ -11451,6 +11461,11 @@ function renderSessionReviewsOverviewSection() {
           `
           : `<div class="muted">Le ressenti de fin de seance apparaitra ici apres tes prochains enregistrements.</div>`
       }
+
+      <div class="history-entry-card__footer" aria-hidden="true">
+        <span>Ouvrir le detail</span>
+        <span class="history-entry-card__arrow">></span>
+      </div>
     </button>
   `;
 }
@@ -11666,7 +11681,7 @@ function renderHistoryOverview() {
                   ? cards
                       .map(
                         (card) => `
-                          <button class="surface surface-pad history-group-card" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
+                          <button class="surface surface-pad history-group-card history-entry-card history-entry-card--session" data-action="open-history-detail" data-history-key="${card.key}" data-accent-day="${card.day}">
                             <div class="history-group-card__top">
                               <div class="history-card__identity">
                                 <div class="history-card__eyebrow">${card.exerciseCount} exo${card.exerciseCount > 1 ? "s" : ""} - ${card.slotCount} slot${card.slotCount > 1 ? "s" : ""}</div>
@@ -11694,6 +11709,11 @@ function renderHistoryOverview() {
                                 <strong>${card.exerciseCount}</strong>
                                 <em>Exos</em>
                               </span>
+                            </div>
+
+                            <div class="history-entry-card__footer" aria-hidden="true">
+                              <span>Voir les exos et la courbe</span>
+                              <span class="history-entry-card__arrow">></span>
                             </div>
                           </button>
                         `
