@@ -369,6 +369,8 @@ const state = {
   programEntryEditor: null,
   storageMeta: {
     lastSavedAt: "",
+    lastExportedAt: "",
+    exportCount: 0,
     backupAvailable: false,
     recoveredFromBackup: false,
     saveError: "",
@@ -4106,6 +4108,73 @@ function getRecentCardioSessions(days = 7) {
   });
 }
 
+function getBackupExportSnapshot() {
+  const lastExportedAt = typeof state.storageMeta.lastExportedAt === "string" ? state.storageMeta.lastExportedAt : "";
+  const exportCount = sanitizePositiveInteger(state.storageMeta.exportCount, 0, 0);
+
+  if (!lastExportedAt) {
+    return {
+      tone: "warn",
+      label: "Export recommande",
+      shortLabel: "A faire",
+      lastExportLabel: "Jamais exporte",
+      countLabel: `${exportCount} export`,
+      note: "L'autosauvegarde locale aide deja, mais un export JSON dans Fichiers ou iCloud reste la vraie securite si le navigateur se vide.",
+      stale: true,
+    };
+  }
+
+  const exportedTime = new Date(lastExportedAt).getTime();
+  if (!Number.isFinite(exportedTime)) {
+    return {
+      tone: "warn",
+      label: "Export recommande",
+      shortLabel: "A verifier",
+      lastExportLabel: "Date inconnue",
+      countLabel: `${exportCount} export${exportCount > 1 ? "s" : ""}`,
+      note: "Le dernier export n'a pas pu etre relu correctement. Refais un export pour repartir sur une base saine.",
+      stale: true,
+    };
+  }
+
+  const ageDays = Math.floor((Date.now() - exportedTime) / (24 * 60 * 60 * 1000));
+  const countLabel = `${exportCount} export${exportCount > 1 ? "s" : ""}`;
+
+  if (ageDays <= 7) {
+    return {
+      tone: "ok",
+      label: "Export a jour",
+      shortLabel: "A jour",
+      lastExportLabel: formatDateTimeShort(lastExportedAt),
+      countLabel,
+      note: "Ta copie externe est recente. Continue simplement a reexporter apres une grosse mise a jour ou une bonne semaine d'entrainement.",
+      stale: false,
+    };
+  }
+
+  if (ageDays <= 14) {
+    return {
+      tone: "soon",
+      label: "Export a actualiser",
+      shortLabel: "Bientot",
+      lastExportLabel: formatDateTimeShort(lastExportedAt),
+      countLabel,
+      note: "La sauvegarde existe bien, mais elle commence a dater. Un nouvel export te remettrait a l'abri en cas de souci iPhone ou Safari.",
+      stale: true,
+    };
+  }
+
+  return {
+    tone: "warn",
+    label: "Export a refaire",
+    shortLabel: "Retard",
+    lastExportLabel: formatDateTimeShort(lastExportedAt),
+    countLabel,
+    note: "La derniere copie externe est trop ancienne. Refais un export maintenant pour ne pas perdre tes dernieres seances si l'appareil se vide.",
+    stale: true,
+  };
+}
+
 function getWeeklyCardioMinutes(days = 7) {
   return getRecentCardioSessions(days).reduce((total, entry) => total + entry.duration, 0);
 }
@@ -5003,6 +5072,8 @@ function buildPersistedState() {
     pendingSession: sanitizedPendingSession,
     selectedChartKey: state.selectedChartKey,
     historyDetailKey: state.historyDetailKey,
+    lastExportedAt: state.storageMeta.lastExportedAt || "",
+    backupExportCount: sanitizePositiveInteger(state.storageMeta.exportCount, 0, 0),
     historyOverviewFilter: sanitizeHistoryOverviewFilter(state.historyOverviewFilter),
     historySectionFilter: sanitizeHistorySectionFilter(state.historySectionFilter),
     historyDetailSectionFilter: sanitizeHistoryDetailSectionFilter(state.historyDetailSectionFilter),
@@ -5090,6 +5161,8 @@ function hydrateState(parsed = {}) {
   state.storageMeta.recoveredFromBackup = false;
   state.storageMeta.backupAvailable = Boolean(readStorageItemSafely(STORAGE_BACKUP_KEY));
   state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+  state.storageMeta.lastExportedAt = typeof parsed.lastExportedAt === "string" ? parsed.lastExportedAt : "";
+  state.storageMeta.exportCount = sanitizePositiveInteger(parsed.backupExportCount, 0, 0);
   state.storageMeta.saveError = "";
 
   const savedRestProfileVersion = sanitizePositiveInteger(
@@ -5195,6 +5268,8 @@ function restoreState() {
 
     hydrateState(parsed);
     state.storageMeta.lastSavedAt = typeof parsed.savedAt === "string" ? parsed.savedAt : "";
+    state.storageMeta.lastExportedAt = typeof parsed.lastExportedAt === "string" ? parsed.lastExportedAt : "";
+    state.storageMeta.exportCount = sanitizePositiveInteger(parsed.backupExportCount, 0, 0);
     state.storageMeta.recoveredFromBackup = recoveredFromBackup;
     state.storageMeta.backupAvailable = true;
     state.storageMeta.saveError = "";
@@ -5411,6 +5486,8 @@ function clearAllData() {
   state.programEntryEditor = null;
   state.storageMeta = {
     lastSavedAt: "",
+    lastExportedAt: "",
+    exportCount: 0,
     backupAvailable: false,
     recoveredFromBackup: false,
     saveError: "",
@@ -5482,9 +5559,13 @@ function setBodyChartField(field) {
 }
 
 function exportBackup() {
+  const exportStamp = new Date().toISOString();
+  state.storageMeta.lastExportedAt = exportStamp;
+  state.storageMeta.exportCount = sanitizePositiveInteger(state.storageMeta.exportCount, 0, 0) + 1;
+
   const payload = {
     version: STORAGE_SCHEMA_VERSION,
-    exportedAt: new Date().toISOString(),
+    exportedAt: exportStamp,
     source: "elite-train-iphone",
     data: buildPersistedState(),
   };
@@ -5494,7 +5575,7 @@ function exportBackup() {
   });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = exportStamp.replace(/[:T]/g, "-").slice(0, 16);
 
   link.href = url;
   link.download = `elite-train-backup-${stamp}.json`;
@@ -5503,6 +5584,8 @@ function exportBackup() {
   link.remove();
 
   setTimeout(() => URL.revokeObjectURL(url), 0);
+  saveState();
+  renderApp();
 }
 
 async function importBackupFromFile(file) {
@@ -5512,6 +5595,16 @@ async function importBackupFromFile(file) {
     const raw = await file.text();
     const parsed = JSON.parse(raw);
     const nextState = parsed?.data && typeof parsed.data === "object" ? parsed.data : parsed;
+    const importedState = {
+      ...nextState,
+      lastExportedAt:
+        typeof nextState?.lastExportedAt === "string" && nextState.lastExportedAt
+          ? nextState.lastExportedAt
+          : typeof parsed?.exportedAt === "string"
+            ? parsed.exportedAt
+            : "",
+      backupExportCount: sanitizePositiveInteger(nextState?.backupExportCount, 1, 0),
+    };
 
     if (!nextState || typeof nextState !== "object") {
       throw new Error("Backup invalide");
@@ -5521,7 +5614,7 @@ async function importBackupFromFile(file) {
       return;
     }
 
-    hydrateState(nextState);
+    hydrateState(importedState);
     saveState();
     renderApp();
     window.alert("Backup importe avec succes.");
@@ -8436,10 +8529,17 @@ function renderRestAlertOverlay() {
 
 function renderStorageConfidenceSection() {
   const lastSavedLabel = formatDateTimeShort(state.storageMeta.lastSavedAt);
+  const exportMeta = getBackupExportSnapshot();
   const backupLabel = state.storageMeta.backupAvailable ? "Actif" : "Absent";
   const recoveryLabel = state.storageMeta.recoveredFromBackup ? "Oui" : "Non";
-  const healthLabel = state.storageMeta.saveError ? "A surveiller" : "OK";
-  const healthMeta = state.storageMeta.saveError || "Autosauvegarde locale + copie de secours";
+  const healthLabel = state.storageMeta.saveError
+    ? "A surveiller"
+    : exportMeta.stale
+      ? "A completer"
+      : "A jour";
+  const healthMeta = state.storageMeta.saveError
+    ? state.storageMeta.saveError
+    : `${exportMeta.note}${state.storageMeta.recoveredFromBackup ? " L'app a deja pu relire la copie locale au chargement." : ""}`;
 
   return `
     <article class="surface surface-pad stack-md storage-shell">
@@ -8461,8 +8561,8 @@ function renderStorageConfidenceSection() {
           <div class="metric__value">${backupLabel}</div>
         </div>
         <div class="metric">
-          <div class="label">Recuperee</div>
-          <div class="metric__value">${recoveryLabel}</div>
+          <div class="label">Dernier export</div>
+          <div class="metric__value metric__value--text">${exportMeta.lastExportLabel}</div>
         </div>
         <div class="metric">
           <div class="label">Etat</div>
@@ -8471,6 +8571,7 @@ function renderStorageConfidenceSection() {
       </div>
 
       <div class="confidence-note">${healthMeta}</div>
+      <div class="muted">Exports externes: ${exportMeta.countLabel} · Recuperation locale: ${recoveryLabel}</div>
     </article>
   `;
 }
@@ -9098,30 +9199,56 @@ function renderBodyMetricsSection() {
 }
 
 function renderSettingsDataSection() {
+  const exportMeta = getBackupExportSnapshot();
+
   return `
     <section class="stack-md">
+      <article class="surface surface-pad stack-md settings-group">
+        <div class="dashboard-section-head">
+          <div>
+            <div class="label">Sauvegarde recommandee</div>
+            <h3 class="section-title dashboard-section-head__title">${exportMeta.label}</h3>
+          </div>
+          <div class="label">JSON</div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="label">Dernier export</div>
+            <div class="metric__value metric__value--text">${exportMeta.lastExportLabel}</div>
+          </div>
+          <div class="metric">
+            <div class="label">Statut</div>
+            <div class="metric__value">${exportMeta.shortLabel}</div>
+          </div>
+        </div>
+
+        <div class="install-hint">${exportMeta.note}</div>
+
+        <div class="backup-actions">
+          <button class="button button--primary" data-action="export-backup">
+            Exporter maintenant
+          </button>
+          <button class="button button--ghost" data-action="import-backup">
+            Importer un backup
+          </button>
+        </div>
+        <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
+      </article>
+
       ${renderStorageConfidenceSection()}
 
       <article class="surface surface-pad stack-md settings-group">
         <div class="dashboard-section-head">
           <div>
-          <div class="label">Donnees</div>
-          <h3 class="section-title dashboard-section-head__title">Sauvegarde et reinitialisation</h3>
+            <div class="label">Zone sensible</div>
+            <h3 class="section-title dashboard-section-head__title">Reinitialisation</h3>
           </div>
-          <div class="label">JSON</div>
+          <div class="label">Danger</div>
         </div>
         <div class="muted">
-          Exporte tes donnees pour les conserver ou les restaurer plus tard.
+          Cette action efface les donnees locales de l'appareil. Fais un export juste avant si tu veux une vraie copie de secours.
         </div>
-        <div class="backup-actions">
-          <button class="button button--ghost" data-action="export-backup">
-            Exporter les donnees
-          </button>
-          <button class="button button--primary" data-action="import-backup">
-            Importer un backup
-          </button>
-        </div>
-        <input id="backup-input" class="backup-input" type="file" accept="application/json,.json" />
         <button class="button button--danger" data-action="clear-data">
           Reinitialiser toutes les donnees
         </button>
@@ -9132,6 +9259,7 @@ function renderSettingsDataSection() {
 
 function getSettingsSections() {
   const backupLabel = state.storageMeta.backupAvailable ? "Backup actif" : "Pas de backup";
+  const exportMeta = getBackupExportSnapshot();
   const soundLabel = state.restSoundEnabled ? "Son ON" : "Son OFF";
   const vibrationLabel = state.restVibrationEnabled ? "Vibreur ON" : "Vibreur OFF";
 
@@ -9161,10 +9289,10 @@ function getSettingsSections() {
     {
       id: "data",
       label: "Donnees",
-      title: backupLabel,
+      title: exportMeta.label,
       summary: "Sauvegarde, import et reinitialisation",
-      meta: state.storageMeta.saveError || "Protege tes donnees et restaure-les si besoin",
-      stats: [backupLabel, state.storageMeta.recoveredFromBackup ? "Recup OK" : "Local"],
+      meta: state.storageMeta.saveError || exportMeta.note,
+      stats: [backupLabel, exportMeta.shortLabel],
       mark: "DATA",
       accentDay: state.day,
       content: renderSettingsDataSection(),
