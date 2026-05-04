@@ -10990,17 +10990,26 @@ function renderWorkout() {
   const activeWorkoutSection = sanitizeWorkoutSectionFilter(state.workoutSectionFilter);
   const showLoadSection = shouldRenderWorkoutSection("load", activeWorkoutSection);
   const showEntrySection = shouldRenderWorkoutSection("entry", activeWorkoutSection);
+  const totalExercises = Math.max(getExercises().length, 1);
+  const currentExerciseIndex = Math.min(state.currentIndex + 1, totalExercises);
+  const remainingExercises = Math.max(totalExercises - currentExerciseIndex, 0);
+  const progressRatio = Math.max(currentExerciseIndex / totalExercises, 0.08);
 
   if (state.workoutFinished) {
     return renderWorkoutCompletionScreen();
   }
 
   if (!active) {
-    return `
-      <section class="surface surface-pad">
-        <div class="muted">Aucun exercice disponible pour cette journee.</div>
-      </section>
-    `;
+    return renderEmptyState(
+      "Aucun bloc actif pour cette journee",
+      "Passe par Plan ou choisis une autre seance pour remettre ton split en mouvement.",
+      "Seance",
+      theme.accentDay,
+      {
+        icon: theme.mark,
+        actionMarkup: `<button class="button button--ghost button--compact" data-screen="plan">Ouvrir Plan</button>`,
+      }
+    );
   }
 
   return `
@@ -11034,6 +11043,20 @@ function renderWorkout() {
           >
             ${state.showPlates ? "KG" : "DB"}
           </button>
+        </div>
+      </div>
+
+      <div class="workout-shell__progress">
+        <div class="workout-shell__progress-top">
+          <span class="workout-shell__progress-kicker">Progression seance</span>
+          <span class="workout-shell__progress-value">${currentExerciseIndex}/${totalExercises}</span>
+        </div>
+        <div class="workout-shell__progress-bar" aria-hidden="true">
+          <span style="width:${(progressRatio * 100).toFixed(1)}%"></span>
+        </div>
+        <div class="workout-shell__progress-foot">
+          <span>${remainingExercises ? `${remainingExercises} bloc${remainingExercises > 1 ? "s" : ""} restant${remainingExercises > 1 ? "s" : ""}` : "Dernier bloc avant la fin"}</span>
+          <span>${getProgressPercent()}%</span>
         </div>
       </div>
 
@@ -11233,13 +11256,16 @@ function dismissBootSplash() {
   }, 320);
 }
 
-function renderEmptyState(title, text, eyebrow = "A venir", accentDay = state.day) {
+function renderEmptyState(title, text, eyebrow = "A venir", accentDay = state.day, options = {}) {
+  const icon = options.icon || "ET";
+  const actionMarkup = options.actionMarkup || "";
   return `
     <article class="surface surface-pad empty-state" data-accent-day="${accentDay}">
-      <div class="empty-state__icon">ET</div>
+      <div class="empty-state__icon">${icon}</div>
       <div class="empty-state__eyebrow">${eyebrow}</div>
       <h3 class="empty-state__title">${title}</h3>
       <p class="empty-state__text">${text}</p>
+      ${actionMarkup ? `<div class="empty-state__actions">${actionMarkup}</div>` : ""}
     </article>
   `;
 }
@@ -11280,12 +11306,16 @@ function renderDashboardProgressOverview(day = state.day) {
           </div>
         </div>
 
-        <div class="chart-empty">
-          <div>
-            <strong>Pas encore assez de recul sur ${day}</strong>
-            <span>Fais quelques passages sur cette seance et les cartes de progression apparaitront ici.</span>
-          </div>
-        </div>
+        ${renderEmptyState(
+          `Pas encore assez de recul sur ${day}`,
+          "Fais quelques passages sur cette seance et les cartes de progression apparaitront ici.",
+          "Progression",
+          resolveDayThemeKey(day),
+          {
+            icon: "GR",
+            actionMarkup: '<button class="button button--ghost button--compact" data-screen="history">Voir la progression</button>',
+          }
+        )}
       </article>
     `;
   }
@@ -11658,24 +11688,35 @@ function renderHistorySectionEmptyState(section) {
       text: "Ajoute une seance tapis ou cardio pour retrouver ici tes durees et tes tendances.",
       eyebrow: "Cardio",
       accentDay: "Legs",
+      icon: "TR",
+      actionMarkup:
+        '<button class="button button--ghost button--compact" data-action="open-history-section" data-history-section="cardio">Ouvrir cardio</button>',
     },
     body: {
       title: "Aucune mesure pour l'instant",
       text: "Ajoute ton poids ou tes mensurations pour suivre visuellement ta progression physique.",
       eyebrow: "Mensurations",
       accentDay: "Upper",
+      icon: "BM",
+      actionMarkup:
+        '<button class="button button--ghost button--compact" data-action="open-history-section" data-history-section="body" data-body-section="entry">Nouvelle mesure</button>',
     },
     reviews: {
       title: "Aucun ressenti pour l'instant",
       text: "Ton energie, ta gene et tes notes de fin de seance apparaitront ici apres enregistrement.",
       eyebrow: "Ressenti",
       accentDay: state.day,
+      icon: "JR",
+      actionMarkup: '<button class="button button--ghost button--compact" data-screen="workout">Aller vers la seance</button>',
     },
   };
 
   const current = emptyStates[section];
   if (!current) return "";
-  return renderEmptyState(current.title, current.text, current.eyebrow, current.accentDay);
+  return renderEmptyState(current.title, current.text, current.eyebrow, current.accentDay, {
+    icon: current.icon,
+    actionMarkup: current.actionMarkup,
+  });
 }
 
 function renderHistoryOverview() {
@@ -11848,12 +11889,17 @@ function renderHistoryOverview() {
                       )
                       .join("")
                   : `
-                      <article class="surface surface-pad empty-state" data-accent-day="${state.day}">
-                        <div class="empty-state__icon">ET</div>
-                        <div class="empty-state__eyebrow">Suivi</div>
-                        <h3 class="empty-state__title">Aucune seance pour ce filtre</h3>
-                        <p class="empty-state__text">Change de filtre pour revoir l'ensemble ou choisis une autre seance.</p>
-                      </article>
+                      ${renderEmptyState(
+                        "Aucune seance pour ce filtre",
+                        "Repasse sur l'ensemble ou change de seance pour retrouver tes records tout de suite.",
+                        "Suivi",
+                        state.day,
+                        {
+                          icon: "PR",
+                          actionMarkup:
+                            '<button class="button button--ghost button--compact" data-action="set-history-overview-filter" data-history-filter="all">Voir tout</button>',
+                        }
+                      )}
                     `
               }
             </div>

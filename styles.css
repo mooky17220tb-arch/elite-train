@@ -911,9 +911,23 @@ button {
 .dashboard-hero__top,
 .dashboard-section-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dashboard-section-head > .label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(242, 247, 244, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .dashboard-hero__badge,
@@ -2810,9 +2824,10 @@ button {
 
 .history-detail-hero__top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .record-card {
@@ -3489,9 +3504,29 @@ button {
 
 .settings-detail-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-detail-header > .pill,
+.history-detail-hero__top > .pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(242, 247, 244, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.settings-detail-header > .button--compact,
+.history-detail-hero__top > .button--compact {
+  min-height: 34px;
 }
 
 .history-card {
@@ -4894,6 +4929,9 @@ select:focus-visible {
 
 .workout-shell__header {
   gap: 14px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .workout-shell__hero-copy {
@@ -4953,6 +4991,65 @@ select:focus-visible {
   font-weight: 850;
   letter-spacing: 0.02em;
   white-space: nowrap;
+}
+
+.workout-shell__progress {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    rgba(7, 10, 9, 0.64);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.workout-shell__progress-top,
+.workout-shell__progress-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workout-shell__progress-kicker {
+  color: rgba(232, 239, 235, 0.76);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.workout-shell__progress-value {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 960;
+  letter-spacing: -0.05em;
+  color: #f5faf7;
+}
+
+.workout-shell__progress-bar {
+  position: relative;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.workout-shell__progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.62), rgba(var(--accent-rgb), 0.96));
+  box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.22);
+}
+
+.workout-shell__progress-foot {
+  color: rgba(226, 233, 229, 0.74);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .workout-entry-panel {
@@ -5474,6 +5571,18 @@ body::before {
   text-transform: uppercase;
 }
 
+.empty-state__actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.empty-state__actions .button {
+  min-width: 160px;
+}
+
 .nav-button {
   gap: 6px;
   padding: 8px 6px 10px;
@@ -5551,6 +5660,14 @@ body::before {
   .chart-empty,
   .empty-state {
     min-height: 172px;
+  }
+
+  .workout-shell__progress {
+    padding: 12px 14px;
+  }
+
+  .workout-shell__progress-value {
+    font-size: 22px;
   }
 
   .progress-overview-grid {
