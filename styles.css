@@ -3161,32 +3161,6 @@ button {
   padding-bottom: 24px;
 }
 
-.app-shell--workout-screen .app-header__inner {
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
-.app-shell--workout-screen .brand {
-  font-size: 22px;
-}
-
-.app-shell--workout-screen .screen-kicker {
-  margin-top: 3px;
-  font-size: 8px;
-}
-
-.page--workout-screen {
-  overflow: hidden;
-}
-
-.icon-button--micro {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  font-size: 20px;
-  line-height: 1;
-}
-
 .update-banner {
   position: sticky;
   top: calc(env(safe-area-inset-top) + 74px);
@@ -4940,39 +4914,6 @@ select:focus-visible {
   gap: 10px;
 }
 
-.weight-card--compact {
-  padding: 18px 18px;
-  border-radius: 24px;
-}
-
-.weight-card--compact .weight-card__value {
-  margin: 8px 0 6px;
-  font-size: 54px;
-}
-
-.weight-card--compact .weight-card__unit {
-  font-size: 20px;
-}
-
-.weight-card--compact .goal-line {
-  gap: 8px;
-}
-
-.weight-card--compact .goal-line__chip {
-  min-height: 30px;
-  padding: 0 10px;
-  font-size: 11px;
-}
-
-.weight-card--compact .load-actions {
-  margin-top: 12px;
-}
-
-.weight-card--compact .last-performance {
-  margin-top: 10px;
-  font-size: 12px;
-}
-
 .weight-card__theme {
   display: inline-flex;
   align-items: center;
@@ -5050,96 +4991,6 @@ select:focus-visible {
   font-weight: 850;
   letter-spacing: 0.02em;
   white-space: nowrap;
-}
-
-.workout-shell__progress {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
-    rgba(7, 10, 9, 0.64);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.workout-shell__progress-top,
-.workout-shell__progress-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.workout-shell__progress-kicker {
-  color: rgba(232, 239, 235, 0.76);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.workout-shell__progress-value {
-  font-size: 24px;
-  line-height: 1;
-  font-weight: 960;
-  letter-spacing: -0.05em;
-  color: #f5faf7;
-}
-
-.workout-shell__progress-bar {
-  position: relative;
-  overflow: hidden;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.workout-shell__progress-bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.62), rgba(var(--accent-rgb), 0.96));
-  box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.22);
-}
-
-.workout-shell__progress-foot {
-  color: rgba(226, 233, 229, 0.74);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.workout-shell__glance {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.workout-shell__glance-card {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.workout-shell__glance-card strong {
-  font-size: 16px;
-  line-height: 1.1;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  color: #f5faf7;
-}
-
-.workout-shell__glance-label {
-  color: rgba(232, 239, 235, 0.66);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .workout-entry-panel {
@@ -5312,11 +5163,6 @@ select:focus-visible {
 
 .session-finish {
   gap: 20px;
-}
-
-.session-finish__toolbar {
-  display: flex;
-  justify-content: flex-start;
 }
 
 .session-finish__topline {
@@ -5755,23 +5601,6 @@ body::before {
   .chart-empty,
   .empty-state {
     min-height: 172px;
-  }
-
-  .workout-shell__progress {
-    padding: 12px 14px;
-  }
-
-  .workout-shell__progress-value {
-    font-size: 22px;
-  }
-
-  .workout-shell__glance {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .workout-shell__glance-card {
-    padding: 10px 12px;
   }
 
   .progress-overview-grid {

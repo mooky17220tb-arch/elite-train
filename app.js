@@ -5325,7 +5325,6 @@ function startWorkoutDay(day) {
   if (!getProgramDays().includes(day)) return;
   state.day = day;
   state.pendingSession = [];
-  state.workoutSectionFilter = "entry";
   resetWorkoutState();
   state.workoutStartedAt = new Date().toISOString();
   state.screen = "workout";
@@ -9690,12 +9689,6 @@ function bindEvents() {
         toggleFocusWorkoutMode();
       }
 
-      if (action === "exit-workout-screen") {
-        state.screen = "dashboard";
-        saveState();
-        renderApp();
-      }
-
       if (action === "increase-load") {
         updateCurrentLoad("up");
       }
@@ -10797,10 +10790,9 @@ function renderPremiumDashboard() {
 
 function renderWeightView(settings, active, last, isFocusMode = false) {
   const theme = getDayTheme(state.day);
-  const compactClass = !isFocusMode ? "weight-card--compact" : "";
 
   return `
-    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""} ${compactClass}" data-accent-day="${theme.accentDay}">
+    <div class="weight-card ${isFocusMode ? "weight-card--focus" : ""}" data-accent-day="${theme.accentDay}">
       ${
         settings.deload
           ? `<div class="deload-chip"><span class="pill pill--amber">Deload suggere</span></div>`
@@ -10900,11 +10892,6 @@ function renderWorkoutCompletionScreen() {
     return `
       <section class="stack-md">
         <section class="surface surface-pad-lg center-block stack-md session-finish" data-accent-day="${theme.accentDay}">
-          <div class="session-finish__toolbar">
-            <button class="button button--ghost button--compact" data-action="exit-workout-screen">
-              Retour
-            </button>
-          </div>
           <div class="trophy">${theme.mark}</div>
           <div class="stack-sm">
             <h2 class="section-title">Seance terminee</h2>
@@ -10928,11 +10915,6 @@ function renderWorkoutCompletionScreen() {
   return `
     <section class="stack-md">
       <section class="surface surface-pad-lg session-finish session-finish--${finishTone}" data-accent-day="${theme.accentDay}">
-        <div class="session-finish__toolbar">
-          <button class="button button--ghost button--compact" data-action="exit-workout-screen">
-            Retour
-          </button>
-        </div>
         <div class="session-finish__hero">
           <div class="trophy">${theme.mark}</div>
           <div class="stack-sm">
@@ -11005,16 +10987,9 @@ function renderWorkout() {
   const advice = getCurrentAdvice();
   const isFocusMode = state.focusWorkoutMode;
   const theme = getDayTheme(state.day);
-  const activeWorkoutSection =
-    sanitizeWorkoutSectionFilter(state.workoutSectionFilter) === "all"
-      ? "entry"
-      : sanitizeWorkoutSectionFilter(state.workoutSectionFilter);
+  const activeWorkoutSection = sanitizeWorkoutSectionFilter(state.workoutSectionFilter);
   const showLoadSection = shouldRenderWorkoutSection("load", activeWorkoutSection);
   const showEntrySection = shouldRenderWorkoutSection("entry", activeWorkoutSection);
-  const totalExercises = Math.max(getExercises().length, 1);
-  const currentExerciseIndex = Math.min(state.currentIndex + 1, totalExercises);
-  const remainingExercises = Math.max(totalExercises - currentExerciseIndex, 0);
-  const progressRatio = Math.max(currentExerciseIndex / totalExercises, 0.08);
 
   if (state.workoutFinished) {
     return renderWorkoutCompletionScreen();
@@ -11051,13 +11026,6 @@ function renderWorkout() {
         </div>
         <div class="workout-shell__tools">
           <button
-            class="icon-button icon-button--micro"
-            data-action="exit-workout-screen"
-            aria-label="Quitter la seance et revenir a l'accueil"
-          >
-            ←
-          </button>
-          <button
             class="icon-button ${state.focusWorkoutMode ? "is-active" : ""}"
             data-action="toggle-focus-workout"
             aria-label="${state.focusWorkoutMode ? "Quitter le mode focus" : "Activer le mode focus"}"
@@ -11074,38 +11042,8 @@ function renderWorkout() {
         </div>
       </div>
 
-      <div class="workout-shell__progress">
-        <div class="workout-shell__progress-top">
-          <span class="workout-shell__progress-kicker">Progression seance</span>
-          <span class="workout-shell__progress-value">${currentExerciseIndex}/${totalExercises}</span>
-        </div>
-        <div class="workout-shell__progress-bar" aria-hidden="true">
-          <span style="width:${(progressRatio * 100).toFixed(1)}%"></span>
-        </div>
-        <div class="workout-shell__progress-foot">
-          <span>${remainingExercises ? `${remainingExercises} bloc${remainingExercises > 1 ? "s" : ""} restant${remainingExercises > 1 ? "s" : ""}` : "Dernier bloc avant la fin"}</span>
-          <span>${getProgressPercent()}%</span>
-        </div>
-      </div>
-
-      <div class="workout-shell__glance">
-        <div class="workout-shell__glance-card">
-          <span class="workout-shell__glance-label">Poids cible</span>
-          <strong>${formatLoad(settings.load, settings.loadLabel)}</strong>
-        </div>
-        <div class="workout-shell__glance-card">
-          <span class="workout-shell__glance-label">Objectif</span>
-          <strong>${active.targetLabel} reps</strong>
-        </div>
-        <div class="workout-shell__glance-card">
-          <span class="workout-shell__glance-label">Repos</span>
-          <strong>${active.rest}s</strong>
-        </div>
-      </div>
-
       <div class="history-filter-row history-filter-row--compact">
         ${WORKOUT_SECTION_FILTERS
-          .filter((section) => section.key !== "all")
           .map(
             (section) => `
               <button
@@ -12170,8 +12108,7 @@ function renderHistory() {
 
 function renderApp() {
   const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
-  const hideBottomNav = state.screen === "workout" && !state.workoutFinished;
-  const isWorkoutScreen = state.screen === "workout" && !state.workoutFinished;
+  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
   const screenMeta = getScreenMeta();
   const timerButtonLabel = getTimerButtonLabel(screenMeta);
   const timerProgress = getTimerProgressRatio();
@@ -12179,7 +12116,7 @@ function renderApp() {
   const navItems = getNavItems();
 
   root.innerHTML = `
-    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""} ${isWorkoutScreen ? "app-shell--workout-screen" : ""}">
+    <div class="app-shell ${hideBottomNav ? "app-shell--focus" : ""}">
       <header class="app-header">
         <div class="app-width app-header__inner">
           <div>
@@ -12206,7 +12143,7 @@ function renderApp() {
 
       ${renderPwaUpdateBanner()}
 
-      <main class="app-width page ${isWorkoutScreen ? "page--workout-screen" : ""}">
+      <main class="app-width page">
         ${renderBody()}
       </main>
 
