@@ -10987,9 +10987,7 @@ function renderWorkout() {
   const advice = getCurrentAdvice();
   const isFocusMode = state.focusWorkoutMode;
   const theme = getDayTheme(state.day);
-  const activeWorkoutSection = sanitizeWorkoutSectionFilter(state.workoutSectionFilter);
-  const showLoadSection = shouldRenderWorkoutSection("load", activeWorkoutSection);
-  const showEntrySection = shouldRenderWorkoutSection("entry", activeWorkoutSection);
+  const lastSetMarkup = renderLastSetActions();
 
   if (state.workoutFinished) {
     return renderWorkoutCompletionScreen();
@@ -11042,61 +11040,38 @@ function renderWorkout() {
         </div>
       </div>
 
-      <div class="history-filter-row history-filter-row--compact">
-        ${WORKOUT_SECTION_FILTERS
-          .map(
-            (section) => `
-              <button
-                class="history-filter-chip ${activeWorkoutSection === section.key ? "is-active" : ""}"
-                data-action="set-workout-section-filter"
-                data-workout-section="${section.key}"
-                aria-pressed="${activeWorkoutSection === section.key ? "true" : "false"}"
-              >
-                ${section.label}
-              </button>
-            `
-          )
-          .join("")}
+      ${lastSetMarkup}
+
+      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
+
+      <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
+        <div class="workout-entry-row">
+          <div class="field-wrap workout-entry-field">
+            <label class="label" for="reps-input">Reps</label>
+            <input
+              id="reps-input"
+              class="input input--reps"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              placeholder="${active.targetLabel}"
+              value="${state.repsInput}"
+            />
+          </div>
+
+          <button
+            id="validate-set-button"
+            class="${getValidationButtonClass(advice)} validation-button--inline"
+            data-action="validate-set"
+            aria-label="${getValidationButtonLabel(advice)}"
+            ${hasValidRepsInput() ? "" : "disabled"}
+          >
+            ${renderValidationButtonContent(advice)}
+          </button>
+        </div>
+
+        ${renderRepQuickPicks()}
       </div>
-
-      ${showLoadSection ? (state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)) : ""}
-
-      ${
-        showEntrySection
-          ? `
-            <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
-              <div class="workout-entry-row">
-                <div class="field-wrap workout-entry-field">
-                  <label class="label" for="reps-input">Reps</label>
-                  <input
-                    id="reps-input"
-                    class="input input--reps"
-                    type="number"
-                    min="1"
-                    inputmode="numeric"
-                    placeholder="${active.targetLabel}"
-                    value="${state.repsInput}"
-                  />
-                </div>
-
-                <button
-                  id="validate-set-button"
-                  class="${getValidationButtonClass(advice)} validation-button--inline"
-                  data-action="validate-set"
-                  aria-label="${getValidationButtonLabel(advice)}"
-                  ${hasValidRepsInput() ? "" : "disabled"}
-                >
-                  ${renderValidationButtonContent(advice)}
-                </button>
-              </div>
-
-              ${renderRepQuickPicks()}
-
-              ${renderLastSetActions()}
-            </div>
-          `
-          : ""
-      }
     </section>
   `;
 }
