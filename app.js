@@ -296,8 +296,7 @@ const BODY_SECTION_FILTERS = [
 
 const WORKOUT_SECTION_FILTERS = [
   { key: "all", label: "Tout" },
-  { key: "load", label: "Charge" },
-  { key: "entry", label: "Reps" },
+  { key: "last", label: "Derniere serie" },
 ];
 
 const HISTORY_DETAIL_SECTION_FILTERS = [
@@ -3678,6 +3677,7 @@ function reopenLastPendingSet(prefill = false) {
   state.timerEndsAt = 0;
   state.workoutFinished = false;
   state.pendingAdvance = null;
+  state.workoutSectionFilter = "all";
   state.currentIndex = Math.max(0, getExerciseIndexForEntry(lastEntry, lastEntry.day));
   state.repsInput = prefill ? String(lastEntry.reps) : "";
   state.selectedChartKey = lastEntry.key || state.selectedChartKey;
@@ -10988,6 +10988,15 @@ function renderWorkout() {
   const isFocusMode = state.focusWorkoutMode;
   const theme = getDayTheme(state.day);
   const lastSetMarkup = renderLastSetActions();
+  const hasLastSet = Boolean(lastSetMarkup);
+  const availableWorkoutSections = hasLastSet
+    ? WORKOUT_SECTION_FILTERS
+    : WORKOUT_SECTION_FILTERS.filter((section) => section.key === "all");
+  const normalizedWorkoutSection = sanitizeWorkoutSectionFilter(state.workoutSectionFilter);
+  const activeWorkoutSection =
+    hasLastSet || normalizedWorkoutSection === "all" ? normalizedWorkoutSection : "all";
+  const showMainWorkoutSection = activeWorkoutSection === "all";
+  const showLastSetSection = hasLastSet && activeWorkoutSection === "last";
 
   if (state.workoutFinished) {
     return renderWorkoutCompletionScreen();
@@ -11040,38 +11049,61 @@ function renderWorkout() {
         </div>
       </div>
 
-      ${lastSetMarkup}
-
-      ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
-
-      <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
-        <div class="workout-entry-row">
-          <div class="field-wrap workout-entry-field">
-            <label class="label" for="reps-input">Reps</label>
-            <input
-              id="reps-input"
-              class="input input--reps"
-              type="number"
-              min="1"
-              inputmode="numeric"
-              placeholder="${active.targetLabel}"
-              value="${state.repsInput}"
-            />
-          </div>
-
-          <button
-            id="validate-set-button"
-            class="${getValidationButtonClass(advice)} validation-button--inline"
-            data-action="validate-set"
-            aria-label="${getValidationButtonLabel(advice)}"
-            ${hasValidRepsInput() ? "" : "disabled"}
-          >
-            ${renderValidationButtonContent(advice)}
-          </button>
-        </div>
-
-        ${renderRepQuickPicks()}
+      <div class="history-filter-row history-filter-row--compact">
+        ${availableWorkoutSections
+          .map(
+            (section) => `
+              <button
+                class="history-filter-chip ${activeWorkoutSection === section.key ? "is-active" : ""}"
+                data-action="set-workout-section-filter"
+                data-workout-section="${section.key}"
+                aria-pressed="${activeWorkoutSection === section.key ? "true" : "false"}"
+              >
+                ${section.label}
+              </button>
+            `
+          )
+          .join("")}
       </div>
+
+      ${
+        showMainWorkoutSection
+          ? `
+            ${state.showPlates ? renderPlateView(settings) : renderWeightView(settings, active, last, isFocusMode)}
+
+            <div class="stack-md workout-entry-panel workout-entry-panel--sticky">
+              <div class="workout-entry-row">
+                <div class="field-wrap workout-entry-field">
+                  <label class="label" for="reps-input">Reps</label>
+                  <input
+                    id="reps-input"
+                    class="input input--reps"
+                    type="number"
+                    min="1"
+                    inputmode="numeric"
+                    placeholder="${active.targetLabel}"
+                    value="${state.repsInput}"
+                  />
+                </div>
+
+                <button
+                  id="validate-set-button"
+                  class="${getValidationButtonClass(advice)} validation-button--inline"
+                  data-action="validate-set"
+                  aria-label="${getValidationButtonLabel(advice)}"
+                  ${hasValidRepsInput() ? "" : "disabled"}
+                >
+                  ${renderValidationButtonContent(advice)}
+                </button>
+              </div>
+
+              ${renderRepQuickPicks()}
+            </div>
+          `
+          : ""
+      }
+
+      ${showLastSetSection ? lastSetMarkup : ""}
     </section>
   `;
 }
