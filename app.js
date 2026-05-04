@@ -9733,6 +9733,12 @@ function bindEvents() {
         renderApp();
       }
 
+      if (action === "leave-workout-screen") {
+        state.screen = "dashboard";
+        saveState();
+        renderApp();
+      }
+
       if (action === "focus-dashboard-chart") {
         state.selectedChartKey = button.dataset.chartKey || state.selectedChartKey;
         state.screen = "history";
@@ -10892,6 +10898,11 @@ function renderWorkoutCompletionScreen() {
     return `
       <section class="stack-md">
         <section class="surface surface-pad-lg center-block stack-md session-finish" data-accent-day="${theme.accentDay}">
+          <div class="session-finish__back">
+            <button class="icon-button icon-button--back" data-action="leave-workout-screen" aria-label="Retour a l'accueil">
+              ←
+            </button>
+          </div>
           <div class="trophy">${theme.mark}</div>
           <div class="stack-sm">
             <h2 class="section-title">Seance terminee</h2>
@@ -10915,6 +10926,11 @@ function renderWorkoutCompletionScreen() {
   return `
     <section class="stack-md">
       <section class="surface surface-pad-lg session-finish session-finish--${finishTone}" data-accent-day="${theme.accentDay}">
+        <div class="session-finish__back">
+          <button class="icon-button icon-button--back" data-action="leave-workout-screen" aria-label="Retour a l'accueil">
+            ←
+          </button>
+        </div>
         <div class="session-finish__hero">
           <div class="trophy">${theme.mark}</div>
           <div class="stack-sm">
@@ -11018,6 +11034,13 @@ function renderWorkout() {
   return `
     <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${theme.accentDay}">
       <div class="row row-start workout-shell__header">
+        <button
+          class="icon-button icon-button--back"
+          data-action="leave-workout-screen"
+          aria-label="Retour a l'accueil"
+        >
+          ←
+        </button>
         <div class="workout-shell__hero-copy">
           <div class="workout-shell__eyebrow-row">
             <span class="pill">${active.series}</span>
@@ -12115,7 +12138,7 @@ function renderHistory() {
 
 function renderApp() {
   const isTimerEndingSoon = state.timer.active && state.timer.seconds > 0 && state.timer.seconds <= 5;
-  const hideBottomNav = state.screen === "workout" && state.focusWorkoutMode;
+  const hideBottomNav = state.screen === "workout";
   const screenMeta = getScreenMeta();
   const timerButtonLabel = getTimerButtonLabel(screenMeta);
   const timerProgress = getTimerProgressRatio();

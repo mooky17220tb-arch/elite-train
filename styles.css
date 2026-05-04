@@ -465,6 +465,15 @@ button {
   color: #041009;
 }
 
+.icon-button--back {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  flex: 0 0 auto;
+  font-size: 20px;
+  line-height: 1;
+}
+
 .progress-wrap {
   display: grid;
   gap: 8px;
@@ -3292,6 +3301,11 @@ button {
 .session-finish {
   display: grid;
   gap: 18px;
+}
+
+.session-finish__back {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .session-finish__hero {
