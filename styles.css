@@ -3409,6 +3409,14 @@ button {
   z-index: 0;
 }
 
+.settings-panel-card[data-card-scope="plan"]::after {
+  right: 14px;
+  bottom: 16px;
+  color: rgba(255, 255, 255, 0.04);
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+
 .settings-panel-card > * {
   position: relative;
   z-index: 1;
@@ -3418,6 +3426,10 @@ button {
   display: grid;
   gap: 6px;
   max-width: 250px;
+}
+
+.settings-panel-card[data-card-scope="plan"] > div:first-child {
+  max-width: calc(100% - 86px);
 }
 
 .settings-panel-card__eyebrow {
@@ -3443,6 +3455,11 @@ button {
   font-weight: 900;
   line-height: 0.92;
   letter-spacing: -0.06em;
+}
+
+.settings-panel-card[data-card-scope="plan"] .settings-panel-card__title {
+  font-size: 29px;
+  line-height: 0.96;
 }
 
 .settings-panel-card__desc {

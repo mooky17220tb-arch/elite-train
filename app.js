@@ -9278,7 +9278,7 @@ function renderPlanHub() {
         ${sections
           .map(
             (section) => `
-              <button class="settings-panel-card" data-action="open-plan-section" data-plan-section="${section.id}" data-accent-day="${section.accentDay}" data-theme-day="${section.accentDay}" data-settings-mark="${section.mark}">
+              <button class="settings-panel-card" data-card-scope="plan" data-action="open-plan-section" data-plan-section="${section.id}" data-accent-day="${section.accentDay}" data-theme-day="${section.accentDay}" data-settings-mark="${section.mark}">
                 <div>
                   <div class="settings-panel-card__eyebrow">Plan</div>
                   <div class="settings-panel-card__title">${section.label}</div>
