@@ -3166,6 +3166,12 @@ button {
   letter-spacing: 0.04em;
 }
 
+.history-filter-chip--back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-shell--focus {
   padding-bottom: 24px;
 }

@@ -11034,13 +11034,6 @@ function renderWorkout() {
   return `
     <section class="surface surface-pad-lg stack-md workout-shell ${isFocusMode ? "workout-shell--focus" : ""}" data-accent-day="${theme.accentDay}">
       <div class="row row-start workout-shell__header">
-        <button
-          class="icon-button icon-button--back"
-          data-action="leave-workout-screen"
-          aria-label="Retour a l'accueil"
-        >
-          ←
-        </button>
         <div class="workout-shell__hero-copy">
           <div class="workout-shell__eyebrow-row">
             <span class="pill">${active.series}</span>
@@ -11073,6 +11066,14 @@ function renderWorkout() {
       </div>
 
       <div class="history-filter-row history-filter-row--compact">
+        <button
+          class="history-filter-chip history-filter-chip--back"
+          data-action="leave-workout-screen"
+          aria-label="Retour a l'accueil"
+        >
+          <span aria-hidden="true">←</span>
+          <span>Retour</span>
+        </button>
         ${availableWorkoutSections
           .map(
             (section) => `
