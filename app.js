@@ -10236,6 +10236,10 @@ function bindEvents() {
         handleValidation();
       }
     };
+    repsInput.onblur = () => {
+      if (state.screen !== "workout" || state.workoutFinished) return;
+      window.setTimeout(scrollWorkoutViewToTop, 80);
+    };
   }
 
   const rpeInput = document.getElementById("rpe-input");
