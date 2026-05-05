@@ -556,9 +556,10 @@ button {
 
 .deload-chip {
   position: absolute;
-  top: -13px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 2;
 }
 
 .plate-stack {
